@@ -128,7 +128,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     console.log(merged);
     alert("저장됨! 콘솔(log) 참고");
   },
-  getSuggestions: (inputValue) => {
+  getSuggestions: (inputValue: string) => {
     const codes = get().codes;
     const codeNames: string[] = codes.map((c: any) => c.name);
     const results = stringSimilarity.findBestMatch(inputValue, codeNames);
@@ -137,7 +137,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       .filter((r: any) => r.rating > 0.3)
       .slice(0, 5)
       .map((r: any) => codes.find((c: any) => c.name === r.target))
-      .filter((it: any) => !!it);
+      .filter((it: any): it is {name: string; code: string} => !!it);
   },
   handleRecommendClick: (rowIdx, value) => {
     const getSuggestions = get().getSuggestions;
