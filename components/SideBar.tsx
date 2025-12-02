@@ -2,7 +2,7 @@
 
 export default function SideBar() {
   return (
-    <div className="w-64 h-full bg-blue-500 fixed left-0 top-0">
+    <div className="w-64 h-screen bg-blue-500 left-0 top-0">
       <div className="w-full h-full flex flex-col">
         <div className="w-full h-20 bg-red-500">
           <div className="w-full h-full flex items-center justify-center">
@@ -18,7 +18,10 @@ export default function SideBar() {
                 console.log("관리");
               }}
             >
-              <a href="/seller">
+              <a
+                href="/upload
+              "
+              >
                 <span>발주서 업로드</span>
               </a>
             </button>
