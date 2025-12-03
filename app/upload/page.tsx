@@ -1,10 +1,10 @@
 "use client";
 
-import Modal from "@/components/ModalTable";
 import {useRef, useState, useEffect} from "react";
 import * as XLSX from "xlsx";
 import stringSimilarity from "string-similarity";
 import {useUploadStore} from "@/stores/uploadStore";
+import ModalTable from "@/components/ModalTable";
 
 export default function UploadPage() {
   const {
@@ -40,6 +40,7 @@ export default function UploadPage() {
     setDirectInputValue,
     closeDirectInputModal,
     saveDirectInputModal,
+    openDirectInputModal,
   } = useUploadStore();
 
   const codesOriginRef = useRef<any[]>([]);
@@ -70,6 +71,105 @@ export default function UploadPage() {
     setHeaderIndex({nameIdx});
   }, [tableData, setHeaderIndex]);
 
+  // 상품명 기준으로 매핑코드 + 타입(내외주) + postType(택배사) 컬럼 자동 연동
+  useEffect(() => {
+    if (
+      !tableData.length ||
+      !headerIndex ||
+      typeof headerIndex.nameIdx !== "number"
+    ) {
+      return;
+    }
+
+    const headerRow = tableData[0];
+    const nameIdx = headerIndex.nameIdx;
+
+    const mappingIdx = headerRow.findIndex((h) => h === "매핑코드");
+    const typeIdx = headerRow.findIndex((h) => h === "내외주");
+    const postTypeIdx = headerRow.findIndex((h) => h === "택배사");
+
+    if (mappingIdx === -1 && typeIdx === -1 && postTypeIdx === -1) return;
+
+    let changed = false;
+    const newMap: {[name: string]: string} = {...productCodeMap};
+
+    const newTable = tableData.map((row, idx) => {
+      if (idx === 0) return row;
+
+      const nameVal = row[nameIdx];
+      if (!nameVal || typeof nameVal !== "string") return row;
+      const name = nameVal.trim();
+      if (!name) return row;
+
+      let rowChanged = false;
+      let updatedRow = row;
+
+      // 코드 우선순위: 직접 입력(productCodeMap) > codes.json 자동 매칭
+      let codeVal = newMap[name];
+      const found = codes.find((c: any) => c.name === name);
+      if (!codeVal && found?.code) codeVal = found.code;
+
+      if (mappingIdx >= 0 && codeVal && row[mappingIdx] !== codeVal) {
+        if (!rowChanged) {
+          updatedRow = [...row];
+          rowChanged = true;
+        }
+        updatedRow[mappingIdx] = codeVal;
+        changed = true;
+      }
+
+      if (found) {
+        if (typeIdx >= 0 && found.type && row[typeIdx] !== found.type) {
+          if (!rowChanged) {
+            updatedRow = [...row];
+            rowChanged = true;
+          }
+          updatedRow[typeIdx] = found.type;
+          changed = true;
+        }
+        if (
+          postTypeIdx >= 0 &&
+          found.postType &&
+          row[postTypeIdx] !== found.postType
+        ) {
+          if (!rowChanged) {
+            updatedRow = [...row];
+            rowChanged = true;
+          }
+          updatedRow[postTypeIdx] = found.postType;
+          changed = true;
+        }
+      }
+
+      // productCodeMap에 비어있고 자동매칭된 코드가 있으면 map에도 채워둠
+      if (!newMap[name] && found?.code) {
+        newMap[name] = found.code;
+      }
+
+      return updatedRow;
+    });
+
+    if (changed) {
+      setTableData(newTable);
+    }
+    // productCodeMap이 변경되었다면 갱신
+    const originalKeys = Object.keys(productCodeMap);
+    const newKeys = Object.keys(newMap);
+    if (
+      originalKeys.length !== newKeys.length ||
+      originalKeys.some((k) => productCodeMap[k] !== newMap[k])
+    ) {
+      setProductCodeMap(newMap);
+    }
+  }, [
+    tableData,
+    headerIndex,
+    codes,
+    productCodeMap,
+    setTableData,
+    setProductCodeMap,
+  ]);
+
   // Upload 버튼 클릭 핸들러: 매칭 map 구성
   // 코드 직접 입력 시 반영
   // 최종 저장(예시: console.log)
@@ -94,6 +194,13 @@ export default function UploadPage() {
     setDragActive(false);
   };
 
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setTableData([]);
+    setFileName("");
+    setProductCodeMap({});
+  };
+
   return (
     <div className="w-full h-full flex flex-col items-center justify-center">
       <button
@@ -102,15 +209,13 @@ export default function UploadPage() {
       >
         엑셀 업로드
       </button>
-      <Modal
+      <ModalTable
         open={isModalOpen}
-        onClose={() => {
-          setIsModalOpen(false);
-          setTableData([]);
-          setFileName("");
-          setProductCodeMap({});
+        onClose={handleCloseModal}
+        onSubmit={() => {
+          handleSave();
+          handleCloseModal();
         }}
-        onSubmit={handleSave}
       >
         <div
           className={`border-2 border-dashed rounded-lg px-8 py-10 flex flex-col items-center justify-center transition-colors hover:bg-[#9a9a9a51] ${
@@ -154,7 +259,6 @@ export default function UploadPage() {
                 onSubmit={(e) => {
                   e.preventDefault();
                   saveDirectInputModal();
-                  console.log(directInputModal.values);
                 }}
                 className="w-full"
               >
@@ -275,16 +379,18 @@ export default function UploadPage() {
                       }
                       return (
                         <tr key={i}>
-                          {tableData[0].map((_, j) => (
-                            <td
-                              key={j}
-                              className="border px-2 py-1 border-gray-300 text-xs min-w-[60px]"
-                            >
-                              {row[j] !== undefined && row[j] !== null
-                                ? row[j]
-                                : ""}
-                            </td>
-                          ))}
+                          {tableData[0].map((_, j) => {
+                            return (
+                              <td
+                                key={j}
+                                className="border px-2 py-1 border-gray-300 text-xs min-w-[60px]"
+                              >
+                                {row[j] !== undefined && row[j] !== null
+                                  ? row[j]
+                                  : ""}
+                              </td>
+                            );
+                          })}
                           <td className="border px-2 py-1 border-gray-300 text-xs">
                             {name &&
                             codesOriginRef.current.find((c) => c.name === name)
@@ -293,7 +399,7 @@ export default function UploadPage() {
                             ) : (
                               <div className="flex items-center">
                                 <input
-                                  className="border text-xs px-2 py-1 rounded"
+                                  className="text-xs px-2 py-1 rounded border border-[#9a9a9a83]"
                                   style={{minWidth: "80px", width: "80px"}}
                                   placeholder="code 입력"
                                   value={productCodeMap[name] || ""}
@@ -303,12 +409,16 @@ export default function UploadPage() {
                                   disabled={!name}
                                 />
                                 <button
-                                  className="ml-1 p-1 rounded-sm text-[12px] hover:bg-blue-200"
+                                  className="w-[40px] ml-1 p-1 rounded-sm text-[12px] hover:bg-blue-300 border border-[#9a9a9a85] bg-blue-400"
                                   type="button"
                                   onClick={() => handleRecommendClick(i, name)}
                                   disabled={!name}
                                 >
-                                  <span role="img" aria-label="추천">
+                                  <span
+                                    role="img"
+                                    aria-label="추천"
+                                    className="text-[#ffffff] font-bold"
+                                  >
                                     추천
                                   </span>
                                 </button>
@@ -324,42 +434,62 @@ export default function UploadPage() {
                                             <tr>
                                               {Object.keys(
                                                 recommendList[0] ?? {}
-                                              ).map((k) => (
-                                                <th
-                                                  key={k}
-                                                  className="border border-gray-200 font-normal bg-gray-50 px-2 py-1"
-                                                >
-                                                  {k}
-                                                </th>
-                                              ))}
+                                              )
+                                                .filter((k) => k !== "id")
+                                                .map((k) => (
+                                                  <th
+                                                    key={k}
+                                                    className="border border-gray-200 font-normal bg-gray-50 px-2 py-1"
+                                                  >
+                                                    {k}
+                                                  </th>
+                                                ))}
                                             </tr>
                                           </thead>
                                           <tbody>
-                                            {recommendList.map((item, ridx) => (
-                                              <tr
-                                                key={ridx}
-                                                className="hover:bg-blue-100 cursor-pointer"
-                                                onClick={() =>
-                                                  handleSelectSuggest(
-                                                    name,
-                                                    item.code
-                                                  )
-                                                }
-                                              >
-                                                {Object.values(item).map(
-                                                  (v, vIdx) => (
+                                            {recommendList.map((item, ridx) => {
+                                              const keys = Object.keys(
+                                                item
+                                              ).filter((k) => k !== "id");
+                                              return (
+                                                <tr
+                                                  key={ridx}
+                                                  className="hover:bg-blue-100 cursor-pointer"
+                                                  onClick={() =>
+                                                    handleSelectSuggest(
+                                                      name,
+                                                      item.code
+                                                    )
+                                                  }
+                                                >
+                                                  {keys.map((k) => (
                                                     <td
-                                                      key={vIdx}
+                                                      key={k}
                                                       className="border border-gray-200 px-2 py-1 break-all text-black whitespace-pre-line min-w-[85px]"
                                                     >
-                                                      {String(v)}
+                                                      {String((item as any)[k])}
                                                     </td>
-                                                  )
-                                                )}
-                                              </tr>
-                                            ))}
+                                                  ))}
+                                                </tr>
+                                              );
+                                            })}
                                           </tbody>
                                         </table>
+                                        <div className="flex justify-between items-center mt-4 text-xs">
+                                          <button
+                                            type="button"
+                                            className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-100 text-gray-600"
+                                            onClick={() => {
+                                              openDirectInputModal(
+                                                name || "",
+                                                i
+                                              );
+                                              setRecommendIdx(null);
+                                            }}
+                                          >
+                                            직접 입력
+                                          </button>
+                                        </div>
                                         <button
                                           className="absolute top-2 right-4 text-gray-400 hover:text-black text-[24px]"
                                           onClick={() => setRecommendIdx(null)}
@@ -381,7 +511,7 @@ export default function UploadPage() {
             </div>
           </>
         )}
-      </Modal>
+      </ModalTable>
     </div>
   );
 }

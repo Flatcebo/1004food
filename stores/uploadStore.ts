@@ -3,6 +3,93 @@ import {RefObject, createRef} from "react";
 import stringSimilarity from "string-similarity";
 import * as XLSX from "xlsx";
 
+type ColumnDef = {
+  key: string;
+  label: string;
+  aliases: string[];
+};
+
+// 내부 절대 컬럼 순서 정의
+const INTERNAL_COLUMNS: ColumnDef[] = [
+  {
+    key: "vendor",
+    label: "업체명",
+    aliases: ["업체명", "업체", "거래처명", "고객주문처명"],
+  },
+  {key: "inout", label: "내외주", aliases: ["내외주"]},
+  {key: "carrier", label: "택배사", aliases: ["택배사", "택배사명", "택배"]},
+
+  {
+    key: "receiverName",
+    label: "수취인명",
+    aliases: ["수취인명", "수취인", "받는분", "받는 사람"],
+  },
+  {
+    key: "receiverPhone",
+    label: "수취인 전화번호",
+    aliases: [
+      "수취인 연락처",
+      "수취인 전화",
+      "수취인 전화번호",
+      "수취인전화번호",
+      "받는분연락처",
+      "받는사람전화",
+    ],
+  },
+  {
+    key: "zip",
+    label: "우편",
+    aliases: ["우편", "우편번호", "우편번호(수취인)", "우편번호(배송지)"],
+  },
+  {
+    key: "address",
+    label: "주소",
+    aliases: ["주소", "배송지주소", "수취인주소"],
+  },
+  {key: "qty", label: "수량", aliases: ["수량", "주문수량", "총수량"]},
+  {
+    key: "productName",
+    label: "상품명",
+    aliases: ["상품명", "아이템명", "품목명", "상품"],
+  },
+
+  {
+    key: "ordererName",
+    label: "주문자명",
+    aliases: ["주문자명", "주문자", "주문자 이름"],
+  },
+  {
+    key: "ordererPhone",
+    label: "주문자 전화번호",
+    aliases: ["주문자 연락처", "주문자 전화번화", "주문자전화번호"],
+  },
+  {
+    key: "message",
+    label: "배송메시지",
+    aliases: ["배송메시지", "배송요청", "요청사항", "배송요청사항"],
+  },
+  // {
+  //   key: "supplyPrice",
+  //   label: "공급가",
+  //   aliases: ["공급가", "공급가격", "상품공급가"],
+  // },
+  // {
+  //   key: "box",
+  //   label: "박스",
+  //   aliases: ["박스", "박스정보", "박스크기"],
+  // },
+  // {
+  //   key: "volume",
+  //   label: "부피",
+  //   aliases: ["부피", "용량", "중량", "무게"],
+  // },
+  // {
+  //   key: "packageMat",
+  //   label: "포장재",
+  //   aliases: ["포장재", "포장자재", "포장방법", "포장"],
+  // },
+];
+
 export interface UploadStoreState {
   tableData: any[][];
   setTableData: (data: any[][]) => void;
@@ -19,7 +106,7 @@ export interface UploadStoreState {
   fileName: string;
   setFileName: (v: string) => void;
 
-  codes: Array<{name: string; code: string; [key: string]: any}>;
+  codes: Array<{name: string; code: string; [key: string]: any} | any>;
   setCodes: (
     codes: Array<{name: string; code: string; [key: string]: any}>
   ) => void;
@@ -37,16 +124,6 @@ export interface UploadStoreState {
     list: Array<{name: string; code: string; [key: string]: any}>
   ) => void;
 
-  handleCodeMatch: () => void;
-  handleInputCode: (name: string, code: string) => void;
-  handleSave: () => void;
-  getSuggestions: (
-    inputValue: string
-  ) => Array<{name: string; code: string; [key: string]: any}>;
-  handleRecommendClick: (rowIdx: number, value: string) => void;
-  handleSelectSuggest: (name: string, code: string) => void;
-  handleFile: (file: File) => void;
-  handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   directInputModal: {
     open: boolean;
     fields: string[];
@@ -64,6 +141,18 @@ export interface UploadStoreState {
   setDirectInputValue: (k: string, v: string) => void;
   closeDirectInputModal: () => void;
   saveDirectInputModal: () => void;
+  openDirectInputModal: (targetName: string, rowIdx: number | null) => void;
+
+  handleCodeMatch: () => void;
+  handleInputCode: (name: string, code: string) => void;
+  handleSave: () => void;
+  getSuggestions: (
+    inputValue: string
+  ) => Array<{name: string; code: string; [key: string]: any}>;
+  handleRecommendClick: (rowIdx: number, value: string) => void;
+  handleSelectSuggest: (name: string, code: string) => void;
+  handleFile: (file: File) => void;
+  handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
 export const useUploadStore = create<UploadStoreState>((set, get) => ({
@@ -140,21 +229,9 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       .filter((it: any): it is {name: string; code: string} => !!it);
   },
   handleRecommendClick: (rowIdx, value) => {
-    const getSuggestions = get().getSuggestions;
-    const suggestions = getSuggestions(value);
-    const codes = get().codes;
+    const suggestions = get().getSuggestions(value);
     if (!suggestions.length) {
-      // 직접 입력 모달 오픈, 모든 columns key 추출
-      const fields = codes.length
-        ? Object.keys(codes[0])
-        : ["name", "code", "etc"];
-      get().setDirectInputModal({
-        open: true,
-        fields,
-        values: {name: value},
-        rowIdx,
-        targetName: value,
-      });
+      get().openDirectInputModal(value, rowIdx);
       return;
     }
     get().setRecommendIdx(rowIdx);
@@ -174,7 +251,83 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       const workbook = XLSX.read(data, {type: "array"});
       const firstSheetName = workbook.SheetNames[0];
       const worksheet = workbook.Sheets[firstSheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+      const raw = XLSX.utils.sheet_to_json(worksheet, {
+        header: 1,
+      }) as any[][];
+
+      if (!raw.length) {
+        setTableData([]);
+        return;
+      }
+
+      const rawHeader = raw[0] as any[];
+      const normalize = (v: any) =>
+        typeof v === "string" ? v.replace(/\s+/g, "").toLowerCase() : "";
+
+      // 각 내부 컬럼에 대응하는 원본 인덱스 계산
+      const indexMap: {[key: string]: number} = {};
+      INTERNAL_COLUMNS.forEach((col) => {
+        const idx = rawHeader.findIndex((h) =>
+          col.aliases.some((al) => normalize(h) === normalize(al))
+        );
+        indexMap[col.key] = idx; // 없으면 -1
+      });
+
+      // 내부 절대 순서로 헤더/데이터 재구성
+      const canonicalHeader = INTERNAL_COLUMNS.map((c) => c.label);
+      const canonicalRows = raw.slice(1).map((row) =>
+        INTERNAL_COLUMNS.map((c) => {
+          const idx = indexMap[c.key];
+          let value = idx >= 0 ? row[idx] ?? "" : "";
+
+          // 박스, 부피 기본값 자동 세팅
+          if (
+            value === undefined ||
+            value === null ||
+            String(value).trim() === ""
+          ) {
+            if (c.key === "box") {
+              value = 2;
+            } else if (c.key === "volume") {
+              value = 60;
+            }
+          }
+
+          return value;
+        })
+      );
+
+      const jsonData = [canonicalHeader, ...canonicalRows];
+
+      // 수취인명/이름(내부 컬럼 기준) 동명이인 번호 붙이기
+      if (jsonData.length > 1) {
+        const headerRow = jsonData[0] as any[];
+        const receiverIdx = headerRow.findIndex(
+          (h: any) =>
+            h &&
+            typeof h === "string" &&
+            (h.includes("수취인명") || h === "이름")
+        );
+
+        if (receiverIdx !== -1) {
+          const nameCount: {[name: string]: number} = {};
+          for (let i = 1; i < jsonData.length; i += 1) {
+            const row = jsonData[i];
+            const rawName = row[receiverIdx];
+            if (!rawName || typeof rawName !== "string") continue;
+
+            const name = rawName.trim();
+            if (!name) continue;
+
+            const count = nameCount[name] ?? 0;
+            if (count > 0) {
+              row[receiverIdx] = `${name}${count}`;
+            }
+            nameCount[name] = count + 1;
+          }
+        }
+      }
+
       setTableData(jsonData as any[][]);
     };
     reader.readAsArrayBuffer(file);
@@ -205,6 +358,20 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       directInputModal: {...state.directInputModal, open: false},
     }));
   },
+  openDirectInputModal: (targetName, rowIdx) => {
+    const codes = get().codes;
+    const baseFields = codes.length
+      ? Object.keys(codes[0])
+      : ["name", "code", "etc"];
+    const fields = baseFields.filter((k) => k !== "id");
+    get().setDirectInputModal({
+      open: true,
+      fields,
+      values: {name: targetName},
+      rowIdx,
+      targetName,
+    });
+  },
   saveDirectInputModal: () => {
     const {
       directInputModal,
@@ -212,13 +379,30 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       setProductCodeMap,
       setCodes,
       codes,
-    }: any = get();
-    if (directInputModal.values.name && directInputModal.values.code) {
+    } = get();
+
+    const values = directInputModal.values;
+
+    // 필수값: id, etc를 제외한 모든 필드는 값이 있어야 저장
+    const requiredKeys = directInputModal.fields.filter(
+      (k) => k !== "id" && k !== "etc"
+    );
+    const hasAllRequired = requiredKeys.every((k) => {
+      const v = values[k];
+      return v !== undefined && v !== null && String(v).trim() !== "";
+    });
+
+    if (!hasAllRequired) {
+      alert("필수 항목이 모두 입력되어야 저장됩니다. (etc는 선택 사항)");
+      return;
+    }
+
+    if (values.name && values.code) {
       setProductCodeMap({
         ...productCodeMap,
-        [directInputModal.values.name]: directInputModal.values.code,
+        [values.name]: values.code,
       });
-      setCodes([...codes, {...directInputModal.values}]); // codes에도 항상 push
+      setCodes([...codes, {...values}]); // codes에도 항상 push
     }
     set({directInputModal: {...directInputModal, open: false}});
   },

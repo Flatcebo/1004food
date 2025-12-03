@@ -1,4 +1,4 @@
-export default function Modal({
+export default function ModalTable({
   open,
   onClose,
   onSubmit,
