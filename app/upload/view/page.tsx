@@ -1,10 +1,10 @@
 "use client";
 
-import {useEffect, useState, useRef, useMemo} from "react";
+import {useEffect, useState, useRef, useMemo, Suspense} from "react";
 import {useSearchParams} from "next/navigation";
 import {useUploadStore} from "@/stores/uploadStore";
 
-export default function FileViewPage() {
+function FileViewContent() {
   const searchParams = useSearchParams();
   const fileId = searchParams.get("id");
   const {
@@ -738,6 +738,18 @@ export default function FileViewPage() {
         </button>
       </div>
     </div>
+  );
+}
+
+export default function FileViewPage() {
+  return (
+    <Suspense fallback={
+      <div className="w-full h-screen flex items-center justify-center">
+        <div>로딩 중...</div>
+      </div>
+    }>
+      <FileViewContent />
+    </Suspense>
   );
 }
 
