@@ -96,7 +96,12 @@ export default function FileTableView({
     handleSelectSuggest(name, code);
   };
 
-  if (!tableData.length || !headerIndex || headerIndex.nameIdx === -1) {
+  if (
+    !tableData.length ||
+    !headerIndex ||
+    typeof headerIndex.nameIdx !== "number" ||
+    headerIndex.nameIdx === -1
+  ) {
     return null;
   }
 
