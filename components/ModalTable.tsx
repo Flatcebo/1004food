@@ -28,19 +28,21 @@ export default function ModalTable({
         </button>
         {children}
 
-        <div className="relative bottom-0 w-full h-[80px] flex flex-row items-center justify-end gap-[16px] text-white font-semibold">
-          <button
-            onClick={onSubmit}
-            className="bg-[#1ca2fb] hover:bg-[#1ca2fba0] px-[32px] py-[10px] rounded-md transition-colors"
-          >
-            Upload
-          </button>
-          <button
-            onClick={onClose}
-            className="bg-[#fc5656] hover:bg-[#fc5656a0] px-[32px] py-[10px] rounded-md transition-colors"
-          >
-            Cancel
-          </button>
+        <div className="relative bottom-0 w-full h-[80px] flex flex-col items-end gap-[8px] mt-4">
+          <div className="flex flex-row items-center justify-end gap-[16px] text-white font-semibold">
+            <button
+              onClick={onSubmit}
+              className="px-[32px] py-[10px] rounded-md transition-colors bg-[#1ca2fb] hover:bg-[#1ca2fba0]"
+            >
+              Upload
+            </button>
+            <button
+              onClick={onClose}
+              className="bg-[#fc5656] hover:bg-[#fc5656a0] px-[32px] py-[10px] rounded-md transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -66,7 +66,13 @@ const INTERNAL_COLUMNS: ColumnDef[] = [
   {
     key: "message",
     label: "배송메시지",
-    aliases: ["배송메시지", "배송요청", "요청사항", "배송요청사항"],
+    aliases: [
+      "배송메시지",
+      "배송메세지",
+      "배송요청",
+      "요청사항",
+      "배송요청사항",
+    ],
   },
   // {
   //   key: "supplyPrice",
@@ -90,6 +96,15 @@ const INTERNAL_COLUMNS: ColumnDef[] = [
   // },
 ];
 
+export interface UploadedFile {
+  id: string;
+  fileName: string;
+  rowCount: number;
+  tableData: any[][];
+  headerIndex: {nameIdx?: number} | null;
+  productCodeMap: {[name: string]: string};
+}
+
 export interface UploadStoreState {
   tableData: any[][];
   setTableData: (data: any[][]) => void;
@@ -105,6 +120,14 @@ export interface UploadStoreState {
 
   fileName: string;
   setFileName: (v: string) => void;
+
+  uploadedFiles: UploadedFile[];
+  setUploadedFiles: (files: UploadedFile[]) => void;
+  addUploadedFile: (file: UploadedFile) => void;
+  removeUploadedFile: (id: string) => void;
+  confirmedFiles: Set<string>;
+  confirmFile: (fileId: string) => void;
+  unconfirmFile: (fileId: string) => void;
 
   codes: Array<{name: string; code: string; [key: string]: any} | any>;
   setCodes: (
@@ -152,7 +175,10 @@ export interface UploadStoreState {
   handleRecommendClick: (rowIdx: number, value: string) => void;
   handleSelectSuggest: (name: string, code: string) => void;
   handleFile: (file: File) => void;
+  handleFiles: (files: File[]) => void;
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  openFileInNewWindow: (fileId: string) => void;
+  processFile: (file: File) => Promise<UploadedFile>;
 }
 
 export const useUploadStore = create<UploadStoreState>((set, get) => ({
@@ -166,6 +192,29 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
   setFileInputRef: (ref) => set({fileInputRef: ref}),
   fileName: "",
   setFileName: (v) => set({fileName: v}),
+  uploadedFiles: [],
+  setUploadedFiles: (files) => set({uploadedFiles: files}),
+  addUploadedFile: (file) =>
+    set((state) => ({
+      uploadedFiles: [...state.uploadedFiles, file],
+    })),
+  removeUploadedFile: (id) =>
+    set((state) => ({
+      uploadedFiles: state.uploadedFiles.filter((f) => f.id !== id),
+    })),
+  confirmedFiles: new Set<string>(),
+  confirmFile: (fileId) =>
+    set((state) => {
+      const newSet = new Set(state.confirmedFiles);
+      newSet.add(fileId);
+      return {confirmedFiles: newSet};
+    }),
+  unconfirmFile: (fileId) =>
+    set((state) => {
+      const newSet = new Set(state.confirmedFiles);
+      newSet.delete(fileId);
+      return {confirmedFiles: newSet};
+    }),
   codes: [],
   setCodes: (codes) => set({codes}),
   productCodeMap: {},
@@ -221,12 +270,23 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     const codes = get().codes;
     const codeNames: string[] = codes.map((c: any) => c.name);
     const results = stringSimilarity.findBestMatch(inputValue, codeNames);
-    return results.ratings
+    const suggestions = results.ratings
       .sort((a: any, b: any) => b.rating - a.rating)
       .filter((r: any) => r.rating > 0.3)
       .slice(0, 5)
       .map((r: any) => codes.find((c: any) => c.name === r.target))
       .filter((it: any): it is {name: string; code: string} => !!it);
+
+    // 매핑코드가 같은 항목들 중복 제거 (첫 번째 항목만 유지)
+    const seenCodes = new Set<string>();
+    return suggestions.filter((item: any) => {
+      const code = item.code || "";
+      if (seenCodes.has(code)) {
+        return false;
+      }
+      seenCodes.add(code);
+      return true;
+    });
   },
   handleRecommendClick: (rowIdx, value) => {
     const suggestions = get().getSuggestions(value);
@@ -242,100 +302,289 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     setProductCodeMap({...productCodeMap, [name]: code});
     setRecommendIdx(null);
   },
-  handleFile: (file) => {
-    const {setFileName, setTableData} = get();
-    setFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const data = new Uint8Array(e.target?.result as ArrayBuffer);
-      const workbook = XLSX.read(data, {type: "array"});
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-      const raw = XLSX.utils.sheet_to_json(worksheet, {
-        header: 1,
-      }) as any[][];
+  processFile: (file: File): Promise<UploadedFile> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, {type: "array"});
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const raw = XLSX.utils.sheet_to_json(worksheet, {
+            header: 1,
+          }) as any[][];
 
-      if (!raw.length) {
-        setTableData([]);
-        return;
-      }
+          if (!raw.length) {
+            reject(new Error("파일이 비어있습니다."));
+            return;
+          }
 
-      const rawHeader = raw[0] as any[];
-      const normalize = (v: any) =>
-        typeof v === "string" ? v.replace(/\s+/g, "").toLowerCase() : "";
+          const rawHeader = raw[0] as any[];
+          const normalize = (v: any) =>
+            typeof v === "string" ? v.replace(/\s+/g, "").toLowerCase() : "";
 
-      // 각 내부 컬럼에 대응하는 원본 인덱스 계산
-      const indexMap: {[key: string]: number} = {};
-      INTERNAL_COLUMNS.forEach((col) => {
-        const idx = rawHeader.findIndex((h) =>
-          col.aliases.some((al) => normalize(h) === normalize(al))
-        );
-        indexMap[col.key] = idx; // 없으면 -1
-      });
+          // 각 내부 컬럼에 대응하는 원본 인덱스 계산
+          const indexMap: {[key: string]: number} = {};
+          INTERNAL_COLUMNS.forEach((col) => {
+            const idx = rawHeader.findIndex((h) =>
+              col.aliases.some((al) => normalize(h) === normalize(al))
+            );
+            indexMap[col.key] = idx; // 없으면 -1
+          });
 
-      // 내부 절대 순서로 헤더/데이터 재구성
-      const canonicalHeader = INTERNAL_COLUMNS.map((c) => c.label);
-      const canonicalRows = raw.slice(1).map((row) =>
-        INTERNAL_COLUMNS.map((c) => {
-          const idx = indexMap[c.key];
-          let value = idx >= 0 ? row[idx] ?? "" : "";
+          // 내부 절대 순서로 헤더/데이터 재구성
+          const canonicalHeader = INTERNAL_COLUMNS.map((c) => c.label);
+          const canonicalRows = raw.slice(1).map((row) =>
+            INTERNAL_COLUMNS.map((c) => {
+              const idx = indexMap[c.key];
+              let value = idx >= 0 ? row[idx] ?? "" : "";
 
-          // 박스, 부피 기본값 자동 세팅
-          if (
-            value === undefined ||
-            value === null ||
-            String(value).trim() === ""
-          ) {
-            if (c.key === "box") {
-              value = 2;
-            } else if (c.key === "volume") {
-              value = 60;
+              // 박스, 부피 기본값 자동 세팅
+              if (
+                value === undefined ||
+                value === null ||
+                String(value).trim() === ""
+              ) {
+                if (c.key === "box") {
+                  value = 2;
+                } else if (c.key === "volume") {
+                  value = 60;
+                }
+              }
+
+              return value;
+            })
+          );
+
+          const jsonData = [canonicalHeader, ...canonicalRows];
+
+          // 수취인명/이름(내부 컬럼 기준) 동명이인 번호 붙이기
+          if (jsonData.length > 1) {
+            const headerRow = jsonData[0] as any[];
+            const receiverIdx = headerRow.findIndex(
+              (h: any) =>
+                h &&
+                typeof h === "string" &&
+                (h.includes("수취인명") || h === "이름")
+            );
+
+            if (receiverIdx !== -1) {
+              const nameCount: {[name: string]: number} = {};
+              for (let i = 1; i < jsonData.length; i += 1) {
+                const row = jsonData[i];
+                const rawName = row[receiverIdx];
+                if (!rawName || typeof rawName !== "string") continue;
+
+                const name = rawName.trim();
+                if (!name) continue;
+
+                const count = nameCount[name] ?? 0;
+                if (count > 0) {
+                  row[receiverIdx] = `${name}${count}`;
+                }
+                nameCount[name] = count + 1;
+              }
             }
           }
 
-          return value;
-        })
-      );
+          // 업체명 기반 배송메시지 자동 입력
+          if (jsonData.length > 1) {
+            const headerRow = jsonData[0] as any[];
+            const vendorIdx = headerRow.findIndex(
+              (h: any) => h && typeof h === "string" && h === "업체명"
+            );
+            const messageIdx = headerRow.findIndex(
+              (h: any) =>
+                h &&
+                typeof h === "string" &&
+                (h === "배송메시지" ||
+                  h === "배송메세지" ||
+                  h === "배송요청" ||
+                  h === "요청사항" ||
+                  h === "배송요청사항")
+            );
 
-      const jsonData = [canonicalHeader, ...canonicalRows];
+            if (vendorIdx !== -1 && messageIdx !== -1) {
+              for (let i = 1; i < jsonData.length; i += 1) {
+                const row = jsonData[i];
+                const vendorName = row[vendorIdx];
+                const currentMessage = row[messageIdx];
 
-      // 수취인명/이름(내부 컬럼 기준) 동명이인 번호 붙이기
-      if (jsonData.length > 1) {
-        const headerRow = jsonData[0] as any[];
-        const receiverIdx = headerRow.findIndex(
-          (h: any) =>
-            h &&
-            typeof h === "string" &&
-            (h.includes("수취인명") || h === "이름")
-        );
+                // 업체명이 있으면 배송메시지에 자동 입력
+                if (vendorName && typeof vendorName === "string") {
+                  const vendorStr = String(vendorName).trim();
+                  if (vendorStr) {
+                    // 5글자 이상이면 앞 2글자만, 4글자 이하면 전체
+                    const vendorPrefix =
+                      vendorStr.length > 4
+                        ? vendorStr.substring(0, 2)
+                        : vendorStr;
 
-        if (receiverIdx !== -1) {
-          const nameCount: {[name: string]: number} = {};
-          for (let i = 1; i < jsonData.length; i += 1) {
-            const row = jsonData[i];
-            const rawName = row[receiverIdx];
-            if (!rawName || typeof rawName !== "string") continue;
-
-            const name = rawName.trim();
-            if (!name) continue;
-
-            const count = nameCount[name] ?? 0;
-            if (count > 0) {
-              row[receiverIdx] = `${name}${count}`;
+                    // 배송메시지가 비어있으면 업체명만 입력
+                    if (
+                      !currentMessage ||
+                      currentMessage === null ||
+                      String(currentMessage).trim() === ""
+                    ) {
+                      row[messageIdx] = vendorPrefix;
+                    } else {
+                      // 배송메시지가 이미 있으면 앞에 업체명 + 띄어쓰기 추가
+                      const existingMessage = String(currentMessage).trim();
+                      row[messageIdx] = `${vendorPrefix} ${existingMessage}`;
+                    }
+                  }
+                }
+              }
             }
-            nameCount[name] = count + 1;
           }
+
+          // 주문자명/주문자 전화번호가 공란인 경우 수취인명/수취인 전화번호로 자동 입력
+          if (jsonData.length > 1) {
+            const headerRow = jsonData[0] as any[];
+            const receiverNameIdx = headerRow.findIndex(
+              (h: any) =>
+                h &&
+                typeof h === "string" &&
+                (h === "수취인명" || h.includes("수취인명"))
+            );
+            const receiverPhoneIdx = headerRow.findIndex(
+              (h: any) =>
+                h &&
+                typeof h === "string" &&
+                (h === "수취인 전화번호" ||
+                  h.includes("수취인 전화번호") ||
+                  h.includes("수취인 연락처"))
+            );
+            const ordererNameIdx = headerRow.findIndex(
+              (h: any) =>
+                h &&
+                typeof h === "string" &&
+                (h === "주문자명" || h.includes("주문자명"))
+            );
+            const ordererPhoneIdx = headerRow.findIndex(
+              (h: any) =>
+                h &&
+                typeof h === "string" &&
+                (h === "주문자 전화번호" ||
+                  h.includes("주문자 전화번호") ||
+                  h.includes("주문자 연락처"))
+            );
+
+            if (
+              receiverNameIdx !== -1 &&
+              receiverPhoneIdx !== -1 &&
+              ordererNameIdx !== -1 &&
+              ordererPhoneIdx !== -1
+            ) {
+              for (let i = 1; i < jsonData.length; i += 1) {
+                const row = jsonData[i];
+                const receiverName = row[receiverNameIdx];
+                const receiverPhone = row[receiverPhoneIdx];
+                const ordererName = row[ordererNameIdx];
+                const ordererPhone = row[ordererPhoneIdx];
+
+                // 주문자명이 공란이고 수취인명이 있으면 수취인명으로 자동 입력
+                if (
+                  (!ordererName ||
+                    ordererName === null ||
+                    String(ordererName).trim() === "") &&
+                  receiverName &&
+                  String(receiverName).trim() !== ""
+                ) {
+                  row[ordererNameIdx] = receiverName;
+                }
+
+                // 주문자 전화번호가 공란이고 수취인 전화번호가 있으면 수취인 전화번호로 자동 입력
+                if (
+                  (!ordererPhone ||
+                    ordererPhone === null ||
+                    String(ordererPhone).trim() === "") &&
+                  receiverPhone &&
+                  String(receiverPhone).trim() !== ""
+                ) {
+                  row[ordererPhoneIdx] = receiverPhone;
+                }
+              }
+            }
+          }
+
+          // 상품명 인덱스 찾기
+          const headerRow = jsonData[0] as any[];
+          const nameIdx = headerRow.findIndex(
+            (h: any) => h && typeof h === "string" && h.includes("상품명")
+          );
+
+          const uploadedFile: UploadedFile = {
+            id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            fileName: file.name,
+            rowCount: jsonData.length - 1,
+            tableData: jsonData as any[][],
+            headerIndex: nameIdx !== -1 ? {nameIdx} : null,
+            productCodeMap: {},
+          };
+
+          resolve(uploadedFile);
+        } catch (error) {
+          reject(error);
         }
-      }
-
-      setTableData(jsonData as any[][]);
-    };
-    reader.readAsArrayBuffer(file);
+      };
+      reader.onerror = () => reject(new Error("파일 읽기 실패"));
+      reader.readAsArrayBuffer(file);
+    });
   },
-  handleFileChange: (event) => {
-    const file = event.target.files?.[0];
+  handleFile: (file) => {
+    get()
+      .processFile(file)
+      .then((uploadedFile) => {
+        get().addUploadedFile(uploadedFile);
+        get().setFileName(file.name);
+        get().setTableData(uploadedFile.tableData);
+      })
+      .catch((error: any) => {
+        console.error("파일 처리 실패:", error);
+        alert(`파일 처리 실패: ${error.message}`);
+      });
+  },
+  handleFiles: async (files: File[]) => {
+    const {addUploadedFile} = get();
+    const promises = Array.from(files).map((file) => get().processFile(file));
+    try {
+      const uploadedFiles = await Promise.all(promises);
+      uploadedFiles.forEach((file) => addUploadedFile(file));
+    } catch (error: any) {
+      console.error("파일 처리 실패:", error);
+      alert(`일부 파일 처리 실패: ${error}`);
+    }
+  },
+  handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+    if (files.length === 1) {
+      get().handleFile(files[0]);
+    } else {
+      get().handleFiles(Array.from(files));
+    }
+  },
+  openFileInNewWindow: (fileId: string) => {
+    const {uploadedFiles} = get();
+    const file = uploadedFiles.find((f) => f.id === fileId);
     if (!file) return;
-    get().handleFile(file);
+
+    // sessionStorage에 파일 데이터 저장
+    try {
+      sessionStorage.setItem(`uploadedFile_${fileId}`, JSON.stringify(file));
+    } catch (error) {
+      console.error("sessionStorage 저장 실패:", error);
+    }
+
+    // 새 창 열기
+    const url = `/upload/view?id=${fileId}`;
+    const newWindow = window.open(url, "_blank", "width=1200,height=800");
+    if (!newWindow) {
+      alert("팝업이 차단되었습니다. 팝업 차단을 해제해주세요.");
+      return;
+    }
   },
   directInputModal: {
     open: false,
