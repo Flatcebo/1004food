@@ -6,8 +6,14 @@
     "name": "초사리 미역 420g 내외",
     "code": "000000",
     "pkg": "2",
-    "price": 10000,
+    "price": 7600,
+    "salePrice": 10000,
     "postFee": 4000,
+    "purchase": "천사-사입",
+    "billType": "면세",
+    "category": "납품업체",
+    "productType": "사입",
+    "sabangName": "ㄱ초사리미역",
     "etc": ""
   },
   {
@@ -17,6 +23,14 @@
     "name": "갈치속젓 500g",
     "code": "111111",
     "pkg": "5",
+    "price": 7600,
+    "salePrice": 10000,
+    "postFee": 0,
+    "purchase": "천사-사입",
+    "billType": "면세",
+    "category": "납품업체",
+    "productType": "사입",
+    "sabangName": "ㄱ갈치속젓500g",
     "etc": ""
   },
   {
@@ -26,6 +40,14 @@
     "name": "생굴무침 500g",
     "code": "222222",
     "pkg": "5",
+    "price": 7600,
+    "salePrice": 10000,
+    "postFee": 0,
+    "purchase": "천사-제조",
+    "billType": "과세",
+    "category": "납품업체",
+    "productType": "제조",
+    "sabangName": "ㄱ생굴무침500/1통",
     "etc": ""
   },
   {
@@ -35,6 +57,14 @@
     "name": "파지 백명란젓 1kg",
     "code": "333333",
     "pkg": "3",
+    "price": 7600,
+    "salePrice": 10000,
+    "postFee": 0,
+    "purchase": "천사-사입",
+    "billType": "과세",
+    "category": "납품업체",
+    "productType": "사입",
+    "sabangName": "ㄱ파지백명란젓1kg",
     "etc": ""
   },
   {
@@ -44,6 +74,14 @@
     "name": "오징어젓 350g",
     "code": "444444",
     "pkg": "5",
+    "price": 7600,
+    "salePrice": 10000,
+    "postFee": 0,
+    "purchase": "천사-사입",
+    "billType": "과세",
+    "category": "납품업체",
+    "productType": "사입",
+    "sabangName": "ㄱ오징어젓350g",
     "etc": ""
   },
   {
@@ -53,6 +91,14 @@
     "name": "청정신안 간장새우 2kg",
     "code": "555555",
     "pkg": "3",
+    "price": 7600,
+    "salePrice": 10000,
+    "purchase": "천사-제조",
+    "billType": "과세",
+    "category": "납품업체",
+    "productType": "제조",
+    "sabangName": "ㄱ새우장2kg",
+    "postFee": 0,
     "etc": ""
   },
   {
@@ -60,8 +106,16 @@
     "type": "내주",
     "postType": "우체국",
     "name": "새우장 2kg",
-    "code": "666666",
+    "code": "555555",
     "pkg": "3",
+    "price": 7600,
+    "salePrice": 10000,
+    "purchase": "천사-제조",
+    "billType": "과세",
+    "category": "납품업체",
+    "productType": "제조",
+    "sabangName": "ㄱ새우장2kg",
+    "postFee": 0,
     "etc": ""
   }
 ]

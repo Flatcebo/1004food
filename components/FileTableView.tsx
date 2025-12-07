@@ -79,8 +79,8 @@ export default function FileTableView({
     handleInputCode(name, code);
   };
 
-  const handleLocalRecommendClick = (rowIdx: number, value: string) => {
-    const suggestions = getSuggestions(value);
+  const handleLocalRecommendClick = async (rowIdx: number, value: string) => {
+    const suggestions = await getSuggestions(value);
     if (!suggestions.length) {
       openDirectInputModal(value, rowIdx);
       return;

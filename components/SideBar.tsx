@@ -1,30 +1,53 @@
 "use client";
 
+import Image from "next/image";
+import Link from "next/link";
+import {usePathname} from "next/navigation";
+
 export default function SideBar() {
+  const pathname = usePathname();
+  const isUploadActive = pathname === "/upload" || pathname?.startsWith("/upload/view") || pathname?.startsWith("/upload/preview");
+  const isTemplatesActive = pathname === "/upload/templates";
+
   return (
-    <div className="w-64 h-screen bg-blue-500 left-0 top-0">
+    <div className="w-60 h-full bg-[#25323c] shrink-0">
       <div className="w-full h-full flex flex-col">
-        <div className="w-full h-20 bg-red-500">
+        <div className="w-full h-16 border-b border-gray-200">
           <div className="w-full h-full flex items-center justify-center">
-            <span>1004</span>
+            <Link href="/">
+              <Image
+                src="http://xn--hy1b07t6sj80h.com/img/logo.jpg"
+                alt="logo"
+                width={150}
+                height={150}
+              />
+            </Link>
           </div>
         </div>
 
-        <div className="w-full h-full flex mx-8 my-6">
-          <div className="w-full h-full flex items-start gap-[20px] font-semibold text-[16px]">
-            <button
-              className=""
-              onClick={() => {
-                console.log("관리");
-              }}
+        <div className="w-full flex-1 flex mx-4 my-6">
+          <div className="w-full flex flex-col items-start font-semibold text-[16px] gap-2">
+            <Link
+              href="/upload"
+              className={`w-full px-4 py-2 rounded-lg transition-all duration-200 ${
+                isUploadActive
+                  ? "text-[#888eab]"
+                  : "hover:bg-gray-700 hover:translate-x-1 active:scale-95 text-white"
+              }`}
             >
-              <a
-                href="/upload
-              "
-              >
-                <span>발주서 업로드</span>
-              </a>
-            </button>
+              <span>발주서 업로드</span>
+            </Link>
+
+            <Link
+              href="/upload/templates"
+              className={`w-full px-4 py-2 rounded-lg transition-all duration-200 ${
+                isTemplatesActive
+                  ? "text-[#888eab]"
+                  : "hover:bg-gray-700 hover:translate-x-1 active:scale-95 text-white"
+              }`}
+            >
+              <span>양식 템플릿 관리</span>
+            </Link>
           </div>
         </div>
       </div>

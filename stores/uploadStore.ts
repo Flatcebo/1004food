@@ -1,6 +1,5 @@
 import {create} from "zustand";
 import {RefObject, createRef} from "react";
-import stringSimilarity from "string-similarity";
 import * as XLSX from "xlsx";
 
 type ColumnDef = {
@@ -166,12 +165,10 @@ export interface UploadStoreState {
   saveDirectInputModal: () => void;
   openDirectInputModal: (targetName: string, rowIdx: number | null) => void;
 
-  handleCodeMatch: () => void;
   handleInputCode: (name: string, code: string) => void;
-  handleSave: () => void;
   getSuggestions: (
     inputValue: string
-  ) => Array<{name: string; code: string; [key: string]: any}>;
+  ) => Promise<Array<{name: string; code: string; [key: string]: any}>>;
   handleRecommendClick: (rowIdx: number, value: string) => void;
   handleSelectSuggest: (name: string, code: string) => void;
   handleFile: (file: File) => void;
@@ -226,70 +223,32 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
   recommendList: [],
   setRecommendList: (list) => set({recommendList: list}),
 
-  handleCodeMatch: () => {
-    const {headerIndex, tableData, codes, setProductCodeMap} = get();
-    if (
-      !headerIndex ||
-      typeof headerIndex.nameIdx !== "number" ||
-      headerIndex.nameIdx === -1
-    ) {
-      return;
-    }
-    const _map: {[name: string]: string} = {};
-    (tableData.slice(1) as any[][]).forEach((row) => {
-      if (typeof headerIndex.nameIdx === "number" && row[headerIndex.nameIdx]) {
-        const name = row[headerIndex.nameIdx] as string;
-        const found = codes.find((c: any) => c.name === name);
-        if (found) _map[name] = found.code;
-      }
-    });
-    setProductCodeMap(_map);
-  },
   handleInputCode: (name, code) => {
     const {productCodeMap, setProductCodeMap} = get();
     setProductCodeMap({...productCodeMap, [name]: code});
   },
-  handleSave: () => {
-    const {headerIndex, tableData, productCodeMap} = get();
-    if (!headerIndex || headerIndex.nameIdx === -1) return;
-    const merged = tableData.slice(1).map((row) => {
-      let name = "";
-      if (typeof headerIndex?.nameIdx === "number") {
-        name = row[headerIndex.nameIdx] as string;
-      }
-      return {
-        ...row,
-        상품명: name,
-        code: name ? productCodeMap[name] || "" : "",
-      };
-    });
-    console.log(merged);
-    alert("저장됨! 콘솔(log) 참고");
-  },
-  getSuggestions: (inputValue: string) => {
-    const codes = get().codes;
-    const codeNames: string[] = codes.map((c: any) => c.name);
-    const results = stringSimilarity.findBestMatch(inputValue, codeNames);
-    const suggestions = results.ratings
-      .sort((a: any, b: any) => b.rating - a.rating)
-      .filter((r: any) => r.rating > 0.3)
-      .slice(0, 5)
-      .map((r: any) => codes.find((c: any) => c.name === r.target))
-      .filter((it: any): it is {name: string; code: string} => !!it);
+  getSuggestions: async (inputValue: string) => {
+    try {
+      const response = await fetch("/api/products/search", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({productName: inputValue}),
+      });
 
-    // 매핑코드가 같은 항목들 중복 제거 (첫 번째 항목만 유지)
-    const seenCodes = new Set<string>();
-    return suggestions.filter((item: any) => {
-      const code = item.code || "";
-      if (seenCodes.has(code)) {
-        return false;
+      const result = await response.json();
+      if (result.success) {
+        return result.data || [];
       }
-      seenCodes.add(code);
-      return true;
-    });
+      return [];
+    } catch (error) {
+      console.error("상품 검색 실패:", error);
+      return [];
+    }
   },
-  handleRecommendClick: (rowIdx, value) => {
-    const suggestions = get().getSuggestions(value);
+  handleRecommendClick: async (rowIdx, value) => {
+    const suggestions = await get().getSuggestions(value);
     if (!suggestions.length) {
       get().openDirectInputModal(value, rowIdx);
       return;
@@ -308,11 +267,62 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       reader.onload = (e) => {
         try {
           const data = new Uint8Array(e.target?.result as ArrayBuffer);
-          const workbook = XLSX.read(data, {type: "array"});
+
+          // 파일 형식 확인 및 읽기 옵션 설정
+          let workbook;
+          try {
+            // Google Sheets에서 다운로드한 파일을 위한 옵션 추가
+            workbook = XLSX.read(data, {
+              type: "array",
+              cellStyles: false,
+              cellDates: false,
+              cellNF: false,
+              cellText: false,
+              raw: false,
+              dense: false,
+            });
+          } catch (readError: any) {
+            // 첫 번째 시도 실패 시 다른 옵션으로 재시도
+            try {
+              workbook = XLSX.read(data, {
+                type: "array",
+                raw: true,
+              });
+            } catch (retryError: any) {
+              reject(
+                new Error(
+                  `파일을 읽을 수 없습니다. 파일 형식을 확인해주세요. (${
+                    readError.message || "알 수 없는 오류"
+                  })`
+                )
+              );
+              return;
+            }
+          }
+
+          if (
+            !workbook ||
+            !workbook.SheetNames ||
+            workbook.SheetNames.length === 0
+          ) {
+            reject(new Error("파일에 워크시트가 없습니다."));
+            return;
+          }
+
           const firstSheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[firstSheetName];
+
+          if (!worksheet) {
+            reject(new Error("워크시트를 찾을 수 없습니다."));
+            return;
+          }
+
+          // Google Sheets 파일을 위한 옵션 추가
           const raw = XLSX.utils.sheet_to_json(worksheet, {
             header: 1,
+            defval: "", // 빈 셀을 빈 문자열로 처리
+            raw: false, // 포맷된 값 사용
+            dateNF: "yyyy-mm-dd", // 날짜 형식
           }) as any[][];
 
           if (!raw.length) {
@@ -525,11 +535,25 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
           };
 
           resolve(uploadedFile);
-        } catch (error) {
-          reject(error);
+        } catch (error: any) {
+          console.error("파일 처리 중 오류:", error);
+          reject(
+            new Error(
+              `파일 처리 중 오류가 발생했습니다: ${
+                error.message || "알 수 없는 오류"
+              }`
+            )
+          );
         }
       };
-      reader.onerror = () => reject(new Error("파일 읽기 실패"));
+      reader.onerror = (error) => {
+        console.error("파일 읽기 실패:", error);
+        reject(
+          new Error(
+            `파일을 읽을 수 없습니다. 파일이 손상되었거나 지원하지 않는 형식일 수 있습니다.`
+          )
+        );
+      };
       reader.readAsArrayBuffer(file);
     });
   },
@@ -608,11 +632,36 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     }));
   },
   openDirectInputModal: (targetName, rowIdx) => {
+    // 필드 순서 정의: 내외주/택배사/상품명/사방넷명/매핑코드/가격/판매가/택배비/카테고리/매입처/상품구분/세금구분/기타
+    const fieldOrder = [
+      "type",
+      "postType",
+      "name",
+      "sabangName",
+      "code",
+      "price",
+      "salePrice",
+      "postFee",
+      "category",
+      "purchase",
+      "productType",
+      "billType",
+      "etc",
+    ];
+
     const codes = get().codes;
-    const baseFields = codes.length
-      ? Object.keys(codes[0])
-      : ["name", "code", "etc"];
-    const fields = baseFields.filter((k) => k !== "id");
+    // codes에서 사용 가능한 필드 확인
+    const availableFields = codes.length
+      ? Object.keys(codes[0]).filter(
+          (k) => k !== "id" && k !== "createdAt" && k !== "updatedAt"
+        )
+      : fieldOrder;
+
+    // 필드 순서에 맞게 정렬하고, 사용 가능한 필드만 포함
+    const fields = fieldOrder.filter((field) =>
+      availableFields.includes(field)
+    );
+
     get().setDirectInputModal({
       open: true,
       fields,
@@ -621,7 +670,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       targetName,
     });
   },
-  saveDirectInputModal: () => {
+  saveDirectInputModal: async () => {
     const {
       directInputModal,
       productCodeMap,
@@ -647,11 +696,48 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     }
 
     if (values.name && values.code) {
-      setProductCodeMap({
-        ...productCodeMap,
-        [values.name]: values.code,
-      });
-      setCodes([...codes, {...values}]); // codes에도 항상 push
+      try {
+        // 서버에 상품 저장
+        const response = await fetch("/api/products/create", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            type: values.type,
+            postType: values.postType,
+            name: values.name,
+            code: values.code,
+            pkg: values.pkg,
+            price: values.price ? parseInt(values.price) : null,
+            salePrice: values.salePrice ? parseInt(values.salePrice) : null,
+            postFee: values.postFee ? parseInt(values.postFee) : null,
+            purchase: values.purchase,
+            billType: values.billType,
+            category: values.category,
+            productType: values.productType,
+            sabangName: values.sabangName,
+            etc: values.etc,
+          }),
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          setProductCodeMap({
+            ...productCodeMap,
+            [values.name]: values.code,
+          });
+          // 로컬 codes에도 추가 (즉시 반영)
+          setCodes([...codes, {...values}]);
+        } else {
+          alert(`상품 저장 실패: ${result.error}`);
+          return;
+        }
+      } catch (error: any) {
+        console.error("상품 저장 실패:", error);
+        alert(`상품 저장 중 오류가 발생했습니다: ${error.message}`);
+        return;
+      }
     }
     set({directInputModal: {...directInputModal, open: false}});
   },

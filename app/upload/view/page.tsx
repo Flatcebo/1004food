@@ -3,6 +3,10 @@
 import {useEffect, useState, useRef, useMemo, Suspense} from "react";
 import {useSearchParams} from "next/navigation";
 import {useUploadStore} from "@/stores/uploadStore";
+import RecommendModal from "@/components/RecommendModal";
+import DirectInputModal from "@/components/DirectInputModal";
+import {fieldNameMap} from "@/constants/fieldMappings";
+import {useAutoMapping} from "@/hooks/useAutoMapping";
 
 function FileViewContent() {
   const searchParams = useSearchParams();
@@ -107,7 +111,7 @@ function FileViewContent() {
     }
   };
 
-  // 매핑코드가 모두 입력되었는지 확인
+  // 매핑코드와 업체명이 모두 입력되었는지 확인
   const isAllMappingCodesFilled = useMemo(() => {
     if (
       !tableData.length ||
@@ -117,10 +121,14 @@ function FileViewContent() {
       return false;
     }
 
+    const headerRow = tableData[0];
     const nameIdx = headerIndex.nameIdx;
+    const vendorIdx = headerRow.findIndex(
+      (h: any) => h === "업체명" || h === "업체"
+    );
     const dataRows = tableData.slice(1);
 
-    // 모든 행의 상품명에 대해 매핑코드가 있는지 확인
+    // 모든 행의 상품명에 대해 매핑코드와 업체명이 있는지 확인
     for (let i = 0; i < dataRows.length; i++) {
       const row = dataRows[i];
       const name = row[nameIdx];
@@ -131,40 +139,51 @@ function FileViewContent() {
 
       const trimmedName = name.trim();
 
-      // productCodeMap에서 확인
+      // 매핑코드 확인
       const codeFromMap = productCodeMap[trimmedName];
-
-      // codes에서 확인
       const codeFromCodes = codes.find((c: any) => c.name === trimmedName)?.code;
-
-      // codesOriginRef에서 확인
       const codeFromOrigin = codesOriginRef.current.find(
         (c) => c.name === trimmedName
       )?.code;
+      
+      const hasMappingCode = !!(codeFromMap || codeFromCodes || codeFromOrigin);
 
-      // 하나라도 매핑코드가 없으면 false 반환
-      if (!codeFromMap && !codeFromCodes && !codeFromOrigin) {
+      // 업체명 확인
+      const vendorName = vendorIdx !== -1 ? String(row[vendorIdx] || "").trim() : "";
+
+      // 매핑코드나 업체명이 하나라도 없으면 false 반환
+      if (!hasMappingCode || (vendorIdx !== -1 && !vendorName)) {
         return false;
       }
     }
 
-    return true; // 모든 상품명에 매핑코드가 있음
+    return true; // 모든 상품명에 매핑코드와 업체명이 있음
   }, [tableData, headerIndex, productCodeMap, codes]);
 
   const isConfirmed = fileId ? confirmedFiles.has(fileId) : false;
 
   const handleConfirm = () => {
     if (fileId && isAllMappingCodesFilled) {
-      // 파일의 productCodeMap 업데이트
+      // 파일의 productCodeMap 및 tableData 업데이트 (모든 필수 필드 포함)
       const updatedFile = {
-        ...file,
+        id: file.id,
+        fileName: file.fileName,
+        rowCount: file.rowCount,
+        tableData: tableData,
+        headerIndex: headerIndex,
         productCodeMap: {...productCodeMap},
       };
+      
       // sessionStorage 업데이트
-      sessionStorage.setItem(
-        `uploadedFile_${fileId}`,
-        JSON.stringify(updatedFile)
-      );
+      try {
+        sessionStorage.setItem(
+          `uploadedFile_${fileId}`,
+          JSON.stringify(updatedFile)
+        );
+      } catch (error) {
+        console.error("sessionStorage 업데이트 실패:", error);
+      }
+      
       // store의 uploadedFiles도 업데이트
       const updatedFiles = uploadedFiles.map((f) =>
         f.id === fileId ? updatedFile : f
@@ -172,7 +191,27 @@ function FileViewContent() {
       setUploadedFiles(updatedFiles);
 
       confirmFile(fileId);
-      alert("확인되었습니다. 모달의 Upload 버튼을 클릭하여 업로드하세요.");
+      
+      // 부모 창에 메시지 전송 (약간의 지연을 두어 메시지가 전송되도록 보장)
+      if (window.opener) {
+        // 메시지 전송
+        window.opener.postMessage(
+          {
+            type: "FILE_CONFIRMED",
+            fileId: fileId,
+            fileData: updatedFile,
+          },
+          window.location.origin
+        );
+        
+        // 메시지가 전송될 시간을 주고 새창 닫기
+        setTimeout(() => {
+          window.close();
+        }, 100);
+      } else {
+        // opener가 없으면 바로 닫기
+        window.close();
+      }
     }
   };
 
@@ -183,35 +222,19 @@ function FileViewContent() {
     window.close();
   };
 
-  // 필드명 한글 매핑
-  const fieldNameMap: {[key: string]: string} = {
-    name: "상품명",
-    code: "매핑코드",
-    type: "내외주",
-    postType: "택배사",
-    pkg: "합포수량",
-    price: "가격",
-    postFee: "택배비",
-    etc: "기타",
-  };
-
-  // 추천 모달 테이블 고정 헤더 순서
-  const fixedRecommendTableHeaders = [
-    "type",
-    "postType",
-    "name",
-    "code",
-    "price",
-    "postFee",
-    "pkg",
-    "etc",
-  ];
 
   useEffect(() => {
-    // codes.json fetch
-    fetch("/data/mapping/codes.json")
+    // 상품 목록 fetch (DB에서)
+    fetch("/api/products/list")
       .then((res) => res.json())
-      .then(setCodes);
+      .then((result) => {
+        if (result.success) {
+          setCodes(result.data || []);
+        }
+      })
+      .catch((error) => {
+        console.error("상품 목록 조회 실패:", error);
+      });
   }, [setCodes]);
 
   useEffect(() => {
@@ -271,109 +294,23 @@ function FileViewContent() {
     }
   }, [fileId, uploadedFiles, setHeaderIndex, setProductCodeMap]);
 
-  // 상품명 기준으로 매핑코드 + 타입(내외주) + postType(택배사) 컬럼 자동 연동
-  useEffect(() => {
-    if (
-      !tableData.length ||
-      !headerIndex ||
-      typeof headerIndex.nameIdx !== "number"
-    ) {
-      return;
-    }
-
-    const headerRow = tableData[0];
-    const nameIdx = headerIndex.nameIdx;
-
-    const mappingIdx = headerRow.findIndex((h) => h === "매핑코드");
-    const typeIdx = headerRow.findIndex((h) => h === "내외주");
-    const postTypeIdx = headerRow.findIndex((h) => h === "택배사");
-
-    if (mappingIdx === -1 && typeIdx === -1 && postTypeIdx === -1) return;
-
-    let changed = false;
-    const newMap: {[name: string]: string} = {...productCodeMap};
-
-    const newTable = tableData.map((row, idx) => {
-      if (idx === 0) return row;
-
-      const nameVal = row[nameIdx];
-      if (!nameVal || typeof nameVal !== "string") return row;
-      const name = nameVal.trim();
-      if (!name) return row;
-
-      let rowChanged = false;
-      let updatedRow = row;
-
-      // 코드 우선순위: 직접 입력(productCodeMap) > codes.json 자동 매칭
-      let codeVal = newMap[name];
-      const found = codes.find((c: any) => c.name === name);
-      if (!codeVal && found?.code) codeVal = found.code;
-
-      if (mappingIdx >= 0 && codeVal && row[mappingIdx] !== codeVal) {
-        if (!rowChanged) {
-          updatedRow = [...row];
-          rowChanged = true;
-        }
-        updatedRow[mappingIdx] = codeVal;
-        changed = true;
-      }
-
-      if (found) {
-        if (typeIdx >= 0 && found.type && row[typeIdx] !== found.type) {
-          if (!rowChanged) {
-            updatedRow = [...row];
-            rowChanged = true;
-          }
-          updatedRow[typeIdx] = found.type;
-          changed = true;
-        }
-        if (
-          postTypeIdx >= 0 &&
-          found.postType &&
-          row[postTypeIdx] !== found.postType
-        ) {
-          if (!rowChanged) {
-            updatedRow = [...row];
-            rowChanged = true;
-          }
-          updatedRow[postTypeIdx] = found.postType;
-          changed = true;
-        }
-      }
-
-      // productCodeMap에 비어있고 자동매칭된 코드가 있으면 map에도 채워둠
-      if (!newMap[name] && found?.code) {
-        newMap[name] = found.code;
-      }
-
-      return updatedRow;
-    });
-
-    if (changed) {
-      setTableData(newTable);
-    }
-    // productCodeMap이 변경되었다면 갱신
-    const originalKeys = Object.keys(productCodeMap);
-    const newKeys = Object.keys(newMap);
-    if (
-      originalKeys.length !== newKeys.length ||
-      originalKeys.some((k) => productCodeMap[k] !== newMap[k])
-    ) {
-      setProductCodeMap(newMap);
-    }
-  }, [
+  // 자동 매핑 훅 사용
+  const {codesOriginRef: autoMappingCodesOriginRef} = useAutoMapping({
     tableData,
-    headerIndex,
     codes,
     productCodeMap,
+    headerIndex,
     setTableData,
     setProductCodeMap,
-  ]);
+    setHeaderIndex,
+  });
 
-  // productCodeMap 변경 시 강제 리렌더링을 위한 effect
+  // codesOriginRef와 autoMappingCodesOriginRef 동기화
   useEffect(() => {
-    // productCodeMap이 변경되면 컴포넌트가 리렌더링되도록 함
-  }, [productCodeMap]);
+    if (autoMappingCodesOriginRef.current.length > 0) {
+      codesOriginRef.current = autoMappingCodesOriginRef.current;
+    }
+  }, [autoMappingCodesOriginRef, codesOriginRef]);
 
   if (!file || !tableData.length) {
     return (
@@ -519,148 +456,77 @@ function FileViewContent() {
                                   추천
                                 </span>
                               </button>
-                              {recommendIdx === i &&
-                                recommendList.length > 0 && (
-                                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#00000084] bg-opacity-30">
-                                    <div className="bg-white shadow-lg rounded-lg px-8 py-6 min-w-[420px] max-w-[90vw] max-h-[65vh] overflow-y-auto relative flex flex-col">
-                                      <div className="font-bold text-base mb-4 text-center">
-                                        비슷한 상품명 추천
-                                      </div>
-                                      <table className="text-xs border border-gray-300 w-full">
-                                        <thead>
-                                          <tr>
-                                            {fixedRecommendTableHeaders
-                                              .filter((key) => {
-                                                return recommendList.some(
-                                                  (item: any) =>
-                                                    item.hasOwnProperty(key)
-                                                );
-                                              })
-                                              .map((key) => (
-                                                <th
-                                                  key={key}
-                                                  className={`border border-gray-200 font-normal bg-gray-50 px-2 py-1 ${
-                                                    key === "code" ||
-                                                    key === "pkg"
-                                                      ? "text-center"
-                                                      : ""
-                                                  }`}
-                                                >
-                                                  {fieldNameMap[key] || key}
-                                                </th>
-                                              ))}
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {recommendList.map((item, ridx) => {
-                                            return (
-                                              <tr
-                                                key={ridx}
-                                                className="hover:bg-blue-100 cursor-pointer"
-                                                onClick={() => {
-                                                  // 먼저 productCodeMap 업데이트
-                                                  const updatedProductCodeMap = {...productCodeMap, [name]: item.code};
-                                                  setProductCodeMap(updatedProductCodeMap);
-                                                  
-                                                  // 매핑코드, 내외주, 택배사 실시간 업데이트
-                                                  const headerRow = tableData[0];
-                                                  const mappingIdx = headerRow.findIndex((h: any) => h === "매핑코드");
-                                                  const typeIdx = headerRow.findIndex((h: any) => h === "내외주");
-                                                  const postTypeIdx = headerRow.findIndex((h: any) => h === "택배사");
-                                                  
-                                                  if (mappingIdx !== -1 || typeIdx !== -1 || postTypeIdx !== -1) {
-                                                    const updatedTable = tableData.map((row, idx) => {
-                                                      if (idx === 0) return row;
-                                                      const rowName = row[headerIndex.nameIdx!];
-                                                      // 같은 상품명을 가진 모든 행 업데이트
-                                                      if (rowName && String(rowName).trim() === name.trim()) {
-                                                        const newRow = [...row];
-                                                        if (mappingIdx !== -1 && item.code) {
-                                                          newRow[mappingIdx] = item.code;
-                                                        }
-                                                        if (typeIdx !== -1 && item.type) {
-                                                          newRow[typeIdx] = item.type;
-                                                        }
-                                                        if (postTypeIdx !== -1 && item.postType) {
-                                                          newRow[postTypeIdx] = item.postType;
-                                                        }
-                                                        return newRow;
-                                                      }
-                                                      return row;
-                                                    });
-                                                    setTableData(updatedTable);
-                                                    
-                                                    // 파일 데이터도 업데이트
-                                                    if (fileId) {
-                                                      const updatedFile = {
-                                                        ...file,
-                                                        tableData: updatedTable,
-                                                        productCodeMap: updatedProductCodeMap,
-                                                      };
-                                                      setFile(updatedFile);
-                                                      sessionStorage.setItem(
-                                                        `uploadedFile_${fileId}`,
-                                                        JSON.stringify(updatedFile)
-                                                      );
-                                                      const updatedFiles = uploadedFiles.map((f) =>
-                                                        f.id === fileId ? updatedFile : f
-                                                      );
-                                                      setUploadedFiles(updatedFiles);
-                                                    }
-                                                  }
-                                                  
-                                                  // 모달 닫기
-                                                  handleSelectSuggest(name, item.code);
-                                                }}
-                                              >
-                                                {fixedRecommendTableHeaders
-                                                  .filter((key) => {
-                                                    return recommendList.some(
-                                                      (item: any) =>
-                                                        item.hasOwnProperty(key)
-                                                    );
-                                                  })
-                                                  .map((key) => (
-                                                    <td
-                                                      key={key}
-                                                      className={`border border-gray-200 px-2 py-1 break-all text-black whitespace-pre-line min-w-[85px] ${
-                                                        key === "code" ||
-                                                        key === "pkg"
-                                                          ? "text-center"
-                                                          : ""
-                                                      }`}
-                                                    >
-                                                      {String(
-                                                        (item as any)[key] ?? ""
-                                                      )}
-                                                    </td>
-                                                  ))}
-                                              </tr>
-                                            );
-                                          })}
-                                        </tbody>
-                                      </table>
-                                      <div className="flex justify-between items-center mt-4 text-xs">
-                                        <button
-                                          type="button"
-                                          className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-100 text-gray-600"
-                                          onClick={() => {
-                                            openDirectInputModal(name || "", i);
-                                            setRecommendIdx(null);
-                                          }}
-                                        >
-                                          직접 입력
-                                        </button>
-                                      </div>
-                                      <button
-                                        className="absolute top-2 right-4 text-gray-400 hover:text-black text-[24px]"
-                                        onClick={() => setRecommendIdx(null)}
-                                      >
-                                        ×
-                                      </button>
-                                    </div>
-                                  </div>
-                                )}
+                              {recommendIdx === i && (
+                                <RecommendModal
+                                  open={recommendIdx === i}
+                                  recommendList={recommendList}
+                                  name={name}
+                                  rowIdx={i}
+                                  onSelect={(selectedName, selectedCode, selectedItem) => {
+                                    // 먼저 productCodeMap 업데이트
+                                    const updatedProductCodeMap = {...productCodeMap, [selectedName]: selectedCode};
+                                    setProductCodeMap(updatedProductCodeMap);
+                                    
+                                    // 매핑코드, 내외주, 택배사 실시간 업데이트
+                                    const headerRow = tableData[0];
+                                    const mappingIdx = headerRow.findIndex((h: any) => h === "매핑코드");
+                                    const typeIdx = headerRow.findIndex((h: any) => h === "내외주");
+                                    const postTypeIdx = headerRow.findIndex((h: any) => h === "택배사");
+                                    
+                                    if (mappingIdx !== -1 || typeIdx !== -1 || postTypeIdx !== -1) {
+                                      // 선택한 항목의 데이터 사용 (없으면 codes에서 찾기)
+                                      const itemData = selectedItem || codes.find((c: any) => c.name === selectedName && c.code === selectedCode);
+                                      
+                                      const updatedTable = tableData.map((row, idx) => {
+                                        if (idx === 0) return row;
+                                        const rowName = row[headerIndex.nameIdx!];
+                                        // 같은 상품명을 가진 모든 행 업데이트
+                                        if (rowName && String(rowName).trim() === selectedName.trim()) {
+                                          const newRow = [...row];
+                                          if (mappingIdx !== -1 && selectedCode) {
+                                            newRow[mappingIdx] = selectedCode;
+                                          }
+                                          if (typeIdx !== -1 && itemData?.type) {
+                                            newRow[typeIdx] = itemData.type;
+                                          }
+                                          if (postTypeIdx !== -1 && itemData?.postType) {
+                                            newRow[postTypeIdx] = itemData.postType;
+                                          }
+                                          return newRow;
+                                        }
+                                        return row;
+                                      });
+                                      setTableData(updatedTable);
+                                      
+                                      // 파일 데이터도 업데이트
+                                      if (fileId) {
+                                        const updatedFile = {
+                                          ...file,
+                                          tableData: updatedTable,
+                                          productCodeMap: updatedProductCodeMap,
+                                        };
+                                        setFile(updatedFile);
+                                        sessionStorage.setItem(
+                                          `uploadedFile_${fileId}`,
+                                          JSON.stringify(updatedFile)
+                                        );
+                                        const updatedFiles = uploadedFiles.map((f) =>
+                                          f.id === fileId ? updatedFile : f
+                                        );
+                                        setUploadedFiles(updatedFiles);
+                                      }
+                                    }
+                                    
+                                    // 모달 닫기
+                                    handleSelectSuggest(selectedName, selectedCode);
+                                  }}
+                                  onClose={() => setRecommendIdx(null)}
+                                  onDirectInput={(inputName, inputRowIdx) => {
+                                    openDirectInputModal(inputName, inputRowIdx);
+                                    setRecommendIdx(null);
+                                  }}
+                                />
+                              )}
                             </div>
                           ) : (
                             ""
@@ -675,108 +541,15 @@ function FileViewContent() {
           </div>
         </>
       )}
-      {directInputModal.open && (
-        <div
-          onClick={closeDirectInputModal}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#00000080] bg-opacity-30"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white shadow-xl rounded-xl px-8 py-7 min-w-[340px] max-w-[90vw] overflow-y-auto relative flex flex-col items-start"
-          >
-            <div className="font-bold text-lg mb-4 text-center text-[#333]">
-              신규 상품정보 직접 입력
-            </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                saveDirectInputModal();
-              }}
-              className="w-full"
-            >
-              <table className="w-full text-xs mb-3 ">
-                <tbody className="w-full flex flex-col gap-[10px]">
-                  {directInputModal.fields.map((key) => (
-                    <tr key={key} className="flex gap-[6px]">
-                      <td className="pr-2 py-1 text-right font-medium text-gray-500 w-[75px]">
-                        {fieldNameMap[key] || key}
-                      </td>
-                      <td className="w-full">
-                        {key === "name" ? (
-                          <input
-                            type="text"
-                            className="border border-[#e1e0e0] px-2 py-1 rounded w-full bg-gray-100 text-[#333]"
-                            value={directInputModal.values.name || ""}
-                            readOnly
-                          />
-                        ) : key === "type" ? (
-                          <select
-                            className="border border-[#e1e0e0] px-2 py-1 rounded w-full text-[#333]"
-                            value={directInputModal.values[key] || ""}
-                            onChange={(e) =>
-                              setDirectInputValue(key, e.target.value)
-                            }
-                          >
-                            <option value="">선택하세요</option>
-                            <option value="내주">내주</option>
-                            <option value="외주">외주</option>
-                          </select>
-                        ) : key === "postType" ? (
-                          <select
-                            className="border border-[#e1e0e0] px-2 py-1 rounded w-full text-[#333]"
-                            value={directInputModal.values[key] || ""}
-                            onChange={(e) =>
-                              setDirectInputValue(key, e.target.value)
-                            }
-                          >
-                            <option value="">선택하세요</option>
-                            <option value="CJ대한통운">CJ대한통운</option>
-                            <option value="우체국택배">우체국택배</option>
-                            <option value="로젠택배">로젠택배</option>
-                            <option value="롯데택배">롯데택배</option>
-                            <option value="한진택배">한진택배</option>
-                            <option value="천일택배">천일택배</option>
-                          </select>
-                        ) : (
-                          <input
-                            type="text"
-                            className="border border-[#e1e0e0] px-2 py-1 rounded w-full text-[#333]"
-                            value={directInputModal.values[key] || ""}
-                            onChange={(e) =>
-                              setDirectInputValue(key, e.target.value)
-                            }
-                          />
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="flex flex-row gap-4 justify-end mt-4">
-                <button
-                  type="button"
-                  className="bg-gray-200 px-4 py-2 rounded hover:bg-gray-300 text-xs font-semibold"
-                  onClick={closeDirectInputModal}
-                >
-                  닫기
-                </button>
-                <button
-                  type="submit"
-                  className="bg-blue-600 px-4 py-2 rounded hover:bg-blue-700 text-xs text-white font-semibold"
-                >
-                  저장
-                </button>
-              </div>
-            </form>
-            <button
-              className="absolute top-2 right-4 text-gray-400 hover:text-black text-[24px]"
-              onClick={closeDirectInputModal}
-            >
-              ×
-            </button>
-          </div>
-        </div>
-      )}
+      <DirectInputModal
+        open={directInputModal.open}
+        fields={directInputModal.fields}
+        values={directInputModal.values}
+        fieldNameMap={fieldNameMap}
+        onClose={closeDirectInputModal}
+        onSave={saveDirectInputModal}
+        onValueChange={setDirectInputValue}
+      />
       {/* 확인/취소 버튼 */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-300 p-4 flex justify-end gap-4 shadow-lg">
         {!isAllMappingCodesFilled && (
