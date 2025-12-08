@@ -21,7 +21,7 @@ const INTERNAL_COLUMNS: ColumnDef[] = [
   {
     key: "receiverName",
     label: "수취인명",
-    aliases: ["수취인명", "수취인", "받는분", "받는 사람"],
+    aliases: ["수취인명", "수취인", "받는분", "받는 사람", "수령인", "받는분"],
   },
   {
     key: "receiverPhone",
@@ -33,6 +33,9 @@ const INTERNAL_COLUMNS: ColumnDef[] = [
       "수취인전화번호",
       "받는분연락처",
       "받는사람전화",
+      "수령인전화번호",
+      "수령인 전화번호",
+      "수령인 전화번호1",
     ],
   },
   {
@@ -43,13 +46,23 @@ const INTERNAL_COLUMNS: ColumnDef[] = [
   {
     key: "address",
     label: "주소",
-    aliases: ["주소", "배송지주소", "수취인주소"],
+    aliases: [
+      "주소",
+      "배송지주소",
+      "수취인주소",
+      "수령인주소",
+      "수령인 주소",
+      "받는분주소",
+      "받는분 주소",
+      "통합배송지",
+      "통합 배송지",
+    ],
   },
   {key: "qty", label: "수량", aliases: ["수량", "주문수량", "총수량"]},
   {
     key: "productName",
     label: "상품명",
-    aliases: ["상품명", "아이템명", "품목명", "상품"],
+    aliases: ["상품명", "아이템명", "품목명", "상품", "품목명", "주문상품명"],
   },
 
   {
@@ -164,6 +177,18 @@ export interface UploadStoreState {
   closeDirectInputModal: () => void;
   saveDirectInputModal: () => void;
   openDirectInputModal: (targetName: string, rowIdx: number | null) => void;
+  productModal: {
+    open: boolean;
+    productName: string;
+    rowIdx: number | null;
+  };
+  setProductModal: (modalState: {
+    open: boolean;
+    productName: string;
+    rowIdx: number | null;
+  }) => void;
+  closeProductModal: () => void;
+  openProductModal: (targetName: string, rowIdx: number | null) => void;
 
   handleInputCode: (name: string, code: string) => void;
   getSuggestions: (
@@ -229,15 +254,8 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
   },
   getSuggestions: async (inputValue: string) => {
     try {
-      const response = await fetch("/api/products/search", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({productName: inputValue}),
-      });
-
-      const result = await response.json();
+      const {searchProducts} = await import("@/utils/api");
+      const result = await searchProducts(inputValue);
       if (result.success) {
         return result.data || [];
       }
@@ -632,22 +650,9 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     }));
   },
   openDirectInputModal: (targetName, rowIdx) => {
-    // 필드 순서 정의: 내외주/택배사/상품명/사방넷명/매핑코드/가격/판매가/택배비/카테고리/매입처/상품구분/세금구분/기타
-    const fieldOrder = [
-      "type",
-      "postType",
-      "name",
-      "sabangName",
-      "code",
-      "price",
-      "salePrice",
-      "postFee",
-      "category",
-      "purchase",
-      "productType",
-      "billType",
-      "etc",
-    ];
+    // 필드 순서 정의
+    const {PRODUCT_FIELD_ORDER} = require("@/constants/productFields");
+    const fieldOrder = PRODUCT_FIELD_ORDER;
 
     const codes = get().codes;
     // codes에서 사용 가능한 필드 확인
@@ -655,12 +660,11 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       ? Object.keys(codes[0]).filter(
           (k) => k !== "id" && k !== "createdAt" && k !== "updatedAt"
         )
-      : fieldOrder;
+      : [];
 
-    // 필드 순서에 맞게 정렬하고, 사용 가능한 필드만 포함
-    const fields = fieldOrder.filter((field) =>
-      availableFields.includes(field)
-    );
+    // fieldOrder에 정의된 필드들은 항상 포함 (pkg 등이 codes에 없어도 표시)
+    // fieldOrder의 모든 필드를 항상 포함시킴
+    const fields = fieldOrder;
 
     get().setDirectInputModal({
       open: true,
@@ -697,31 +701,12 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
 
     if (values.name && values.code) {
       try {
-        // 서버에 상품 저장
-        const response = await fetch("/api/products/create", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            type: values.type,
-            postType: values.postType,
-            name: values.name,
-            code: values.code,
-            pkg: values.pkg,
-            price: values.price ? parseInt(values.price) : null,
-            salePrice: values.salePrice ? parseInt(values.salePrice) : null,
-            postFee: values.postFee ? parseInt(values.postFee) : null,
-            purchase: values.purchase,
-            billType: values.billType,
-            category: values.category,
-            productType: values.productType,
-            sabangName: values.sabangName,
-            etc: values.etc,
-          }),
-        });
+        const {transformProductData} = await import("@/utils/product");
+        const {createProduct} = await import("@/utils/api");
+        
+        const requestBody = transformProductData(values);
+        const result = await createProduct(requestBody);
 
-        const result = await response.json();
         if (result.success) {
           setProductCodeMap({
             ...productCodeMap,
@@ -733,12 +718,33 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
           alert(`상품 저장 실패: ${result.error}`);
           return;
         }
-      } catch (error: any) {
+      } catch (error) {
         console.error("상품 저장 실패:", error);
-        alert(`상품 저장 중 오류가 발생했습니다: ${error.message}`);
+        const errorMessage = error instanceof Error 
+          ? error.message 
+          : "상품 저장 중 오류가 발생했습니다.";
+        alert(`상품 저장 중 오류가 발생했습니다: ${errorMessage}`);
         return;
       }
     }
     set({directInputModal: {...directInputModal, open: false}});
+  },
+  productModal: {
+    open: false,
+    productName: "",
+    rowIdx: null as number | null,
+  },
+  setProductModal: (modalState) => set({productModal: modalState}),
+  closeProductModal: () => {
+    set((state: any) => ({
+      productModal: {...state.productModal, open: false},
+    }));
+  },
+  openProductModal: (targetName, rowIdx) => {
+    get().setProductModal({
+      open: true,
+      productName: targetName,
+      rowIdx,
+    });
   },
 }));

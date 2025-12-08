@@ -1,24 +1,18 @@
 "use client";
 
 import {useState, useEffect} from "react";
+import type {Product} from "@/types/api";
 
-interface CodeItem {
-  id: string;
-  type: string;
-  postType: string;
-  name: string;
-  code: string;
-  pkg: string;
-  price: number | null;
-  postFee: number | null;
-  etc: string;
-}
+type CodeItem = Omit<Product, "id"> & {
+  id: string | number;
+};
 
 interface CodeEditWindowProps {
   rowId: number;
-  currentRowData: any;
-  onCodeUpdate: (rowId: number, code: string) => void;
+  currentRowData: Record<string, unknown>;
+  onCodeUpdate: (rowId: number, code: string, codeItem?: CodeItem) => void;
   onClose: () => void;
+  skipApiCall?: boolean; // API 호출을 건너뛸지 여부
 }
 
 export default function CodeEditWindow({
@@ -26,10 +20,11 @@ export default function CodeEditWindow({
   currentRowData,
   onCodeUpdate,
   onClose,
+  skipApiCall = false,
 }: CodeEditWindowProps) {
   // 현재 row 데이터에서 주요 필드 추출
-  const currentCode = currentRowData?.매핑코드 || "";
-  const currentProductName = currentRowData?.상품명 || "";
+  const currentCode = String(currentRowData?.매핑코드 || "");
+  const currentProductName = String(currentRowData?.상품명 || "");
   const [codes, setCodes] = useState<CodeItem[]>([]);
   const [currentCodeData, setCurrentCodeData] = useState<CodeItem | null>(null);
   const [codeSearch, setCodeSearch] = useState<string>("");
@@ -39,39 +34,44 @@ export default function CodeEditWindow({
 
   useEffect(() => {
     // 상품 목록 로드 (DB에서)
-    fetch("/api/products/list")
-      .then((res) => res.json())
-      .then((result) => {
-        if (result.success) {
-          const data = result.data || [];
-          setCodes(data);
-          setFilteredCodes(data);
+    const loadProducts = async () => {
+      const {fetchProducts} = await import("@/utils/api");
+      const result = await fetchProducts();
+      if (result.success) {
+        const data = (result.data || []) as CodeItem[];
+        setCodes(data);
 
-          // 현재 매핑코드에 해당하는 데이터 찾기
-          if (currentCode) {
-            const found = data.find(
-              (item: CodeItem) => item.code === currentCode
-            );
-            setCurrentCodeData(found || null);
-          }
+        // 현재 매핑코드에 해당하는 데이터 찾기
+        if (currentCode) {
+          const found = data.find((item) => item.code === currentCode);
+          setCurrentCodeData(found || null);
         }
-      })
-      .catch((error) => {
-        console.error("코드 데이터 로드 실패:", error);
-      });
+      }
+    };
+    loadProducts();
   }, [currentCode]);
 
   useEffect(() => {
+    // 검색어가 있을 때만 필터링 적용
+    const hasCodeSearch = codeSearch.trim().length > 0;
+    const hasNameSearch = nameSearch.trim().length > 0;
+
+    if (!hasCodeSearch && !hasNameSearch) {
+      // 검색어가 없으면 빈 배열 유지
+      setFilteredCodes([]);
+      return;
+    }
+
     // 검색 필터링
     let filtered = codes;
 
-    if (codeSearch.trim()) {
+    if (hasCodeSearch) {
       filtered = filtered.filter((item) =>
         item.code.toLowerCase().includes(codeSearch.toLowerCase())
       );
     }
 
-    if (nameSearch.trim()) {
+    if (hasNameSearch) {
       filtered = filtered.filter((item) =>
         item.name.toLowerCase().includes(nameSearch.toLowerCase())
       );
@@ -83,37 +83,48 @@ export default function CodeEditWindow({
   const handleCodeSelect = async (codeItem: CodeItem) => {
     setLoading(true);
     try {
-      const response = await fetch("/api/upload/update-code", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          rowId,
-          codeData: {
-            code: codeItem.code,
-            type: codeItem.type,
-            postType: codeItem.postType,
-            pkg: codeItem.pkg,
-            price: codeItem.price,
-            postFee: codeItem.postFee,
-            etc: codeItem.etc,
-          },
-        }),
-      });
-
-      const result = await response.json();
-
-      if (result.success) {
-        onCodeUpdate(rowId, codeItem.code);
-        alert("매핑코드 및 관련 데이터가 업데이트되었습니다.");
+      if (skipApiCall) {
+        // API 호출 없이 바로 콜백 실행
+        onCodeUpdate(rowId, codeItem.code, codeItem);
         onClose();
       } else {
-        alert(`업데이트 실패: ${result.error}`);
+        // 기존 API 호출 로직
+        const response = await fetch("/api/upload/update-code", {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            rowId,
+            codeData: {
+              code: codeItem.code,
+              type: codeItem.type,
+              postType: codeItem.postType,
+              pkg: codeItem.pkg,
+              price: codeItem.price,
+              postFee: codeItem.postFee,
+              etc: codeItem.etc,
+            },
+          }),
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          onCodeUpdate(rowId, codeItem.code, codeItem);
+          alert("매핑코드 및 관련 데이터가 업데이트되었습니다.");
+          onClose();
+        } else {
+          alert(`업데이트 실패: ${result.error}`);
+        }
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error("매핑코드 업데이트 중 오류:", error);
-      alert(`업데이트 중 오류가 발생했습니다: ${error.message}`);
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "업데이트 중 오류가 발생했습니다.";
+      alert(`업데이트 중 오류가 발생했습니다: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -164,6 +175,14 @@ export default function CodeEditWindow({
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">
+                  사방넷명
+                </label>
+                <div className="text-sm text-gray-900 wrap-break-word">
+                  {currentCodeData.sabangName || "-"}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">
                   매핑코드
                 </label>
                 <div className="text-sm text-gray-900 font-mono">
@@ -183,9 +202,9 @@ export default function CodeEditWindow({
                   가격
                 </label>
                 <div className="text-sm text-gray-900">
-                  {currentCodeData.price !== undefined &&
-                  currentCodeData.price !== null
-                    ? currentCodeData.price.toLocaleString()
+                  {currentCodeData.salePrice !== undefined &&
+                  currentCodeData.salePrice !== null
+                    ? currentCodeData.salePrice.toLocaleString()
                     : "-"}
                 </div>
               </div>
@@ -263,32 +282,29 @@ export default function CodeEditWindow({
             <table className="w-full border-collapse border border-gray-300">
               <thead className="bg-gray-100 sticky top-0">
                 <tr>
-                  <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium">
+                  <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
                     내외주
                   </th>
-                  <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium">
+                  <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
                     택배사
                   </th>
-                  <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium">
+                  <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
                     상품명
                   </th>
-                  <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium">
+                  <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
+                    사방넷명
+                  </th>
+                  <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
                     매핑코드
                   </th>
-                  <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium">
+                  <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
                     합포수량
                   </th>
-                  <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium">
-                    가격
+                  <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
+                    공급가
                   </th>
-                  <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium">
+                  <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
                     택배비
-                  </th>
-                  <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium">
-                    기타
-                  </th>
-                  <th className="border border-gray-300 px-4 py-2 text-left text-sm font-medium">
-                    선택
                   </th>
                 </tr>
               </thead>
@@ -299,7 +315,9 @@ export default function CodeEditWindow({
                       colSpan={9}
                       className="border border-gray-300 px-4 py-8 text-center text-gray-500"
                     >
-                      검색 결과가 없습니다.
+                      {codeSearch.trim() || nameSearch.trim()
+                        ? "검색 결과가 없습니다."
+                        : "매핑코드 또는 상품명을 검색해주세요."}
                     </td>
                   </tr>
                 ) : (
@@ -307,42 +325,35 @@ export default function CodeEditWindow({
                     <tr
                       key={item.id}
                       className="hover:bg-blue-50 cursor-pointer transition-colors"
+                      onClick={() => handleCodeSelect(item)}
                     >
-                      <td className="border border-gray-300 px-4 py-2 text-sm">
+                      <td className="border border-gray-300 px-4 py-2 text-xs">
                         {item.type}
                       </td>
-                      <td className="border border-gray-300 px-4 py-2 text-sm">
+                      <td className="border border-gray-300 px-4 py-2 text-xs">
                         {item.postType}
                       </td>
-                      <td className="border border-gray-300 px-4 py-2 text-sm">
+                      <td className="border border-gray-300 px-4 py-2 text-xs">
                         {item.name}
                       </td>
-                      <td className="border border-gray-300 px-4 py-2 text-sm font-mono">
+                      <td className="border border-gray-300 px-4 py-2 text-xs">
+                        {item.sabangName}
+                      </td>
+                      <td className="border border-gray-300 px-4 py-2 text-xs font-mono">
                         {item.code}
                       </td>
-                      <td className="border border-gray-300 px-4 py-2 text-sm">
+                      <td className="border border-gray-300 px-4 py-2 text-xs">
                         {item.pkg}
                       </td>
-                      <td className="border border-gray-300 px-4 py-2 text-sm">
-                        {item.price !== undefined && item.price !== null
-                          ? item.price.toLocaleString()
+                      <td className="border border-gray-300 px-4 py-2 text-xs">
+                        {item.salePrice !== undefined && item.salePrice !== null
+                          ? item.salePrice.toLocaleString()
                           : "-"}
                       </td>
-                      <td className="border border-gray-300 px-4 py-2 text-sm">
+                      <td className="border border-gray-300 px-4 py-2 text-xs">
                         {item.postFee !== undefined && item.postFee !== null
                           ? item.postFee.toLocaleString()
                           : "-"}
-                      </td>
-                      <td className="border border-gray-300 px-4 py-2 text-sm">
-                        {item.etc || "-"}
-                      </td>
-                      <td className="border border-gray-300 px-4 py-2 text-sm">
-                        <button
-                          onClick={() => handleCodeSelect(item)}
-                          className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
-                        >
-                          선택
-                        </button>
                       </td>
                     </tr>
                   ))

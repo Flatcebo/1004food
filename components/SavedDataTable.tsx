@@ -1,10 +1,11 @@
 "use client";
 
-import {useState, useEffect} from "react";
+import {useState, useEffect, useMemo, useCallback, memo} from "react";
 import CodeEditWindow from "./CodeEditWindow";
 import RowDetailWindow from "./RowDetailWindow";
 import Pagination from "./Pagination";
 import ActiveFilters from "./ActiveFilters";
+import {getColumnWidth} from "@/utils/table";
 
 interface SavedDataTableProps {
   loading: boolean;
@@ -13,6 +14,7 @@ interface SavedDataTableProps {
   paginatedRows: any[];
   currentPage: number;
   totalPages: number;
+  totalCount: number;
   onPageChange: (page: number) => void;
   onDataUpdate?: () => void;
   // 필터 정보
@@ -28,13 +30,14 @@ interface SavedDataTableProps {
   onRemoveFilter?: (filterType: string) => void;
 }
 
-export default function SavedDataTable({
+const SavedDataTable = memo(function SavedDataTable({
   loading,
   tableRows,
   headers,
   paginatedRows,
   currentPage,
   totalPages,
+  totalCount,
   onPageChange,
   onDataUpdate,
   selectedType = "",
@@ -57,36 +60,11 @@ export default function SavedDataTable({
     "upload_time",
   ];
 
-  // 헤더 순서는 useUploadData에서 이미 정렬되어 전달되므로 그대로 사용
-  const filteredHeaders = headers.filter(
-    (header) => !hiddenHeaders.includes(header)
-  );
+  // 헤더 순서는 useUploadData에서 이미 정렬되어 전달되므로 그대로 사용 (메모이제이션)
+  const filteredHeaders = useMemo(() => {
+    return headers.filter((header) => !hiddenHeaders.includes(header));
+  }, [headers]);
 
-  // 각 컬럼의 width 설정 (px 단위)
-  const getColumnWidth = (header: string): string => {
-    const widthMap: Record<string, string> = {
-      id: "60px",
-      매핑코드: "100px",
-      주문상태: "80px",
-      우편: "60px",
-      내외주: "50px",
-      주소: "250px",
-      상품명: "200px",
-      수량: "45px",
-      가격: "100px",
-      합포수량: "80px",
-      택배비: "80px",
-      기타: "100px",
-      업체명: "90px",
-      수취인명: "70px",
-      주문자명: "70px",
-      수취인: "70px",
-      주문자: "70px",
-      전화번호: "120px",
-      이름: "80px",
-    };
-    return widthMap[header] || "100px"; // 기본값 100px
-  };
   const [editingRow, setEditingRow] = useState<{
     id: number;
     rowData: any;
@@ -94,6 +72,7 @@ export default function SavedDataTable({
   const [detailRow, setDetailRow] = useState<any>(null);
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [isCanceling, setIsCanceling] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [templates, setTemplates] = useState<any[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<number | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -127,6 +106,18 @@ export default function SavedDataTable({
 
     setIsDownloading(true);
     try {
+      // 현재 적용된 필터 정보를 다운로드 요청에 포함
+      const filters = {
+        type: selectedType || undefined,
+        postType: selectedPostType || undefined,
+        vendor: selectedVendor || undefined,
+        orderStatus: selectedOrderStatus || undefined,
+        searchField: appliedSearchField || undefined,
+        searchValue: appliedSearchValue || undefined,
+        uploadTimeFrom: uploadTimeFrom || undefined,
+        uploadTimeTo: uploadTimeTo || undefined,
+      };
+
       const response = await fetch("/api/upload/download", {
         method: "POST",
         headers: {
@@ -135,6 +126,7 @@ export default function SavedDataTable({
         body: JSON.stringify({
           templateId: selectedTemplate,
           rowIds: rowIdsToDownload,
+          filters: rowIdsToDownload ? undefined : filters, // 선택된 행이 있으면 필터 무시, 없으면 필터 적용
         }),
       });
 
@@ -225,6 +217,52 @@ export default function SavedDataTable({
       alert(`취소 중 오류가 발생했습니다: ${error.message}`);
     } finally {
       setIsCanceling(false);
+    }
+  };
+
+  // 선택된 항목 삭제 처리
+  const handleDeleteSelected = async () => {
+    if (selectedRows.size === 0) {
+      alert("삭제할 항목을 선택해주세요.");
+      return;
+    }
+
+    if (
+      !confirm(
+        `선택한 ${selectedRows.size}개의 데이터를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`
+      )
+    ) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch("/api/upload/delete", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          rowIds: Array.from(selectedRows),
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert(`${result.deletedCount}개의 데이터가 삭제되었습니다.`);
+        setSelectedRows(new Set());
+        if (onDataUpdate) {
+          onDataUpdate();
+        }
+      } else {
+        alert(`삭제 실패: ${result.error}`);
+      }
+    } catch (error: any) {
+      console.error("데이터 삭제 중 오류:", error);
+      alert(`삭제 중 오류가 발생했습니다: ${error.message}`);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -340,13 +378,13 @@ export default function SavedDataTable({
   }
 
   // 데이터가 없을 때 필터 표시와 함께 메시지 표시
-  if (tableRows.length === 0) {
+  if (totalCount === 0) {
     return (
       <>
         <div className="h-full mb-2 text-sm text-gray-600 flex items-center justify-between">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="py-1.5">
-              총 {tableRows.length}건 (페이지 {currentPage} / {totalPages})
+              총 {totalCount}건 (페이지 {currentPage} / {totalPages})
             </span>
             {activeFilters.length > 0 && (
               <div className="flex items-center gap-1 flex-wrap">
@@ -384,7 +422,7 @@ export default function SavedDataTable({
       <div className="h-full mb-2 text-sm text-gray-600 flex items-center justify-between">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="py-1.5">
-            총 {tableRows.length}건 (페이지 {currentPage} / {totalPages})
+            총 {totalCount}건 (페이지 {currentPage} / {totalPages})
           </span>
           <ActiveFilters
             filters={activeFilters}
@@ -393,14 +431,24 @@ export default function SavedDataTable({
         </div>
         <div className="flex items-center gap-2">
           {selectedRows.size > 0 && (
-            <button
-              onClick={handleCancelSelected}
-              disabled={isCanceling}
-              className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm 
-              font-bold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isCanceling ? "처리 중..." : `${selectedRows.size}건 취소`}
-            </button>
+            <>
+              <button
+                onClick={handleCancelSelected}
+                disabled={isCanceling || isDeleting}
+                className="px-4 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-sm 
+                font-bold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isCanceling ? "처리 중..." : `${selectedRows.size}건 취소`}
+              </button>
+              <button
+                onClick={handleDeleteSelected}
+                disabled={isCanceling || isDeleting}
+                className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm 
+                font-bold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isDeleting ? "삭제 중..." : `${selectedRows.size}건 삭제`}
+              </button>
+            </>
           )}
 
           {templates.length > 0 && (
@@ -477,7 +525,7 @@ export default function SavedDataTable({
                 <tr
                   key={`${row.id}-${rowIdx}`}
                   className={`${
-                    isCancelled ? "bg-red-50" : isSelected ? "bg-gray-100" : ""
+                    isCancelled ? "bg-red-50" : isSelected ? "bg-gray-50" : ""
                   }`}
                   style={{height: "56px"}}
                 >
@@ -579,4 +627,6 @@ export default function SavedDataTable({
       )}
     </>
   );
-}
+});
+
+export default SavedDataTable;

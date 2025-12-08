@@ -8,6 +8,7 @@ export default function SideBar() {
   const pathname = usePathname();
   const isUploadActive = pathname === "/upload" || pathname?.startsWith("/upload/view") || pathname?.startsWith("/upload/preview");
   const isTemplatesActive = pathname === "/upload/templates";
+  const isProductsActive = pathname === "/products";
 
   return (
     <div className="w-60 h-full bg-[#25323c] shrink-0">
@@ -47,6 +48,17 @@ export default function SideBar() {
               }`}
             >
               <span>양식 템플릿 관리</span>
+            </Link>
+
+            <Link
+              href="/products"
+              className={`w-full px-4 py-2 rounded-lg transition-all duration-200 ${
+                isProductsActive
+                  ? "text-[#888eab]"
+                  : "hover:bg-gray-700 hover:translate-x-1 active:scale-95 text-white"
+              }`}
+            >
+              <span>상품 관리</span>
             </Link>
           </div>
         </div>

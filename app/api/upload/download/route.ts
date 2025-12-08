@@ -8,7 +8,7 @@ import {copyCellStyle, applyHeaderStyle} from "@/utils/excelStyles";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const {templateId, rowIds} = body;
+    const {templateId, rowIds, filters} = body;
 
     if (!templateId) {
       return NextResponse.json(
@@ -32,32 +32,217 @@ export async function POST(request: NextRequest) {
     }
 
     const templateData = templateResult[0].template_data;
-    const headers = templateData.headers || [];
-    const columnOrder = templateData.columnOrder || headers;
+    const headers = Array.isArray(templateData.headers)
+      ? templateData.headers
+      : [];
+    const columnOrder = Array.isArray(templateData.columnOrder)
+      ? templateData.columnOrder
+      : headers;
+
+    // columnOrder가 비어있거나 유효하지 않은 경우 에러 처리
+    if (!columnOrder || columnOrder.length === 0) {
+      return NextResponse.json(
+        {success: false, error: "템플릿의 컬럼 순서가 설정되지 않았습니다."},
+        {status: 400}
+      );
+    }
 
     // 선택된 행 데이터 조회
     let rows: any[] = [];
     if (rowIds && rowIds.length > 0) {
+      // 선택된 행이 있으면 해당 ID들만 조회 (필터 무시)
       const rowData = await sql`
         SELECT row_data
         FROM upload_rows
         WHERE id = ANY(${rowIds})
       `;
-      rows = rowData.map((r: any) => r.row_data);
+      rows = rowData.map((r: any) => {
+        const rowData = r.row_data || {};
+        // 우편번호를 우편으로 통일
+        if (
+          rowData["우편번호"] !== undefined &&
+          rowData["우편"] === undefined
+        ) {
+          rowData["우편"] = rowData["우편번호"];
+        }
+        return rowData;
+      });
     } else {
-      // 모든 데이터 조회
-      const allData = await sql`
-        SELECT row_data
-        FROM upload_rows
-        ORDER BY id DESC
-      `;
-      rows = allData.map((r: any) => r.row_data);
+      // 필터가 있으면 필터링된 데이터 조회, 없으면 모든 데이터 조회
+      if (filters && Object.keys(filters).length > 0) {
+        const {
+          type,
+          postType,
+          vendor,
+          orderStatus,
+          searchField,
+          searchValue,
+          uploadTimeFrom,
+          uploadTimeTo,
+        } = filters;
+
+        // 검색 필드 매핑
+        const fieldMap: {[key: string]: string} = {
+          수취인명: "수취인명",
+          주문자명: "주문자명",
+          상품명: "상품명",
+          매핑코드: "매핑코드",
+        };
+        const dbField = searchField ? fieldMap[searchField] : null;
+        const searchPattern = searchValue ? `%${searchValue}%` : null;
+
+        // WHERE 조건 구성
+        const conditions: any[] = [];
+        if (type) {
+          conditions.push(sql`ur.row_data->>'내외주' = ${type}`);
+        }
+        if (postType) {
+          conditions.push(sql`ur.row_data->>'택배사' = ${postType}`);
+        }
+        if (vendor) {
+          conditions.push(sql`ur.row_data->>'업체명' = ${vendor}`);
+        }
+        if (orderStatus) {
+          conditions.push(sql`ur.row_data->>'주문상태' = ${orderStatus}`);
+        }
+        if (dbField && searchPattern) {
+          conditions.push(sql`ur.row_data->>${dbField} ILIKE ${searchPattern}`);
+        }
+        if (uploadTimeFrom) {
+          conditions.push(sql`u.created_at >= ${uploadTimeFrom}::date`);
+        }
+        if (uploadTimeTo) {
+          conditions.push(
+            sql`u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')`
+          );
+        }
+
+        // 조건부 쿼리 구성
+        const buildQuery = () => {
+          if (conditions.length === 0) {
+            return sql`
+              SELECT ur.row_data
+              FROM upload_rows ur
+              INNER JOIN uploads u ON ur.upload_id = u.id
+              ORDER BY u.created_at DESC, ur.id DESC
+            `;
+          }
+
+          // 첫 번째 조건으로 WHERE 시작
+          let query = sql`
+            SELECT ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE ${conditions[0]}
+          `;
+
+          // 나머지 조건들을 AND로 연결
+          for (let i = 1; i < conditions.length; i++) {
+            query = sql`${query} AND ${conditions[i]}`;
+          }
+
+          query = sql`${query} ORDER BY u.created_at DESC, ur.id DESC`;
+
+          return query;
+        };
+
+        const filteredData = await buildQuery();
+        rows = filteredData.map((r: any) => {
+          const rowData = r.row_data || {};
+          // 우편번호를 우편으로 통일
+          if (
+            rowData["우편번호"] !== undefined &&
+            rowData["우편"] === undefined
+          ) {
+            rowData["우편"] = rowData["우편번호"];
+          }
+          return rowData;
+        });
+      } else {
+        // 필터가 없으면 모든 데이터 조회
+        const allData = await sql`
+          SELECT row_data
+          FROM upload_rows
+          ORDER BY id DESC
+        `;
+        rows = allData.map((r: any) => {
+          const rowData = r.row_data || {};
+          // 우편번호를 우편으로 통일
+          if (
+            rowData["우편번호"] !== undefined &&
+            rowData["우편"] === undefined
+          ) {
+            rowData["우편"] = rowData["우편번호"];
+          }
+          return rowData;
+        });
+      }
+    }
+
+    // 매핑코드별 가격 정보 조회 (같은 상품코드는 같은 가격 사용)
+    const productCodes = [
+      ...new Set(rows.map((row: any) => row.매핑코드).filter(Boolean)),
+    ];
+    const productPriceMap: {[code: string]: number | null} = {};
+    const productSalePriceMap: {[code: string]: number | null} = {};
+
+    if (productCodes.length > 0) {
+      try {
+        const products = await sql`
+          SELECT code, price, sale_price
+          FROM products
+          WHERE code = ANY(${productCodes})
+        `;
+        products.forEach((p: any) => {
+          if (p.code) {
+            if (p.price !== null && p.price !== undefined) {
+              productPriceMap[p.code] = p.price;
+            }
+            if (p.sale_price !== null && p.sale_price !== undefined) {
+              productSalePriceMap[p.code] = p.sale_price;
+            }
+          }
+        });
+      } catch (error) {
+        console.error("상품 가격 조회 실패:", error);
+      }
     }
 
     // 템플릿 헤더 순서에 맞게 데이터 재구성
     let excelData = rows.map((row) => {
-      return columnOrder.map((header: string) => {
-        return mapDataToTemplate(row, header);
+      // 매핑코드가 있으면 products 테이블에서 가격 정보 가져오기
+      if (row.매핑코드) {
+        // salePrice 우선 사용 (공급가용)
+        if (productSalePriceMap[row.매핑코드] !== undefined) {
+          const salePrice = productSalePriceMap[row.매핑코드];
+          if (salePrice !== null) {
+            // 공급가 필드에 명시적으로 설정 (여러 변형명 지원)
+            row["공급가"] = salePrice;
+            row["salePrice"] = salePrice;
+            row["sale_price"] = salePrice;
+            // 가격 필드에도 설정 (기존 호환성)
+            if (!row.가격 || row.가격 === "") {
+              row.가격 = salePrice;
+            }
+          }
+        }
+        // salePrice가 없으면 price 사용
+        else if (productPriceMap[row.매핑코드] !== undefined) {
+          const productPrice = productPriceMap[row.매핑코드];
+          if (productPrice !== null) {
+            row["공급가"] = productPrice;
+            if (!row.가격 || row.가격 === "") {
+              row.가격 = productPrice;
+            }
+          }
+        }
+      }
+
+      return columnOrder.map((header: any) => {
+        // header가 문자열이 아닌 경우 문자열로 변환
+        const headerStr =
+          typeof header === "string" ? header : String(header || "");
+        return mapDataToTemplate(row, headerStr);
       });
     });
 
@@ -104,6 +289,27 @@ export async function POST(request: NextRequest) {
         };
       } else if (workbook.properties.date1904 === undefined) {
         workbook.properties.date1904 = false;
+      }
+
+      // 테마 관련 속성 제거 (복구 알림 방지)
+      try {
+        const model = (workbook as any).model;
+        if (model) {
+          // 테마 관련 속성 제거
+          if (model.theme) {
+            delete model.theme;
+          }
+          if (model.themeManager) {
+            delete model.themeManager;
+          }
+          // 스타일 테마 제거
+          if (model.styles && model.styles.themes) {
+            delete model.styles.themes;
+          }
+        }
+      } catch (themeError) {
+        // 테마 제거 실패는 무시 (필수 아님)
+        console.warn("테마 제거 중 오류 (무시됨):", themeError);
       }
 
       // calcProperties 초기화 (fullCalcOnLoad 에러 방지)
@@ -374,6 +580,31 @@ export async function POST(request: NextRequest) {
       (workbook as any).calcProperties.fullCalcOnLoad = false;
     }
 
+    // 워크북 저장 전 최종 정리 (테마 관련 속성 제거 - 복구 알림 방지)
+    try {
+      const model = (workbook as any).model;
+      if (model) {
+        // 테마 관련 속성 제거
+        if (model.theme) {
+          delete model.theme;
+        }
+        if (model.themeManager) {
+          delete model.themeManager;
+        }
+        // 스타일 테마 제거
+        if (model.styles && model.styles.themes) {
+          delete model.styles.themes;
+        }
+        // 워크북 테마 속성 제거
+        if (model.workbook && model.workbook.theme) {
+          delete model.workbook.theme;
+        }
+      }
+    } catch (cleanupError) {
+      // 정리 실패는 무시
+      console.warn("워크북 정리 중 오류 (무시됨):", cleanupError);
+    }
+
     // 엑셀 파일 생성
     let buffer: ArrayBuffer;
     try {
@@ -394,14 +625,25 @@ export async function POST(request: NextRequest) {
       new Date().toISOString().split("T")[0]
     }.xlsx`;
 
-    return new NextResponse(buffer, {
-      headers: {
-        "Content-Type":
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "Content-Disposition": `attachment; filename="${encodeURIComponent(
-          fileName
-        )}"`,
-      },
+    // Windows에서 한글 파일명 깨짐 방지를 위한 RFC 5987 형식 인코딩
+    // HTTP 헤더는 ASCII만 허용하므로 filename에는 ASCII fallback만 사용
+    const safeFileName = "download.xlsx"; // ASCII fallback
+    const encodedFileName = encodeURIComponent(fileName); // UTF-8 인코딩
+    // filename*만 사용 (대부분의 브라우저가 지원)
+    const contentDisposition = `attachment; filename*=UTF-8''${encodedFileName}`;
+
+    // 헤더를 Headers 객체로 직접 설정하여 파싱 문제 방지
+    const responseHeaders = new Headers();
+    responseHeaders.set(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    // ASCII만 포함된 헤더 값 사용
+    responseHeaders.set("Content-Disposition", contentDisposition);
+
+    // Response 객체를 직접 사용하여 헤더 설정
+    return new Response(buffer, {
+      headers: responseHeaders,
     });
   } catch (error: any) {
     console.error("엑셀 다운로드 실패:", error);

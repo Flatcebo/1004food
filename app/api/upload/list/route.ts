@@ -12,6 +12,9 @@ export async function GET(request: NextRequest) {
     const searchValue = searchParams.get("searchValue");
     const uploadTimeFrom = searchParams.get("uploadTimeFrom");
     const uploadTimeTo = searchParams.get("uploadTimeTo");
+    const page = parseInt(searchParams.get("page") || "1", 10);
+    const limit = parseInt(searchParams.get("limit") || "20", 10);
+    const offset = (page - 1) * limit;
 
     // 검색 필드 매핑
     const fieldMap: {[key: string]: string} = {
@@ -23,70 +26,82 @@ export async function GET(request: NextRequest) {
     const dbField = searchField ? fieldMap[searchField] : null;
     const searchPattern = searchValue ? `%${searchValue}%` : null;
 
-    // 동적 쿼리 구성
-    let query = sql`
-      SELECT 
-        ur.id,
-        ur.upload_id,
-        ur.row_data,
-        u.file_name,
-        u.created_at as upload_time
-      FROM upload_rows ur
-      INNER JOIN uploads u ON ur.upload_id = u.id
-    `;
-
-    // WHERE 조건 추가
+    // WHERE 조건 구성
     const conditions: any[] = [];
     if (type) {
-      query = sql`${query} WHERE ur.row_data->>'내외주' = ${type}`;
-      conditions.push(true);
+      conditions.push(sql`ur.row_data->>'내외주' = ${type}`);
     }
     if (postType) {
-      query =
-        conditions.length === 0
-          ? sql`${query} WHERE ur.row_data->>'택배사' = ${postType}`
-          : sql`${query} AND ur.row_data->>'택배사' = ${postType}`;
-      conditions.push(true);
+      conditions.push(sql`ur.row_data->>'택배사' = ${postType}`);
     }
     if (vendor) {
-      query =
-        conditions.length === 0
-          ? sql`${query} WHERE ur.row_data->>'업체명' = ${vendor}`
-          : sql`${query} AND ur.row_data->>'업체명' = ${vendor}`;
-      conditions.push(true);
+      conditions.push(sql`ur.row_data->>'업체명' = ${vendor}`);
     }
     if (orderStatus) {
-      query =
-        conditions.length === 0
-          ? sql`${query} WHERE ur.row_data->>'주문상태' = ${orderStatus}`
-          : sql`${query} AND ur.row_data->>'주문상태' = ${orderStatus}`;
-      conditions.push(true);
+      conditions.push(sql`ur.row_data->>'주문상태' = ${orderStatus}`);
     }
     if (dbField && searchPattern) {
-      query =
-        conditions.length === 0
-          ? sql`${query} WHERE ur.row_data->>${dbField} ILIKE ${searchPattern}`
-          : sql`${query} AND ur.row_data->>${dbField} ILIKE ${searchPattern}`;
-      conditions.push(true);
+      conditions.push(sql`ur.row_data->>${dbField} ILIKE ${searchPattern}`);
     }
     if (uploadTimeFrom) {
-      query =
-        conditions.length === 0
-          ? sql`${query} WHERE u.created_at >= ${uploadTimeFrom}::date`
-          : sql`${query} AND u.created_at >= ${uploadTimeFrom}::date`;
-      conditions.push(true);
+      conditions.push(sql`u.created_at >= ${uploadTimeFrom}::date`);
     }
     if (uploadTimeTo) {
-      query =
-        conditions.length === 0
-          ? sql`${query} WHERE u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')`
-          : sql`${query} AND u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')`;
+      conditions.push(sql`u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')`);
     }
 
-    // ORDER BY 추가
-    query = sql`${query} ORDER BY u.created_at DESC, ur.id DESC`;
+    // 조건부 쿼리 구성
+    const buildQuery = (selectClause: any, includeLimit = false) => {
+      if (conditions.length === 0) {
+        return includeLimit
+          ? sql`${selectClause} ORDER BY u.created_at DESC, ur.id DESC LIMIT ${limit} OFFSET ${offset}`
+          : selectClause;
+      }
+      
+      // 첫 번째 조건으로 WHERE 시작
+      let query = sql`${selectClause} WHERE ${conditions[0]}`;
+      
+      // 나머지 조건들을 AND로 연결
+      for (let i = 1; i < conditions.length; i++) {
+        query = sql`${query} AND ${conditions[i]}`;
+      }
+      
+      if (includeLimit) {
+        query = sql`${query} ORDER BY u.created_at DESC, ur.id DESC LIMIT ${limit} OFFSET ${offset}`;
+      }
+      
+      return query;
+    };
 
-    const rows = await query;
+    // 전체 개수 조회 쿼리
+    const countQuery = buildQuery(
+      sql`SELECT COUNT(*) as total FROM upload_rows ur INNER JOIN uploads u ON ur.upload_id = u.id`
+    );
+
+    // 데이터 조회 쿼리 (페이지네이션 적용)
+    const dataQuery = buildQuery(
+      sql`
+        SELECT 
+          ur.id,
+          ur.upload_id,
+          ur.row_data,
+          u.file_name,
+          u.created_at as upload_time
+        FROM upload_rows ur
+        INNER JOIN uploads u ON ur.upload_id = u.id
+      `,
+      true
+    );
+
+    // 두 쿼리를 병렬로 실행
+    const [countResult, rows] = await Promise.all([
+      countQuery,
+      dataQuery,
+    ]);
+
+    const totalCount = Array.isArray(countResult) && countResult.length > 0
+      ? parseInt(countResult[0].total as string, 10)
+      : 0;
 
     // 필터 목록 조회
     const [typeList, postTypeList, vendorList] = await Promise.all([
@@ -98,6 +113,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: Array.isArray(rows) ? rows : [],
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages: Math.ceil(totalCount / limit),
+      },
       filters: {
         types: typeList.map((t: any) => t.type).filter(Boolean),
         postTypes: postTypeList.map((pt: any) => pt.post_type).filter(Boolean),

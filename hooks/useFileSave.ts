@@ -183,17 +183,8 @@ export function useFileSave({
     try {
       // 신규 상품이 있으면 먼저 products 테이블에 저장
       if (newProducts.length > 0) {
-        const productResponse = await fetch("/api/products/batch-create", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            products: newProducts,
-          }),
-        });
-
-        const productResult = await productResponse.json();
+        const {batchCreateProducts} = await import("@/utils/api");
+        const productResult = await batchCreateProducts(newProducts);
         if (!productResult.success) {
           console.warn("신규 상품 저장 실패:", productResult.error);
           // 상품 저장 실패해도 업로드는 계속 진행

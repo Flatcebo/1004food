@@ -56,6 +56,21 @@ export async function POST() {
       CREATE INDEX IF NOT EXISTS idx_products_code ON products(code)
     `;
 
+    // 구매처(업체) 정보를 저장할 테이블 생성
+    await sql`
+      CREATE TABLE IF NOT EXISTS purchase (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL UNIQUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `;
+
+    // 인덱스 생성 (검색 성능 향상)
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_purchase_name ON purchase(name)
+    `;
+
     return NextResponse.json({ success: true, message: "스키마가 성공적으로 생성되었습니다." });
   } catch (error: any) {
     console.error("스키마 생성 실패:", error);

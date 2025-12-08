@@ -53,6 +53,59 @@ export function mapDataToTemplate(row: any, header: string): any {
   // 매핑된 헤더명 사용
   const mappedHeader = headerMap[header] || header;
 
+  // 우편번호 관련 특별 처리
+  if (normalizedHeader.includes("우편") || normalizedHeader.includes("우편번호") || header.includes("우편")) {
+    // 우편번호 또는 우편 필드 찾기
+    const postalValue =
+      row["우편"] ||
+      row["우편번호"] ||
+      row["우편 번호"] ||
+      "";
+    if (postalValue) return postalValue;
+  }
+
+  // 공급가 관련 특별 처리 (salePrice 우선 사용)
+  // 공급가 헤더인 경우 명시적으로 처리
+  if (
+    normalizedHeader.includes("공급가") || 
+    header === "공급가" || 
+    header.includes("공급가") ||
+    (normalizedHeader.includes("가격") && header.includes("공급"))
+  ) {
+    // 공급가 필드 우선 확인 (명시적으로 설정된 값)
+    const priceValue =
+      row["공급가"] ||
+      row["salePrice"] ||
+      row["sale_price"] ||
+      row["가격"] ||
+      "";
+    // 숫자로 변환 시도 (문자열이면 숫자로 변환)
+    if (priceValue !== null && priceValue !== undefined && priceValue !== "") {
+      const numValue = typeof priceValue === 'string' ? parseFloat(priceValue.replace(/,/g, '')) : Number(priceValue);
+      if (!isNaN(numValue)) {
+        return numValue;
+      }
+      return priceValue;
+    }
+    return "";
+  }
+  
+  // 일반 가격 필드 처리 (공급가가 아닌 경우)
+  if (normalizedHeader.includes("가격") && !normalizedHeader.includes("공급가")) {
+    const priceValue =
+      row["가격"] ||
+      row["price"] ||
+      "";
+    if (priceValue !== null && priceValue !== undefined && priceValue !== "") {
+      const numValue = typeof priceValue === 'string' ? parseFloat(priceValue.replace(/,/g, '')) : Number(priceValue);
+      if (!isNaN(numValue)) {
+        return numValue;
+      }
+      return priceValue;
+    }
+    return "";
+  }
+
   // 다양한 변형으로 값 찾기
   let value =
     row[mappedHeader] ||

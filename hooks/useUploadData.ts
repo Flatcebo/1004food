@@ -1,19 +1,11 @@
-import {useState, useEffect, useCallback} from "react";
+import {useState, useEffect, useCallback, useMemo} from "react";
+import {getTodayDate} from "@/utils/date";
 
 interface Filters {
   types: string[];
   postTypes: string[];
   vendors: string[];
 }
-
-// 오늘 날짜를 YYYY-MM-DD 형식으로 반환
-const getTodayDate = () => {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, "0");
-  const day = String(today.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
 
 export function useUploadData() {
   const [savedData, setSavedData] = useState<any[]>([]);
@@ -43,6 +35,8 @@ export function useUploadData() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
+  const [totalCount, setTotalCount] = useState(0);
+
   // 저장된 데이터 조회
   const fetchSavedData = useCallback(async () => {
     setLoading(true);
@@ -63,12 +57,19 @@ export function useUploadData() {
         params.append("uploadTimeFrom", appliedUploadTimeFrom);
       if (appliedUploadTimeTo)
         params.append("uploadTimeTo", appliedUploadTimeTo);
+      
+      // 페이지네이션 파라미터 추가
+      params.append("page", currentPage.toString());
+      params.append("limit", itemsPerPage.toString());
 
       const response = await fetch(`/api/upload/list?${params.toString()}`);
       const result = await response.json();
 
       if (result.success) {
         setSavedData(result.data || []);
+        if (result.pagination) {
+          setTotalCount(result.pagination.totalCount || 0);
+        }
         if (result.filters) {
           setFilters(result.filters);
         }
@@ -89,6 +90,8 @@ export function useUploadData() {
     appliedSearchValue,
     appliedUploadTimeFrom,
     appliedUploadTimeTo,
+    currentPage,
+    itemsPerPage,
   ]);
 
   // 초기 로드 시 오늘 날짜 필터 자동 적용
@@ -98,44 +101,48 @@ export function useUploadData() {
     setAppliedUploadTimeTo(todayDate);
   }, []);
 
+  // 필터 변경 시 첫 페이지로 이동하고 데이터 조회
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    selectedType,
+    selectedPostType,
+    selectedVendor,
+    selectedOrderStatus,
+    appliedSearchField,
+    appliedSearchValue,
+    appliedUploadTimeFrom,
+    appliedUploadTimeTo,
+  ]);
+
+  // currentPage 변경 시 데이터 조회
   useEffect(() => {
     fetchSavedData();
-    setCurrentPage(1); // 필터 변경 시 첫 페이지로 이동
   }, [fetchSavedData]);
 
-  // 테이블 데이터 준비: 모든 행 데이터를 평탄화
-  const tableRows = savedData.map((row: any) => {
-    const flatRow = {
-      id: row.id,
-      file_name: row.file_name,
-      upload_time: row.upload_time,
-      ...(row.row_data || {}),
-    };
+  // 테이블 데이터 준비: 현재 페이지의 행 데이터를 평탄화 (메모이제이션)
+  // 백엔드에서 이미 페이지네이션된 데이터를 받아오므로 그대로 사용
+  const tableRows = useMemo(() => {
+    return savedData.map((row: any) => {
+      const flatRow = {
+        id: row.id,
+        file_name: row.file_name,
+        upload_time: row.upload_time,
+        ...(row.row_data || {}),
+      };
 
-    // 우편번호를 우편으로 통일
-    if (flatRow["우편번호"] !== undefined && flatRow["우편"] === undefined) {
-      flatRow["우편"] = flatRow["우편번호"];
-      delete flatRow["우편번호"];
-    }
-
-    return flatRow;
-  });
-
-  // 모든 컬럼 헤더 수집
-  const allHeaders = new Set<string>();
-  tableRows.forEach((row: any) => {
-    Object.keys(row).forEach((key) => {
-      // 우편번호는 우편으로 통일
-      if (key === "우편번호") {
-        allHeaders.add("우편");
-      } else {
-        allHeaders.add(key);
+      // 우편번호를 우편으로 통일
+      if (flatRow["우편번호"] !== undefined && flatRow["우편"] === undefined) {
+        flatRow["우편"] = flatRow["우편번호"];
+        delete flatRow["우편번호"];
       }
-    });
-  });
 
-  // 새창 데이터 테이블과 동일한 헤더 순서 (INTERNAL_COLUMNS 순서)
-  const headerOrder = [
+      return flatRow;
+    });
+  }, [savedData]);
+
+  // 헤더 순서 정의 (상수로 이동)
+  const headerOrder = useMemo(() => [
     "id",
     "file_name",
     "upload_time",
@@ -153,26 +160,45 @@ export function useUploadData() {
     "배송메시지",
     "매핑코드",
     "주문상태",
-  ];
+  ], []);
 
-  const headers = Array.from(allHeaders).sort((a, b) => {
-    const aIndex = headerOrder.indexOf(a);
-    const bIndex = headerOrder.indexOf(b);
-    // 둘 다 순서에 있으면 순서대로
-    if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
-    // a만 순서에 있으면 앞으로
-    if (aIndex !== -1) return -1;
-    // b만 순서에 있으면 앞으로
-    if (bIndex !== -1) return 1;
-    // 둘 다 순서에 없으면 알파벳 순서
-    return a.localeCompare(b);
-  });
+  // 모든 컬럼 헤더 수집 (메모이제이션)
+  const headers = useMemo(() => {
+    const allHeaders = new Set<string>();
+    tableRows.forEach((row: any) => {
+      Object.keys(row).forEach((key) => {
+        // 우편번호는 우편으로 통일
+        if (key === "우편번호") {
+          allHeaders.add("우편");
+        } else {
+          allHeaders.add(key);
+        }
+      });
+    });
 
-  // 페이지네이션 계산
-  const totalPages = Math.ceil(tableRows.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedRows = tableRows.slice(startIndex, endIndex);
+    return Array.from(allHeaders).sort((a, b) => {
+      const aIndex = headerOrder.indexOf(a);
+      const bIndex = headerOrder.indexOf(b);
+      // 둘 다 순서에 있으면 순서대로
+      if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+      // a만 순서에 있으면 앞으로
+      if (aIndex !== -1) return -1;
+      // b만 순서에 있으면 앞으로
+      if (bIndex !== -1) return 1;
+      // 둘 다 순서에 없으면 알파벳 순서
+      return a.localeCompare(b);
+    });
+  }, [tableRows, headerOrder]);
+
+  // 페이지네이션 계산 (백엔드에서 받은 totalCount 사용)
+  const totalPages = useMemo(() => {
+    return Math.ceil(totalCount / itemsPerPage);
+  }, [totalCount, itemsPerPage]);
+
+  // 백엔드에서 이미 페이지네이션된 데이터를 받아오므로 그대로 사용
+  const paginatedRows = useMemo(() => {
+    return tableRows;
+  }, [tableRows]);
 
   // 검색 필터 적용 함수 (검색 버튼 클릭 시 호출)
   const applySearchFilter = useCallback(() => {
@@ -233,6 +259,7 @@ export function useUploadData() {
     currentPage,
     setCurrentPage,
     totalPages,
+    totalCount,
     headers,
     paginatedRows,
     tableRows,

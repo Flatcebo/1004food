@@ -2,46 +2,37 @@
 
 import BaseFilter from "./BaseFilter";
 
-interface DataFiltersProps {
+interface ProductFiltersProps {
   filters: {
     types: string[];
     postTypes: string[];
-    vendors: string[];
+    categories: string[];
   };
   selectedType: string;
   selectedPostType: string;
-  selectedVendor: string;
-  selectedOrderStatus: string;
+  selectedCategory: string;
   searchField: string;
   searchValue: string;
-  uploadTimeFrom: string;
-  uploadTimeTo: string;
   onTypeChange: (type: string) => void;
   onPostTypeChange: (postType: string) => void;
-  onVendorChange: (vendor: string) => void;
-  onOrderStatusChange: (status: string) => void;
+  onCategoryChange: (category: string) => void;
   onSearchFieldChange: (field: string) => void;
   onSearchValueChange: (value: string) => void;
-  onUploadTimeFromChange: (value: string) => void;
-  onUploadTimeToChange: (value: string) => void;
   onApplySearchFilter: () => void;
   onResetFilters: () => void;
 }
 
-export default function DataFilters(props: DataFiltersProps) {
+export default function ProductFilters(props: ProductFiltersProps) {
   return (
     <BaseFilter
       {...props}
-      showVendor={true}
-      showOrderStatus={true}
-      showDateRange={true}
+      showCategory={true}
       searchFieldOptions={[
-        {label: "선택", value: ""},
-        {label: "수취인명", value: "수취인명"},
-        {label: "주문자명", value: "주문자명"},
         {label: "상품명", value: "상품명"},
         {label: "매핑코드", value: "매핑코드"},
+        {label: "사방넷명", value: "사방넷명"},
       ]}
     />
   );
 }
+

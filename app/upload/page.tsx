@@ -90,6 +90,7 @@ export default function UploadPage() {
     currentPage,
     setCurrentPage,
     totalPages,
+    totalCount,
     headers,
     paginatedRows,
     tableRows,
@@ -137,8 +138,55 @@ export default function UploadPage() {
   };
 
   // 파일 검증 관련 훅
-  const {fileValidationStatus, updateValidationStatus} =
-    useFileValidation(uploadedFiles);
+  const {fileValidationStatus, updateValidationStatus} = useFileValidation(
+    uploadedFiles,
+    productCodeMap
+  );
+
+  // 검증이 통과한 파일들을 자동으로 확인 처리
+  useEffect(() => {
+    if (uploadedFiles.length === 0) return;
+
+    // 약간의 지연을 두어 검증 완료 후 실행
+    const timeoutId = setTimeout(() => {
+      uploadedFiles.forEach((file) => {
+        const isValid = fileValidationStatus[file.id] !== false; // 기본값은 true
+        const isConfirmed = confirmedFiles.has(file.id);
+
+        // 검증이 통과했고 아직 확인되지 않은 파일만 자동 확인
+        if (isValid && !isConfirmed) {
+          // sessionStorage에서 최신 파일 데이터 가져오기
+          const storedFile = sessionStorage.getItem(`uploadedFile_${file.id}`);
+          let fileToConfirm = file;
+
+          if (storedFile) {
+            try {
+              fileToConfirm = JSON.parse(storedFile);
+            } catch (error) {
+              console.error("파일 데이터 파싱 실패:", error);
+            }
+          }
+
+          // sessionStorage에 최신 상태 저장 (확인 처리와 동일한 로직)
+          try {
+            sessionStorage.setItem(
+              `uploadedFile_${file.id}`,
+              JSON.stringify(fileToConfirm)
+            );
+          } catch (error) {
+            console.error("sessionStorage 업데이트 실패:", error);
+          }
+
+          // 자동 확인 처리
+          confirmFile(file.id);
+        }
+      });
+    }, 500); // 검증 완료 후 약간의 지연
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [fileValidationStatus, uploadedFiles, confirmedFiles, confirmFile]);
 
   // 메시지 핸들러 훅
   useFileMessageHandler({
@@ -158,6 +206,120 @@ export default function UploadPage() {
     setProductCodeMap,
     setHeaderIndex,
   });
+
+  // 각 업로드된 파일에 자동 매핑 적용
+  useEffect(() => {
+    if (uploadedFiles.length === 0 || codes.length === 0) return;
+
+    // 약간의 지연을 두어 파일 업로드 완료 후 실행
+    const timeoutId = setTimeout(() => {
+      let hasChanges = false;
+      const updatedFiles = uploadedFiles.map((file) => {
+        if (!file.tableData || !file.tableData.length) return file;
+        if (!file.headerIndex || typeof file.headerIndex.nameIdx !== "number")
+          return file;
+
+        const headerRow = file.tableData[0];
+        const nameIdx = file.headerIndex.nameIdx;
+        const mappingIdx = headerRow.findIndex((h: any) => h === "매핑코드");
+        const typeIdx = headerRow.findIndex((h: any) => h === "내외주");
+        const postTypeIdx = headerRow.findIndex((h: any) => h === "택배사");
+
+        if (mappingIdx === -1 && typeIdx === -1 && postTypeIdx === -1)
+          return file;
+
+        let fileChanged = false;
+        const fileProductCodeMap = {...file.productCodeMap};
+
+        const updatedTableData = file.tableData.map((row, idx) => {
+          if (idx === 0) return row;
+
+          const nameVal = row[nameIdx];
+          if (!nameVal || typeof nameVal !== "string") return row;
+          const name = nameVal.trim();
+          if (!name) return row;
+
+          let rowChanged = false;
+          let updatedRow = row;
+
+          // 코드 우선순위: 파일의 productCodeMap > 전역 productCodeMap > codes 자동 매칭
+          let codeVal = fileProductCodeMap[name] || productCodeMap[name];
+          const found = codes.find((c: any) => c.name === name);
+          if (!codeVal && found?.code) codeVal = found.code;
+
+          if (mappingIdx >= 0 && codeVal && row[mappingIdx] !== codeVal) {
+            if (!rowChanged) {
+              updatedRow = [...row];
+              rowChanged = true;
+            }
+            updatedRow[mappingIdx] = codeVal;
+            fileChanged = true;
+          }
+
+          if (found) {
+            if (typeIdx >= 0 && found.type && row[typeIdx] !== found.type) {
+              if (!rowChanged) {
+                updatedRow = [...row];
+                rowChanged = true;
+              }
+              updatedRow[typeIdx] = found.type;
+              fileChanged = true;
+            }
+            if (
+              postTypeIdx >= 0 &&
+              found.postType &&
+              row[postTypeIdx] !== found.postType
+            ) {
+              if (!rowChanged) {
+                updatedRow = [...row];
+                rowChanged = true;
+              }
+              updatedRow[postTypeIdx] = found.postType;
+              fileChanged = true;
+            }
+          }
+
+          // productCodeMap에 비어있고 자동매칭된 코드가 있으면 map에도 채워둠
+          if (!fileProductCodeMap[name] && found?.code) {
+            fileProductCodeMap[name] = found.code;
+          }
+
+          return updatedRow;
+        });
+
+        if (fileChanged) {
+          hasChanges = true;
+          const updatedFile = {
+            ...file,
+            tableData: updatedTableData,
+            productCodeMap: fileProductCodeMap,
+          };
+
+          // sessionStorage 업데이트
+          try {
+            sessionStorage.setItem(
+              `uploadedFile_${file.id}`,
+              JSON.stringify(updatedFile)
+            );
+          } catch (error) {
+            console.error("sessionStorage 업데이트 실패:", error);
+          }
+
+          return updatedFile;
+        }
+
+        return file;
+      });
+
+      if (hasChanges) {
+        setUploadedFiles(updatedFiles);
+      }
+    }, 500); // 파일 업로드 및 codes 로드 완료 후 실행
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [uploadedFiles, codes, productCodeMap, setUploadedFiles]);
 
   // 모달이 열릴 때 일부 데이터만 리셋 (파일 목록은 유지)
   useEffect(() => {
@@ -183,16 +345,14 @@ export default function UploadPage() {
   // 상품 목록 fetch (DB에서)
   useEffect(() => {
     if (!isModalOpen) return;
-    fetch("/api/products/list")
-      .then((res) => res.json())
-      .then((result) => {
-        if (result.success) {
-          setCodes(result.data || []);
-        }
-      })
-      .catch((error) => {
-        console.error("상품 목록 조회 실패:", error);
-      });
+    const loadProducts = async () => {
+      const {fetchProducts} = await import("@/utils/api");
+      const result = await fetchProducts();
+      if (result.success) {
+        setCodes(result.data || []);
+      }
+    };
+    loadProducts();
   }, [isModalOpen, setCodes]);
 
   // 드래그 앤 드롭 훅
@@ -278,26 +438,6 @@ export default function UploadPage() {
               >
                 새로고침
               </button>
-              {/* <button
-                className="px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700"
-                onClick={async () => {
-                  try {
-                    const response = await fetch("/api/upload/init", {
-                      method: "POST",
-                    });
-                    const result = await response.json();
-                    if (result.success) {
-                      alert("스키마가 초기화되었습니다.");
-                    } else {
-                      alert(`스키마 초기화 실패: ${result.error}`);
-                    }
-                  } catch (error: any) {
-                    alert(`스키마 초기화 중 오류: ${error.message}`);
-                  }
-                }}
-              >
-                DB 스키마 초기화
-              </button> */}
             </div>
           </div>
 
@@ -330,6 +470,7 @@ export default function UploadPage() {
             paginatedRows={paginatedRows}
             currentPage={currentPage}
             totalPages={totalPages}
+            totalCount={totalCount}
             onPageChange={setCurrentPage}
             onDataUpdate={fetchSavedData}
             selectedType={selectedType}

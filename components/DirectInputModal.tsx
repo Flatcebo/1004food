@@ -1,5 +1,16 @@
 "use client";
 
+import {useState, useEffect, useRef, useCallback, useMemo} from "react";
+import {
+  TYPE_OPTIONS,
+  POST_TYPE_OPTIONS,
+  BILL_TYPE_OPTIONS,
+  PRODUCT_TYPE_OPTIONS,
+  CATEGORY_OPTIONS,
+} from "@/constants/productFields";
+import {searchPurchase} from "@/utils/api";
+import type {PurchaseOption} from "@/types/api";
+
 interface DirectInputModalProps {
   open: boolean;
   fields: string[];
@@ -8,6 +19,7 @@ interface DirectInputModalProps {
   onClose: () => void;
   onSave: () => void;
   onValueChange: (key: string, value: string) => void;
+  nameReadOnly?: boolean; // 상품명 입력란을 읽기 전용으로 할지 여부
 }
 
 export default function DirectInputModal({
@@ -18,7 +30,135 @@ export default function DirectInputModal({
   onClose,
   onSave,
   onValueChange,
+  nameReadOnly = true, // 기본값은 읽기 전용
 }: DirectInputModalProps) {
+  const [purchaseSuggestions, setPurchaseSuggestions] = useState<
+    PurchaseOption[]
+  >([]);
+  const [showPurchaseDropdown, setShowPurchaseDropdown] = useState(false);
+  const [purchaseSearchQuery, setPurchaseSearchQuery] = useState("");
+  const purchaseInputRef = useRef<HTMLInputElement>(null);
+  const purchaseDropdownRef = useRef<HTMLDivElement>(null);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isSelectingRef = useRef(false);
+
+  // purchase 검색 함수
+  const handleSearchPurchase = useCallback(async (query: string) => {
+    if (!query || query.trim() === "") {
+      setPurchaseSuggestions([]);
+      setShowPurchaseDropdown(false);
+      return;
+    }
+
+    try {
+      const result = await searchPurchase(query.trim());
+      if (result.success) {
+        setPurchaseSuggestions(result.data || []);
+        setShowPurchaseDropdown(true);
+      } else {
+        setPurchaseSuggestions([]);
+        setShowPurchaseDropdown(false);
+      }
+    } catch (error) {
+      console.error("구매처 검색 실패:", error);
+      setPurchaseSuggestions([]);
+      setShowPurchaseDropdown(false);
+    }
+  }, []);
+
+  // purchase 입력 핸들러
+  const handlePurchaseInputChange = useCallback(
+    (value: string) => {
+      setPurchaseSearchQuery(value);
+
+      // 선택 중이 아닐 때만 onValueChange 호출
+      if (!isSelectingRef.current) {
+        onValueChange("purchase", value);
+      }
+
+      // 디바운싱: 300ms 후 검색
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+      searchTimeoutRef.current = setTimeout(() => {
+        if (!isSelectingRef.current) {
+          handleSearchPurchase(value);
+        }
+      }, 300);
+    },
+    [handleSearchPurchase, onValueChange]
+  );
+
+  // purchase 선택 핸들러
+  const handlePurchaseSelect = useCallback(
+    (e: React.MouseEvent, purchaseName: string) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      isSelectingRef.current = true;
+      setPurchaseSearchQuery(purchaseName);
+      onValueChange("purchase", purchaseName);
+      setShowPurchaseDropdown(false);
+      setPurchaseSuggestions([]);
+
+      // 선택 완료 후 플래그 리셋
+      setTimeout(() => {
+        isSelectingRef.current = false;
+      }, 200);
+    },
+    [onValueChange]
+  );
+
+  // 외부 클릭 시 드롭다운 닫기
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        purchaseDropdownRef.current &&
+        !purchaseDropdownRef.current.contains(event.target as Node) &&
+        purchaseInputRef.current &&
+        !purchaseInputRef.current.contains(event.target as Node)
+      ) {
+        setShowPurchaseDropdown(false);
+      }
+    };
+
+    if (showPurchaseDropdown) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showPurchaseDropdown]);
+
+  // 모달이 열릴 때 purchase 값 초기화 (open 변경 시에만)
+  useEffect(() => {
+    if (open) {
+      const purchaseValue = values.purchase || "";
+      setPurchaseSearchQuery(purchaseValue);
+      isSelectingRef.current = false;
+    } else {
+      setPurchaseSearchQuery("");
+      setPurchaseSuggestions([]);
+      setShowPurchaseDropdown(false);
+      isSelectingRef.current = false;
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+        searchTimeoutRef.current = null;
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // cleanup
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
+
   if (!open) return null;
 
   return (
@@ -51,9 +191,16 @@ export default function DirectInputModal({
                     {key === "name" ? (
                       <input
                         type="text"
-                        className="border border-[#e1e0e0] px-2 py-1 rounded w-full bg-gray-100 text-[#333]"
+                        className={`border border-[#e1e0e0] px-2 py-1 rounded w-full text-[#333] ${
+                          nameReadOnly ? "bg-gray-100" : ""
+                        }`}
                         value={values.name || ""}
-                        readOnly
+                        readOnly={nameReadOnly}
+                        onChange={
+                          nameReadOnly
+                            ? undefined
+                            : (e) => onValueChange(key, e.target.value)
+                        }
                       />
                     ) : key === "type" ? (
                       <select
@@ -61,9 +208,11 @@ export default function DirectInputModal({
                         value={values[key] || ""}
                         onChange={(e) => onValueChange(key, e.target.value)}
                       >
-                        <option value="">선택하세요</option>
-                        <option value="내주">내주</option>
-                        <option value="외주">외주</option>
+                        {TYPE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
                       </select>
                     ) : key === "postType" ? (
                       <select
@@ -71,13 +220,11 @@ export default function DirectInputModal({
                         value={values[key] || ""}
                         onChange={(e) => onValueChange(key, e.target.value)}
                       >
-                        <option value="">선택하세요</option>
-                        <option value="CJ대한통운">CJ대한통운</option>
-                        <option value="우체국택배">우체국택배</option>
-                        <option value="로젠택배">로젠택배</option>
-                        <option value="롯데택배">롯데택배</option>
-                        <option value="한진택배">한진택배</option>
-                        <option value="천일택배">천일택배</option>
+                        {POST_TYPE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
                       </select>
                     ) : key === "billType" ? (
                       <select
@@ -85,9 +232,11 @@ export default function DirectInputModal({
                         value={values[key] || ""}
                         onChange={(e) => onValueChange(key, e.target.value)}
                       >
-                        <option value="">선택하세요</option>
-                        <option value="과세">과세</option>
-                        <option value="면세">면세</option>
+                        {BILL_TYPE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
                       </select>
                     ) : key === "productType" ? (
                       <select
@@ -95,9 +244,11 @@ export default function DirectInputModal({
                         value={values[key] || ""}
                         onChange={(e) => onValueChange(key, e.target.value)}
                       >
-                        <option value="">선택하세요</option>
-                        <option value="사입">사입</option>
-                        <option value="제조">제조</option>
+                        {PRODUCT_TYPE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
                       </select>
                     ) : key === "category" ? (
                       <select
@@ -105,10 +256,53 @@ export default function DirectInputModal({
                         value={values[key] || ""}
                         onChange={(e) => onValueChange(key, e.target.value)}
                       >
-                        <option value="">선택하세요</option>
-                        <option value="납품업체">납품업체</option>
-                        <option value="온라인">온라인</option>
+                        {CATEGORY_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
                       </select>
+                    ) : key === "purchase" ? (
+                      <div className="relative w-full">
+                        <input
+                          ref={purchaseInputRef}
+                          type="text"
+                          className="border border-[#e1e0e0] px-2 py-1 rounded w-full text-[#333]"
+                          value={purchaseSearchQuery}
+                          onChange={(e) =>
+                            handlePurchaseInputChange(e.target.value)
+                          }
+                          onFocus={() => {
+                            if (
+                              purchaseSuggestions.length > 0 &&
+                              !isSelectingRef.current
+                            ) {
+                              setShowPurchaseDropdown(true);
+                            }
+                          }}
+                          placeholder="매입처 입력 또는 선택"
+                        />
+                        {showPurchaseDropdown &&
+                          purchaseSuggestions.length > 0 && (
+                            <div
+                              ref={purchaseDropdownRef}
+                              className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto"
+                            >
+                              {purchaseSuggestions.map((option) => (
+                                <div
+                                  key={option.id}
+                                  className="px-3 py-2 hover:bg-blue-100 cursor-pointer text-sm"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    handlePurchaseSelect(e, option.name);
+                                  }}
+                                >
+                                  {option.name}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                      </div>
                     ) : (
                       <input
                         type="text"
@@ -148,4 +342,3 @@ export default function DirectInputModal({
     </div>
   );
 }
-
