@@ -385,7 +385,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             })
           );
 
-          const jsonData = [canonicalHeader, ...canonicalRows];
+          let jsonData = [canonicalHeader, ...canonicalRows];
 
           // 수취인명/이름(내부 컬럼 기준) 동명이인 번호 붙이기
           if (jsonData.length > 1) {
@@ -537,6 +537,33 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             }
           }
 
+          // 빈 행 필터링: 헤더가 13개일 때 11칸 이상 공란인 row 삭제
+          if (jsonData.length > 1) {
+            const headerRow = jsonData[0] as any[];
+            const totalColumns = headerRow.length;
+
+            // 헤더를 제외한 데이터 행만 필터링
+            const filteredRows = jsonData.slice(1).filter((row) => {
+              // 빈 셀 개수 카운트
+              let emptyCount = 0;
+              for (let i = 0; i < totalColumns; i++) {
+                const value = row[i];
+                if (
+                  value === undefined ||
+                  value === null ||
+                  String(value).trim() === ""
+                ) {
+                  emptyCount++;
+                }
+              }
+              // 11개 이상 비어있으면 제외 (false 반환)
+              return emptyCount < 11;
+            });
+
+            // 헤더와 필터링된 행들로 jsonData 재구성
+            jsonData = [headerRow, ...filteredRows];
+          }
+
           // 상품명 인덱스 찾기
           const headerRow = jsonData[0] as any[];
           const nameIdx = headerRow.findIndex(
@@ -666,10 +693,16 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     // fieldOrder의 모든 필드를 항상 포함시킴
     const fields = fieldOrder;
 
+    // 모든 필드의 초기값을 빈 문자열로 설정 (name만 targetName으로)
+    const initialValues: {[key: string]: string} = {};
+    fields.forEach((field: string) => {
+      initialValues[field] = field === "name" ? targetName : "";
+    });
+
     get().setDirectInputModal({
       open: true,
       fields,
-      values: {name: targetName},
+      values: initialValues,
       rowIdx,
       targetName,
     });
@@ -703,7 +736,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       try {
         const {transformProductData} = await import("@/utils/product");
         const {createProduct} = await import("@/utils/api");
-        
+
         const requestBody = transformProductData(values);
         const result = await createProduct(requestBody);
 
@@ -720,9 +753,10 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
         }
       } catch (error) {
         console.error("상품 저장 실패:", error);
-        const errorMessage = error instanceof Error 
-          ? error.message 
-          : "상품 저장 중 오류가 발생했습니다.";
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : "상품 저장 중 오류가 발생했습니다.";
         alert(`상품 저장 중 오류가 발생했습니다: ${errorMessage}`);
         return;
       }

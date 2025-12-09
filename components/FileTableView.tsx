@@ -112,6 +112,40 @@ export default function FileTableView({
       typeof h === "string" &&
       (h.includes("수취인명") || h.includes("이름"))
   );
+  const addressIdx = tableData[0]?.findIndex(
+    (h: any) =>
+      h &&
+      typeof h === "string" &&
+      h.includes("주소")
+  );
+  const duplicateReceiverSet = (() => {
+    const set = new Set<string>();
+    if (receiverIdx === -1) return set;
+    const counts: {[key: string]: number} = {};
+    tableData.slice(1).forEach((row) => {
+      const receiverValue = String(row?.[receiverIdx] ?? "").trim();
+      if (!receiverValue) return;
+      counts[receiverValue] = (counts[receiverValue] || 0) + 1;
+    });
+    Object.entries(counts).forEach(([key, count]) => {
+      if (count > 1) set.add(key);
+    });
+    return set;
+  })();
+  const duplicateAddressSet = (() => {
+    const set = new Set<string>();
+    if (addressIdx === -1) return set;
+    const counts: {[key: string]: number} = {};
+    tableData.slice(1).forEach((row) => {
+      const addressValue = String(row?.[addressIdx] ?? "").trim();
+      if (!addressValue) return;
+      counts[addressValue] = (counts[addressValue] || 0) + 1;
+    });
+    Object.entries(counts).forEach(([key, count]) => {
+      if (count > 1) set.add(key);
+    });
+    return set;
+  })();
 
   const sorted = [...tableData.slice(1)].sort((a, b) => {
     const prodA = a[productNameIdx] || "";
@@ -155,13 +189,31 @@ export default function FileTableView({
               if (typeof headerIndex?.nameIdx === "number") {
                 name = row[headerIndex.nameIdx] as string;
               }
+              const receiverValue =
+                receiverIdx !== -1
+                  ? String(row[receiverIdx] ?? "").trim()
+                  : "";
+              const addressValue =
+                addressIdx !== -1 ? String(row[addressIdx] ?? "").trim() : "";
+              const isReceiverDup =
+                receiverValue && duplicateReceiverSet.has(receiverValue);
+              const isAddressDup =
+                addressValue && duplicateAddressSet.has(addressValue);
               return (
-                <tr key={i}>
+                <tr
+                  key={i}
+                >
                   {tableData[0].map((_, j) => {
+                    const isDuplicateCell =
+                      (isReceiverDup && j === receiverIdx) ||
+                      (isAddressDup && j === addressIdx);
+                    const tdClass = `border px-2 py-1 border-gray-300 text-xs min-w-[60px]${
+                      isDuplicateCell ? " bg-red-100" : ""
+                    }`;
                     return (
                       <td
                         key={j}
-                        className="border px-2 py-1 border-gray-300 text-xs min-w-[60px]"
+                        className={tdClass}
                       >
                         {row[j] !== undefined && row[j] !== null
                           ? row[j]

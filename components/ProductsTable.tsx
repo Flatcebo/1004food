@@ -117,8 +117,11 @@ const ProductsTable = memo(function ProductsTable({
       const result = await createProduct(requestBody);
 
       if (result.success) {
-        onDataUpdate();
+        alert(
+          "상품이 성공적으로 등록되었습니다. 새로고침 버튼을 눌러 목록을 업데이트하세요."
+        );
         handleCloseDirectInputModal();
+        // onDataUpdate 호출 제거 - 리렌더링 방지
       } else {
         throw new Error(result.error || "저장 실패");
       }
@@ -148,8 +151,11 @@ const ProductsTable = memo(function ProductsTable({
       const result = await createProduct(requestBody);
 
       if (result.success) {
-        onDataUpdate();
+        alert(
+          "상품이 성공적으로 수정되었습니다. 새로고침 버튼을 눌러 목록을 업데이트하세요."
+        );
         handleCloseEditDirectInputModal();
+        // onDataUpdate 호출 제거 - 리렌더링 방지
       } else {
         throw new Error(result.error || "저장 실패");
       }
@@ -202,8 +208,8 @@ const ProductsTable = memo(function ProductsTable({
       const {deleteProducts} = await import("@/utils/api");
       const result = await deleteProducts(Array.from(selectedRows));
 
-      if (result.success && result.data) {
-        alert(result.data.message || "삭제되었습니다.");
+      if (result.success) {
+        alert(result.message || "삭제되었습니다.");
         setSelectedRows(new Set());
         onDataUpdate();
       } else {
@@ -247,7 +253,10 @@ const ProductsTable = memo(function ProductsTable({
   if (loading) {
     return (
       <div className="w-full flex items-center justify-center py-8">
-        <div>로딩 중...</div>
+        <div className="flex items-center justify-center gap-2 text-gray-500">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+          <span>데이터를 불러오는 중...</span>
+        </div>
       </div>
     );
   }

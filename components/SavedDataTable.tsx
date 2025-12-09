@@ -141,10 +141,28 @@ const SavedDataTable = memo(function SavedDataTable({
       const a = document.createElement("a");
       a.href = url;
       const contentDisposition = response.headers.get("Content-Disposition");
-      const fileName =
-        contentDisposition?.split("filename=")[1]?.replace(/"/g, "") ||
-        "download.xlsx";
-      a.download = decodeURIComponent(fileName);
+      let fileName = "download.xlsx";
+      if (contentDisposition) {
+        // filename* 우선
+        const filenameStarMatch = contentDisposition.match(
+          /filename\*\s*=\s*UTF-8''([^;]+)/i
+        );
+        if (filenameStarMatch?.[1]) {
+          try {
+            fileName = decodeURIComponent(filenameStarMatch[1]);
+          } catch (_) {
+            fileName = filenameStarMatch[1];
+          }
+        } else {
+          const filenameMatch = contentDisposition.match(
+            /filename\s*=\s*\"?([^\";]+)\"?/i
+          );
+          if (filenameMatch?.[1]) {
+            fileName = filenameMatch[1];
+          }
+        }
+      }
+      a.download = fileName;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -375,6 +393,18 @@ const SavedDataTable = memo(function SavedDataTable({
       label: appliedSearchField,
       value: appliedSearchValue,
     });
+  }
+
+  // 로딩 중일 때
+  if (loading) {
+    return (
+      <div className="text-center py-8 text-gray-500">
+        <div className="flex items-center justify-center gap-2">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+          <span>데이터를 불러오는 중...</span>
+        </div>
+      </div>
+    );
   }
 
   // 데이터가 없을 때 필터 표시와 함께 메시지 표시

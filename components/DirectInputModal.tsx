@@ -159,6 +159,18 @@ export default function DirectInputModal({
     };
   }, []);
 
+  // etc를 제외한 모든 필드가 입력되었는지 확인
+  const isFormValid = useMemo(() => {
+    // etc를 제외한 필수 필드들
+    const requiredFields = fields.filter((field) => field !== "etc");
+
+    // 모든 필수 필드가 값을 가지고 있는지 확인
+    return requiredFields.every((field) => {
+      const value = field === "purchase" ? purchaseSearchQuery : values[field];
+      return value && value.toString().trim() !== "";
+    });
+  }, [fields, values, purchaseSearchQuery]);
+
   if (!open) return null;
 
   return (
@@ -326,7 +338,12 @@ export default function DirectInputModal({
             </button>
             <button
               type="submit"
-              className="bg-blue-600 px-4 py-2 rounded hover:bg-blue-700 text-xs text-white font-semibold"
+              disabled={!isFormValid}
+              className={`px-4 py-2 rounded text-xs text-white font-semibold ${
+                isFormValid
+                  ? "bg-blue-600 hover:bg-blue-700 cursor-pointer"
+                  : "bg-gray-400 cursor-not-allowed"
+              }`}
             >
               저장
             </button>

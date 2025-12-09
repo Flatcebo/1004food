@@ -1,5 +1,9 @@
 // 데이터 매핑 함수 - 템플릿 헤더에 맞게 데이터 변환
-export function mapDataToTemplate(row: any, header: string): any {
+export function mapDataToTemplate(
+  row: any,
+  header: string,
+  options?: {templateName?: string; preferSabangName?: boolean}
+): any {
   // 절대값으로 설정할 필드들
   const normalizedHeader = header.replace(/\s+/g, "").toLowerCase();
 
@@ -54,21 +58,22 @@ export function mapDataToTemplate(row: any, header: string): any {
   const mappedHeader = headerMap[header] || header;
 
   // 우편번호 관련 특별 처리
-  if (normalizedHeader.includes("우편") || normalizedHeader.includes("우편번호") || header.includes("우편")) {
+  if (
+    normalizedHeader.includes("우편") ||
+    normalizedHeader.includes("우편번호") ||
+    header.includes("우편")
+  ) {
     // 우편번호 또는 우편 필드 찾기
     const postalValue =
-      row["우편"] ||
-      row["우편번호"] ||
-      row["우편 번호"] ||
-      "";
+      row["우편"] || row["우편번호"] || row["우편 번호"] || "";
     if (postalValue) return postalValue;
   }
 
   // 공급가 관련 특별 처리 (salePrice 우선 사용)
   // 공급가 헤더인 경우 명시적으로 처리
   if (
-    normalizedHeader.includes("공급가") || 
-    header === "공급가" || 
+    normalizedHeader.includes("공급가") ||
+    header === "공급가" ||
     header.includes("공급가") ||
     (normalizedHeader.includes("가격") && header.includes("공급"))
   ) {
@@ -81,7 +86,10 @@ export function mapDataToTemplate(row: any, header: string): any {
       "";
     // 숫자로 변환 시도 (문자열이면 숫자로 변환)
     if (priceValue !== null && priceValue !== undefined && priceValue !== "") {
-      const numValue = typeof priceValue === 'string' ? parseFloat(priceValue.replace(/,/g, '')) : Number(priceValue);
+      const numValue =
+        typeof priceValue === "string"
+          ? parseFloat(priceValue.replace(/,/g, ""))
+          : Number(priceValue);
       if (!isNaN(numValue)) {
         return numValue;
       }
@@ -89,21 +97,69 @@ export function mapDataToTemplate(row: any, header: string): any {
     }
     return "";
   }
-  
+
   // 일반 가격 필드 처리 (공급가가 아닌 경우)
-  if (normalizedHeader.includes("가격") && !normalizedHeader.includes("공급가")) {
-    const priceValue =
-      row["가격"] ||
-      row["price"] ||
-      "";
+  if (
+    normalizedHeader.includes("가격") &&
+    !normalizedHeader.includes("공급가")
+  ) {
+    const priceValue = row["가격"] || row["price"] || "";
     if (priceValue !== null && priceValue !== undefined && priceValue !== "") {
-      const numValue = typeof priceValue === 'string' ? parseFloat(priceValue.replace(/,/g, '')) : Number(priceValue);
+      const numValue =
+        typeof priceValue === "string"
+          ? parseFloat(priceValue.replace(/,/g, ""))
+          : Number(priceValue);
       if (!isNaN(numValue)) {
         return numValue;
       }
       return priceValue;
     }
     return "";
+  }
+
+  // 상품명 컬럼: 사방넷명이 있으면 무조건 사방넷명 우선 사용
+  if (
+    normalizedHeader.includes("상품명") ||
+    header === "상품명" ||
+    header.includes("상품명")
+  ) {
+    // 디버깅 로그 (처음 3개만)
+    if (!row._logged) {
+      console.log(`\n[mapDataToTemplate] 상품명 매핑`);
+      console.log(`- 템플릿명: ${options?.templateName}`);
+      console.log(`- row["사방넷명"]: ${row["사방넷명"]}`);
+      console.log(`- row["sabangName"]: ${row["sabangName"]}`);
+      console.log(`- row["상품명"]: ${row["상품명"]}`);
+      row._logged = true;
+    }
+
+    // 사방넷명이 있으면 무조건 사방넷명 우선 사용
+    const sabangValue =
+      row["사방넷명"] || row["sabangName"] || row["sabang_name"] || "";
+    if (sabangValue !== null && sabangValue !== undefined) {
+      const sabangStr = String(sabangValue).trim();
+      if (sabangStr) {
+        // 맨 앞의 'ㄱ'만 제거
+        const cleaned =
+          sabangStr.startsWith("ㄱ") && sabangStr.length > 1
+            ? sabangStr.slice(1)
+            : sabangStr;
+        if (!row._logged2) {
+          console.log(`✓ 사방넷명 사용: ${cleaned}`);
+          row._logged2 = true;
+        }
+        return cleaned;
+      }
+    }
+
+    // 사방넷명이 없으면 원래 상품명 사용
+    const productName =
+      row["상품명"] || row[header] || row[header.replace(/\s+/g, "")] || "";
+    if (!row._logged2) {
+      console.log(`→ 원본 상품명 사용 (사방넷명 없음): ${productName}`);
+      row._logged2 = true;
+    }
+    return productName || "";
   }
 
   // 다양한 변형으로 값 찾기
@@ -174,4 +230,3 @@ export function sortExcelData(
     return 0;
   });
 }
-

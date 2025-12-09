@@ -185,14 +185,22 @@ export async function POST(request: NextRequest) {
     ];
     const productPriceMap: {[code: string]: number | null} = {};
     const productSalePriceMap: {[code: string]: number | null} = {};
+    const productSabangNameMap: {[code: string]: string | null} = {};
 
     if (productCodes.length > 0) {
       try {
+        console.log("=== 사방넷명 매핑 디버깅 ===");
+        console.log("매핑코드 목록:", productCodes);
+
         const products = await sql`
-          SELECT code, price, sale_price
+          SELECT code, price, sale_price, sabang_name as "sabangName"
           FROM products
           WHERE code = ANY(${productCodes})
         `;
+
+        console.log("조회된 상품 개수:", products.length);
+        console.log("조회된 상품 데이터:", JSON.stringify(products, null, 2));
+
         products.forEach((p: any) => {
           if (p.code) {
             if (p.price !== null && p.price !== undefined) {
@@ -201,15 +209,23 @@ export async function POST(request: NextRequest) {
             if (p.sale_price !== null && p.sale_price !== undefined) {
               productSalePriceMap[p.code] = p.sale_price;
             }
+            if (p.sabangName !== undefined) {
+              productSabangNameMap[p.code] = p.sabangName;
+              console.log(`매핑: ${p.code} => 사방넷명: ${p.sabangName}`);
+            } else {
+              console.log(`매핑: ${p.code} => 사방넷명 없음`);
+            }
           }
         });
+
+        console.log("productSabangNameMap:", productSabangNameMap);
       } catch (error) {
         console.error("상품 가격 조회 실패:", error);
       }
     }
 
     // 템플릿 헤더 순서에 맞게 데이터 재구성
-    let excelData = rows.map((row) => {
+    let excelData = rows.map((row, idx) => {
       // 매핑코드가 있으면 products 테이블에서 가격 정보 가져오기
       if (row.매핑코드) {
         // salePrice 우선 사용 (공급가용)
@@ -236,13 +252,53 @@ export async function POST(request: NextRequest) {
             }
           }
         }
+
+        // 사방넷명 매핑: products 테이블 값이 있으면 row에 주입
+        if (productSabangNameMap[row.매핑코드] !== undefined) {
+          const sabangName = productSabangNameMap[row.매핑코드];
+          if (idx < 3) {
+            // 처음 3개 row만 로그
+            console.log(`\n[Row ${idx}] 매핑코드: ${row.매핑코드}`);
+            console.log(`원본 상품명: ${row.상품명}`);
+            console.log(`조회된 사방넷명: ${sabangName}`);
+          }
+          if (
+            sabangName !== null &&
+            sabangName !== undefined &&
+            String(sabangName).trim() !== ""
+          ) {
+            row["사방넷명"] = sabangName;
+            row["sabangName"] = sabangName;
+            if (idx < 3) {
+              console.log(`✓ 사방넷명 주입 완료: ${sabangName}`);
+            }
+          } else {
+            if (idx < 3) {
+              console.log(`✗ 사방넷명이 비어있거나 null`);
+            }
+          }
+        } else {
+          if (idx < 3) {
+            console.log(
+              `\n[Row ${idx}] 매핑코드: ${row.매핑코드} - productSabangNameMap에 없음`
+            );
+          }
+        }
+      } else {
+        if (idx < 3) {
+          console.log(`\n[Row ${idx}] 매핑코드 없음`);
+        }
       }
 
       return columnOrder.map((header: any) => {
         // header가 문자열이 아닌 경우 문자열로 변환
         const headerStr =
           typeof header === "string" ? header : String(header || "");
-        return mapDataToTemplate(row, headerStr);
+
+        // 모든 템플릿에서 사방넷명 사용 (preferSabangName 옵션 불필요)
+        return mapDataToTemplate(row, headerStr, {
+          templateName: templateData.name,
+        });
       });
     });
 
@@ -621,16 +677,20 @@ export async function POST(request: NextRequest) {
     }
 
     // 파일명 생성
-    const fileName = `${templateData.name || "download"}_${
-      new Date().toISOString().split("T")[0]
-    }.xlsx`;
+    const dateStr = new Date().toISOString().split("T")[0];
+    const baseName = (templateData.name || "download").toString().trim();
+    const fileName = `${dateStr}_${baseName}.xlsx`;
 
     // Windows에서 한글 파일명 깨짐 방지를 위한 RFC 5987 형식 인코딩
-    // HTTP 헤더는 ASCII만 허용하므로 filename에는 ASCII fallback만 사용
-    const safeFileName = "download.xlsx"; // ASCII fallback
+    // HTTP 헤더는 ASCII만 허용하므로 filename에는 ASCII fallback 추가
+    const asciiFallbackBase =
+      `${dateStr}_${baseName}`
+        .replace(/[^\x00-\x7F]/g, "")
+        .replace(/\s+/g, "_") || "download";
+    const safeFileName = `${asciiFallbackBase}.xlsx`; // ASCII fallback
     const encodedFileName = encodeURIComponent(fileName); // UTF-8 인코딩
-    // filename*만 사용 (대부분의 브라우저가 지원)
-    const contentDisposition = `attachment; filename*=UTF-8''${encodedFileName}`;
+    // filename* 우선, filename ASCII fallback 병행
+    const contentDisposition = `attachment; filename="${safeFileName}"; filename*=UTF-8''${encodedFileName}`;
 
     // 헤더를 Headers 객체로 직접 설정하여 파싱 문제 방지
     const responseHeaders = new Headers();

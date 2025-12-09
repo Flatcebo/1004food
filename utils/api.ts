@@ -87,8 +87,8 @@ export async function batchCreateProducts(
  */
 export async function deleteProducts(
   ids: number[]
-): Promise<ApiResponse<{deletedCount: number; message: string}>> {
-  return apiCall<{deletedCount: number; message: string}>(
+): Promise<ApiResponse<any>> {
+  return apiCall<any>(
     "/api/products/delete",
     {
       method: "DELETE",

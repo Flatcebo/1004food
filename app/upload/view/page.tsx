@@ -44,19 +44,242 @@ function FileViewContent() {
   const [fileName, setFileName] = useState("");
   const [vendorName, setVendorName] = useState("");
   const codesOriginRef = useRef<any[]>([]);
+  // 원본 배송메시지 저장 (rowIdx -> 원본 메시지, 파일 로드 시점의 메시지)
+  const originalMessagesRef = useRef<{[rowIdx: number]: string}>({});
+  // 순수 원본 배송메시지 저장 (rowIdx -> 순수 원본 메시지, 업체명 제거된 메시지)
+  const pureOriginalMessagesRef = useRef<{[rowIdx: number]: string}>({});
   const [codeEditWindow, setCodeEditWindow] = useState<{
     open: boolean;
     rowIdx: number;
     productName: string;
   } | null>(null);
   // 클라이언트에서만 관리하는 내외주/택배사 맵 (useAutoMapping이 덮어쓰지 않도록)
-  const [productTypeMap, setProductTypeMap] = useState<{[name: string]: string}>({});
-  const [productPostTypeMap, setProductPostTypeMap] = useState<{[name: string]: string}>({});
+  const [productTypeMap, setProductTypeMap] = useState<{
+    [name: string]: string;
+  }>({});
+  const [productPostTypeMap, setProductPostTypeMap] = useState<{
+    [name: string]: string;
+  }>({});
+  // Edit 모드 상태
+  const [isEditMode, setIsEditMode] = useState(false);
+
+  // 테이블 정렬 함수 (상품명 오름차순, 동일 시 수취인명/이름 오름차순)
+  const sortTableData = (data: any[][]): any[][] => {
+    if (
+      !data.length ||
+      !headerIndex ||
+      typeof headerIndex.nameIdx !== "number" ||
+      headerIndex.nameIdx === -1
+    ) {
+      return data;
+    }
+
+    const headerRow = data[0];
+    const productNameIdx = headerIndex.nameIdx;
+    const receiverIdx = headerRow.findIndex(
+      (h: any) =>
+        h &&
+        typeof h === "string" &&
+        (h.includes("수취인명") || h.includes("이름"))
+    );
+
+    const sortedBody = [...data.slice(1)].sort((a, b) => {
+      const prodA = a[productNameIdx] || "";
+      const prodB = b[productNameIdx] || "";
+      const prodCompare = String(prodA).localeCompare(String(prodB), "ko-KR");
+      if (prodCompare !== 0) return prodCompare;
+      if (receiverIdx !== -1) {
+        const recA = a[receiverIdx] || "";
+        const recB = b[receiverIdx] || "";
+        return String(recA).localeCompare(String(recB), "ko-KR");
+      }
+      return 0;
+    });
+
+    return [headerRow, ...sortedBody];
+  };
+
+  // 편집 토글 시 정렬 적용 (편집 종료 시)
+  const handleToggleEditMode = () => {
+    const next = !isEditMode;
+    const applySortedData = (sortedData: any[][]) => {
+      if (sortedData === tableData) return;
+      setTableData(sortedData);
+      if (fileId) {
+        const updatedFile = {
+          ...file,
+          tableData: sortedData,
+          rowCount: sortedData.length - 1,
+          productCodeMap: {...productCodeMap},
+        };
+        setFile(updatedFile);
+        sessionStorage.setItem(
+          `uploadedFile_${fileId}`,
+          JSON.stringify(updatedFile)
+        );
+        const updatedFiles = uploadedFiles.map((f) =>
+          f.id === fileId ? updatedFile : f
+        );
+        setUploadedFiles(updatedFiles);
+      }
+    };
+
+    if (!isEditMode && next) {
+      // 편집 진입 시 한 번 정렬
+      const sortedData = sortTableData(tableData);
+      applySortedData(sortedData);
+    } else if (isEditMode && !next) {
+      // 편집 종료 시 다시 정렬
+      const sortedData = sortTableData(tableData);
+      applySortedData(sortedData);
+    }
+    setIsEditMode(next);
+  };
+
+  // 행 복제 함수
+  const handleDuplicateRow = (rowIndex: number) => {
+    if (rowIndex < 1) return; // 헤더는 복제 불가
+
+    const newTableData = [...tableData];
+    const rowToDuplicate = [...newTableData[rowIndex]];
+
+    // 복제된 행을 원본 행 바로 아래에 삽입
+    newTableData.splice(rowIndex + 1, 0, rowToDuplicate);
+
+    setTableData(newTableData);
+
+    // 파일 데이터도 업데이트
+    if (fileId) {
+      const updatedFile = {
+        ...file,
+        tableData: newTableData,
+        rowCount: newTableData.length - 1,
+        productCodeMap: {...productCodeMap},
+      };
+      setFile(updatedFile);
+      sessionStorage.setItem(
+        `uploadedFile_${fileId}`,
+        JSON.stringify(updatedFile)
+      );
+      const updatedFiles = uploadedFiles.map((f) =>
+        f.id === fileId ? updatedFile : f
+      );
+      setUploadedFiles(updatedFiles);
+    }
+  };
+
+  // 셀 값 변경 함수
+  const handleCellChange = (
+    rowIndex: number,
+    colIndex: number,
+    value: string
+  ) => {
+    const newTableData = [...tableData];
+    newTableData[rowIndex][colIndex] = value;
+
+    // 상품명 컬럼이 변경된 경우 매핑코드, 내외주, 택배사도 자동 업데이트
+    if (headerIndex && colIndex === headerIndex.nameIdx) {
+      const trimmedValue = value.trim();
+
+      // codes에서 매칭되는 상품 찾기
+      const matchedProduct = codes.find((c: any) => c.name === trimmedValue);
+
+      const headerRow = newTableData[0];
+      const mappingIdx = headerRow.findIndex((h: any) => h === "매핑코드");
+      const typeIdx = headerRow.findIndex((h: any) => h === "내외주");
+      const postTypeIdx = headerRow.findIndex((h: any) => h === "택배사");
+
+      if (matchedProduct) {
+        // 매칭되는 상품이 있을 때: 데이터 자동 입력
+        // 매핑코드 업데이트
+        if (mappingIdx !== -1) {
+          newTableData[rowIndex][mappingIdx] = matchedProduct.code || "";
+        }
+
+        // 내외주 업데이트
+        if (typeIdx !== -1) {
+          newTableData[rowIndex][typeIdx] = matchedProduct.type || "";
+          // productTypeMap에도 저장
+          if (matchedProduct.type) {
+            const newTypeMap = {
+              ...productTypeMap,
+              [trimmedValue]: matchedProduct.type,
+            };
+            setProductTypeMap(newTypeMap);
+          }
+        }
+
+        // 택배사 업데이트
+        if (postTypeIdx !== -1) {
+          newTableData[rowIndex][postTypeIdx] = matchedProduct.postType || "";
+          // productPostTypeMap에도 저장
+          if (matchedProduct.postType) {
+            const newPostTypeMap = {
+              ...productPostTypeMap,
+              [trimmedValue]: matchedProduct.postType,
+            };
+            setProductPostTypeMap(newPostTypeMap);
+          }
+        }
+
+        // productCodeMap에도 저장
+        const newCodeMap = {
+          ...productCodeMap,
+          [trimmedValue]: matchedProduct.code || "",
+        };
+        setProductCodeMap(newCodeMap);
+      } else {
+        // 매칭되는 상품이 없을 때: 모두 공란으로 처리
+        if (mappingIdx !== -1) {
+          newTableData[rowIndex][mappingIdx] = "";
+        }
+        if (typeIdx !== -1) {
+          newTableData[rowIndex][typeIdx] = "";
+        }
+        if (postTypeIdx !== -1) {
+          newTableData[rowIndex][postTypeIdx] = "";
+        }
+
+        // Map에서도 제거
+        if (trimmedValue) {
+          const newTypeMap = {...productTypeMap};
+          delete newTypeMap[trimmedValue];
+          setProductTypeMap(newTypeMap);
+
+          const newPostTypeMap = {...productPostTypeMap};
+          delete newPostTypeMap[trimmedValue];
+          setProductPostTypeMap(newPostTypeMap);
+
+          const newCodeMap = {...productCodeMap};
+          delete newCodeMap[trimmedValue];
+          setProductCodeMap(newCodeMap);
+        }
+      }
+    }
+
+    setTableData(newTableData);
+
+    // 파일 데이터도 업데이트
+    if (fileId) {
+      const updatedFile = {
+        ...file,
+        tableData: newTableData,
+        productCodeMap: {...productCodeMap},
+      };
+      setFile(updatedFile);
+      sessionStorage.setItem(
+        `uploadedFile_${fileId}`,
+        JSON.stringify(updatedFile)
+      );
+      const updatedFiles = uploadedFiles.map((f) =>
+        f.id === fileId ? updatedFile : f
+      );
+      setUploadedFiles(updatedFiles);
+    }
+  };
 
   // 업체명 변경시 배송메시지 실시간 업데이트를 위한 함수
   const updateVendorAndMessage = (newVendorName: string) => {
-    if (!newVendorName.trim()) return;
-
     const headerRow = tableData[0];
     const vendorIdx = headerRow.findIndex(
       (h: any) => h && typeof h === "string" && h === "업체명"
@@ -75,8 +298,9 @@ function FileViewContent() {
     if (vendorIdx === -1) return;
 
     const vendorStr = newVendorName.trim();
+    // 5글자 이상이면 2글자, 4글자 이하면 전체 글자수
     const vendorPrefix =
-      vendorStr.length > 4 ? vendorStr.substring(0, 2) : vendorStr;
+      vendorStr.length >= 5 ? vendorStr.substring(0, 2) : vendorStr;
 
     const updatedTable = tableData.map((row, idx) => {
       if (idx === 0) return row;
@@ -85,21 +309,47 @@ function FileViewContent() {
 
       // 배송메시지 업데이트
       if (messageIdx !== -1) {
-        const currentMessage = row[messageIdx];
-        if (
-          !currentMessage ||
-          currentMessage === null ||
-          String(currentMessage).trim() === ""
-        ) {
-          newRow[messageIdx] = vendorPrefix;
+        // 순수 원본 메시지 가져오기 (한 번만 추출하고 절대 변경하지 않음)
+        let pureOriginalMessage = pureOriginalMessagesRef.current[idx];
+
+        if (pureOriginalMessage === undefined) {
+          // 순수 원본이 저장되지 않았으면 원본 메시지를 그대로 저장
+          const originalMessage = originalMessagesRef.current[idx];
+
+          if (originalMessage === undefined) {
+            // 원본도 없으면 현재 메시지를 그대로 저장
+            const currentMessage = row[messageIdx];
+            const currentMessageStr =
+              currentMessage !== null && currentMessage !== undefined
+                ? String(currentMessage).trim()
+                : "";
+
+            // 기존 메시지를 그대로 순수 원본으로 저장 (첫 단어 제거하지 않음)
+            pureOriginalMessage = currentMessageStr;
+
+            // 원본 메시지도 저장
+            originalMessagesRef.current[idx] = currentMessageStr;
+          } else {
+            // 원본 메시지를 그대로 순수 원본으로 저장 (첫 단어 제거하지 않음)
+            pureOriginalMessage = originalMessage;
+          }
+
+          // 순수 원본 메시지 저장 (한 번만 저장하고 절대 변경하지 않음)
+          pureOriginalMessagesRef.current[idx] = pureOriginalMessage;
+        }
+        // 순수 원본이 이미 저장되어 있으면 절대 변경하지 않고 그대로 사용
+
+        // 업체명이 있으면 앞에 업체명 추가, 없으면 순수 원본 메시지만 표시
+        if (vendorStr) {
+          if (pureOriginalMessage) {
+            newRow[messageIdx] =
+              `${vendorPrefix} ${pureOriginalMessage}`.trim();
+          } else {
+            newRow[messageIdx] = vendorPrefix;
+          }
         } else {
-          const existingMessage = String(currentMessage).trim();
-          // 기존 메시지에서 업체명 부분 제거 후 새 업체명 추가
-          const messageWithoutVendor = existingMessage.replace(
-            /^[^\s]+\s?/,
-            ""
-          );
-          newRow[messageIdx] = `${vendorPrefix} ${messageWithoutVendor}`.trim();
+          // 업체명이 비어있으면 순수 원본 메시지만 표시
+          newRow[messageIdx] = pureOriginalMessage || "";
         }
       }
 
@@ -188,15 +438,15 @@ function FileViewContent() {
       const headerRow = tableData[0];
       const typeIdx = headerRow.findIndex((h: any) => h === "내외주");
       const postTypeIdx = headerRow.findIndex((h: any) => h === "택배사");
-      
+
       const finalTableData = tableData.map((row, idx) => {
         if (idx === 0) return row;
         const rowName = row[headerIndex?.nameIdx || 0];
         if (!rowName) return row;
-        
+
         const trimmedName = String(rowName).trim();
         const newRow = [...row];
-        
+
         // 클라이언트 맵에 저장된 값이 있으면 반영
         if (typeIdx !== -1 && productTypeMap[trimmedName]) {
           newRow[typeIdx] = productTypeMap[trimmedName];
@@ -204,7 +454,7 @@ function FileViewContent() {
         if (postTypeIdx !== -1 && productPostTypeMap[trimmedName]) {
           newRow[postTypeIdx] = productPostTypeMap[trimmedName];
         }
-        
+
         return newRow;
       });
 
@@ -300,9 +550,38 @@ function FileViewContent() {
         setHeaderIndex(parsedFile.headerIndex);
         setProductCodeMap(parsedFile.productCodeMap || {});
 
-        // 업체명 초기값 설정
+        // 원본 배송메시지 저장 (파일 로드 시점의 메시지를 그대로 저장)
         if (parsedFile.tableData && parsedFile.tableData.length > 1) {
           const headerRow = parsedFile.tableData[0];
+          const messageIdx = headerRow.findIndex(
+            (h: any) =>
+              h &&
+              typeof h === "string" &&
+              (h === "배송메시지" ||
+                h === "배송메세지" ||
+                h === "배송요청" ||
+                h === "요청사항" ||
+                h === "배송요청사항")
+          );
+
+          if (messageIdx !== -1) {
+            // 각 행의 원본 배송메시지 저장 (파일 로드 시점의 메시지를 그대로 저장)
+            parsedFile.tableData.forEach((row: any[], idx: number) => {
+              if (idx > 0) {
+                const message = row[messageIdx];
+                if (message !== null && message !== undefined) {
+                  const messageStr = String(message).trim();
+                  // 파일 로드 시점의 메시지를 그대로 원본으로 저장
+                  // 업체명 제거는 나중에 업체명을 적용할 때 한 번만 수행
+                  originalMessagesRef.current[idx] = messageStr;
+                } else {
+                  originalMessagesRef.current[idx] = "";
+                }
+              }
+            });
+          }
+
+          // 업체명 초기값 설정
           const vendorIdx = headerRow.findIndex(
             (h: any) => h && typeof h === "string" && h === "업체명"
           );
@@ -323,9 +602,38 @@ function FileViewContent() {
         setHeaderIndex(foundFile.headerIndex);
         setProductCodeMap(foundFile.productCodeMap || {});
 
-        // 업체명 초기값 설정
+        // 원본 배송메시지 저장 (파일 로드 시점의 메시지를 그대로 저장)
         if (foundFile.tableData && foundFile.tableData.length > 1) {
           const headerRow = foundFile.tableData[0];
+          const messageIdx = headerRow.findIndex(
+            (h: any) =>
+              h &&
+              typeof h === "string" &&
+              (h === "배송메시지" ||
+                h === "배송메세지" ||
+                h === "배송요청" ||
+                h === "요청사항" ||
+                h === "배송요청사항")
+          );
+
+          if (messageIdx !== -1) {
+            // 각 행의 원본 배송메시지 저장 (파일 로드 시점의 메시지를 그대로 저장)
+            foundFile.tableData.forEach((row: any[], idx: number) => {
+              if (idx > 0) {
+                const message = row[messageIdx];
+                if (message !== null && message !== undefined) {
+                  const messageStr = String(message).trim();
+                  // 파일 로드 시점의 메시지를 그대로 원본으로 저장
+                  // 업체명 제거는 나중에 업체명을 적용할 때 한 번만 수행
+                  originalMessagesRef.current[idx] = messageStr;
+                } else {
+                  originalMessagesRef.current[idx] = "";
+                }
+              }
+            });
+          }
+
+          // 업체명 초기값 설정
           const vendorIdx = headerRow.findIndex(
             (h: any) => h && typeof h === "string" && h === "업체명"
           );
@@ -370,26 +678,29 @@ function FileViewContent() {
           <div className="font-bold text-lg mt-4 mb-2 text-black text-left w-full flex flex-row justify-between items-center">
             <span>{fileName}</span>
             <div className="flex items-center gap-2">
+              <button
+                onClick={handleToggleEditMode}
+                className={`px-4 py-1 rounded text-sm font-semibold transition-colors ${
+                  isEditMode
+                    ? "bg-green-500 hover:bg-green-600 text-white"
+                    : "bg-blue-500 hover:bg-blue-600 text-white"
+                }`}
+              >
+                {isEditMode ? "편집 완료" : "편집"}
+              </button>
               <input
                 type="text"
                 placeholder="업체명 입력"
                 value={vendorName}
-                onChange={(e) => setVendorName(e.target.value)}
+                onChange={(e) => {
+                  const newValue = e.target.value;
+                  setVendorName(newValue);
+                  // 실시간으로 업데이트 (빈 값일 때도 처리)
+                  updateVendorAndMessage(newValue);
+                }}
                 className="border border-gray-300 px-3 py-1 rounded text-sm"
                 style={{minWidth: "150px"}}
               />
-              <button
-                onClick={() => {
-                  if (!vendorName.trim()) {
-                    alert("업체명을 입력해주세요.");
-                    return;
-                  }
-                  updateVendorAndMessage(vendorName);
-                }}
-                className="px-4 py-1 bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold rounded transition-colors"
-              >
-                적용
-              </button>
               <span>{tableData.length - 1}건</span>
             </div>
           </div>
@@ -408,6 +719,11 @@ function FileViewContent() {
                   <th className="border bg-gray-100 px-2 py-1 text-xs text-center">
                     매핑코드
                   </th>
+                  {isEditMode && (
+                    <th className="border bg-gray-100 px-2 py-1 text-xs text-center">
+                      복제
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -422,37 +738,99 @@ function FileViewContent() {
                       typeof h === "string" &&
                       (h.includes("수취인명") || h.includes("이름"))
                   );
-                  // 상품명 -> (상품명 같으면) 수취인명/이름 기준 오름차순 정렬
-                  const sorted = [...tableData.slice(1)].sort((a, b) => {
-                    const prodA = a[productNameIdx] || "";
-                    const prodB = b[productNameIdx] || "";
-                    const prodCompare = String(prodA).localeCompare(
-                      String(prodB),
-                      "ko-KR"
-                    );
-                    if (prodCompare !== 0) return prodCompare;
-                    // 상품명 동일하면 수취인명 or 이름 기준
-                    if (receiverIdx !== -1) {
-                      const recA = a[receiverIdx] || "";
-                      const recB = b[receiverIdx] || "";
-                      return String(recA).localeCompare(String(recB), "ko-KR");
-                    }
-                    return 0;
-                  });
+
+                  // 편집 모드가 아닐 때만 정렬, 편집 모드일 때는 원본 순서 유지
+                  const sorted = isEditMode
+                    ? [...tableData.slice(1)]
+                    : [...tableData.slice(1)].sort((a, b) => {
+                        const prodA = a[productNameIdx] || "";
+                        const prodB = b[productNameIdx] || "";
+                        const prodCompare = String(prodA).localeCompare(
+                          String(prodB),
+                          "ko-KR"
+                        );
+                        if (prodCompare !== 0) return prodCompare;
+                        // 상품명 동일하면 수취인명 or 이름 기준
+                        if (receiverIdx !== -1) {
+                          const recA = a[receiverIdx] || "";
+                          const recB = b[receiverIdx] || "";
+                          return String(recA).localeCompare(
+                            String(recB),
+                            "ko-KR"
+                          );
+                        }
+                        return 0;
+                      });
                   const headerRow = tableData[0];
                   const mappingIdx = headerRow.findIndex(
                     (h: any) => h === "매핑코드"
                   );
-                  const typeIdx = headerRow.findIndex((h: any) => h === "내외주");
+                  const typeIdx = headerRow.findIndex(
+                    (h: any) => h === "내외주"
+                  );
                   const postTypeIdx = headerRow.findIndex(
                     (h: any) => h === "택배사"
                   );
+                  const qtyIdx = headerRow.findIndex((h: any) => h === "수량");
+                  const receiverNameIdx = headerRow.findIndex(
+                    (h: any) =>
+                      h &&
+                      typeof h === "string" &&
+                      (h.includes("수취인명") || h === "이름")
+                  );
+                  const addressIdx = headerRow.findIndex(
+                    (h: any) => h && typeof h === "string" && h.includes("주소")
+                  );
+                  const duplicateReceiverSet = (() => {
+                    const set = new Set<string>();
+                    if (receiverNameIdx === -1) return set;
+                    const counts: {[key: string]: number} = {};
+                    tableData.slice(1).forEach((row) => {
+                      const receiverValue = String(
+                        row?.[receiverNameIdx] ?? ""
+                      ).trim();
+                      if (!receiverValue) return;
+                      counts[receiverValue] = (counts[receiverValue] || 0) + 1;
+                    });
+                    Object.entries(counts).forEach(([key, count]) => {
+                      if (count > 1) set.add(key);
+                    });
+                    return set;
+                  })();
+                  const duplicateAddressSet = (() => {
+                    const set = new Set<string>();
+                    if (addressIdx === -1) return set;
+                    const counts: {[key: string]: number} = {};
+                    tableData.slice(1).forEach((row) => {
+                      const addressValue = String(
+                        row?.[addressIdx] ?? ""
+                      ).trim();
+                      if (!addressValue) return;
+                      counts[addressValue] = (counts[addressValue] || 0) + 1;
+                    });
+                    Object.entries(counts).forEach(([key, count]) => {
+                      if (count > 1) set.add(key);
+                    });
+                    return set;
+                  })();
 
                   return sorted.map((row, i) => {
                     let name = "";
                     if (typeof headerIndex?.nameIdx === "number") {
                       name = row[headerIndex.nameIdx] as string;
                     }
+                    const receiverValue =
+                      receiverNameIdx !== -1
+                        ? String(row[receiverNameIdx] ?? "").trim()
+                        : "";
+                    const addressValue =
+                      addressIdx !== -1
+                        ? String(row[addressIdx] ?? "").trim()
+                        : "";
+                    const isReceiverDup =
+                      receiverValue && duplicateReceiverSet.has(receiverValue);
+                    const isAddressDup =
+                      addressValue && duplicateAddressSet.has(addressValue);
 
                     // 매핑코드 값 가져오기 (우선순위: productCodeMap > 테이블 컬럼 > codes)
                     let mappingCode = "";
@@ -487,14 +865,47 @@ function FileViewContent() {
                               cellValue = productPostTypeMap[trimmedName];
                             }
                           }
+
+                          // 편집 모드이고 상품명, 수량, 수취인명 컬럼인 경우 input으로 표시
+                          const isEditableColumn =
+                            j === productNameIdx ||
+                            j === qtyIdx ||
+                            j === receiverNameIdx;
+                          const isDuplicateCell =
+                            (isReceiverDup && j === receiverNameIdx) ||
+                            (isAddressDup && j === addressIdx);
+                          const tdClass = `border px-2 py-1 border-gray-300 text-xs min-w-[60px]${
+                            isDuplicateCell ? " bg-red-100" : ""
+                          }`;
+
                           return (
-                            <td
-                              key={j}
-                              className="border px-2 py-1 border-gray-300 text-xs min-w-[60px]"
-                            >
-                              {cellValue !== undefined && cellValue !== null
-                                ? cellValue
-                                : ""}
+                            <td key={j} className={tdClass}>
+                              {isEditMode && isEditableColumn ? (
+                                <input
+                                  type="text"
+                                  value={
+                                    cellValue !== undefined &&
+                                    cellValue !== null
+                                      ? cellValue
+                                      : ""
+                                  }
+                                  onChange={(e) => {
+                                    const actualRowIndex =
+                                      tableData.indexOf(row);
+                                    handleCellChange(
+                                      actualRowIndex,
+                                      j,
+                                      e.target.value
+                                    );
+                                  }}
+                                  className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs"
+                                />
+                              ) : cellValue !== undefined &&
+                                cellValue !== null ? (
+                                cellValue
+                              ) : (
+                                ""
+                              )}
                             </td>
                           );
                         })}
@@ -673,6 +1084,20 @@ function FileViewContent() {
                             ""
                           )}
                         </td>
+                        {isEditMode && (
+                          <td className="border px-2 py-1 border-gray-300 text-xs text-center">
+                            <button
+                              onClick={() => {
+                                const actualRowIndex = tableData.indexOf(row);
+                                handleDuplicateRow(actualRowIndex);
+                              }}
+                              className="px-2 py-1 bg-green-500 hover:bg-green-600 text-white rounded text-xs"
+                              type="button"
+                            >
+                              복제
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     );
                   });
@@ -800,9 +1225,11 @@ function FileViewContent() {
 
                 if (mappingIdx !== -1 || typeIdx !== -1 || postTypeIdx !== -1) {
                   // codeItem에서 직접 type과 postType 가져오기 (우선순위: codeItem > selectedItem)
-                  const typeValue = codeItem?.type ?? selectedItem?.type ?? null;
-                  const postTypeValue = codeItem?.postType ?? selectedItem?.postType ?? null;
-                  
+                  const typeValue =
+                    codeItem?.type ?? selectedItem?.type ?? null;
+                  const postTypeValue =
+                    codeItem?.postType ?? selectedItem?.postType ?? null;
+
                   // 클라이언트 맵에 저장 (useAutoMapping이 덮어쓰지 않도록)
                   if (typeValue) {
                     setProductTypeMap((prev) => ({
@@ -828,17 +1255,25 @@ function FileViewContent() {
                         newRow[mappingIdx] = selectedCode;
                       }
                       // type과 postType 업데이트 (값이 null이 아니면 업데이트)
-                      if (typeIdx !== -1 && typeValue !== null && typeValue !== undefined) {
+                      if (
+                        typeIdx !== -1 &&
+                        typeValue !== null &&
+                        typeValue !== undefined
+                      ) {
                         newRow[typeIdx] = typeValue;
                       }
-                      if (postTypeIdx !== -1 && postTypeValue !== null && postTypeValue !== undefined) {
+                      if (
+                        postTypeIdx !== -1 &&
+                        postTypeValue !== null &&
+                        postTypeValue !== undefined
+                      ) {
                         newRow[postTypeIdx] = postTypeValue;
                       }
                       return newRow;
                     }
                     return row;
                   });
-                  
+
                   setTableData(updatedTable);
 
                   // 파일 데이터도 업데이트
