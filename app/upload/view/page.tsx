@@ -62,6 +62,11 @@ function FileViewContent() {
   }>({});
   // Edit 모드 상태
   const [isEditMode, setIsEditMode] = useState(false);
+  // 체크박스 선택 상태
+  const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
+  // 일괄 적용 인풋 상태
+  const [bulkProductName, setBulkProductName] = useState("");
+  const [bulkQuantity, setBulkQuantity] = useState("");
 
   // 테이블 정렬 함수 (상품명 오름차순, 동일 시 수취인명/이름 오름차순)
   const sortTableData = (data: any[][]): any[][] => {
@@ -99,7 +104,29 @@ function FileViewContent() {
     return [headerRow, ...sortedBody];
   };
 
-  // 편집 토글 시 정렬 적용 (편집 종료 시)
+  // 수량 내림차순 정렬 함수
+  const sortTableDataByQuantity = (data: any[][]): any[][] => {
+    if (!data.length || !headerIndex) {
+      return data;
+    }
+
+    const headerRow = data[0];
+    const qtyIdx = headerRow.findIndex((h: any) => h === "수량");
+
+    if (qtyIdx === -1) {
+      return data;
+    }
+
+    const sortedBody = [...data.slice(1)].sort((a, b) => {
+      const qtyA = Number(a[qtyIdx]) || 0;
+      const qtyB = Number(b[qtyIdx]) || 0;
+      return qtyB - qtyA; // 내림차순
+    });
+
+    return [headerRow, ...sortedBody];
+  };
+
+  // 편집 토글 시 정렬 적용
   const handleToggleEditMode = () => {
     const next = !isEditMode;
     const applySortedData = (sortedData: any[][]) => {
@@ -125,15 +152,191 @@ function FileViewContent() {
     };
 
     if (!isEditMode && next) {
-      // 편집 진입 시 한 번 정렬
-      const sortedData = sortTableData(tableData);
+      // 편집 진입 시 수량 오름차순 정렬
+      const sortedData = sortTableDataByQuantity(tableData);
       applySortedData(sortedData);
+      // 체크박스 선택 초기화
+      setSelectedRows(new Set());
     } else if (isEditMode && !next) {
-      // 편집 종료 시 다시 정렬
+      // 편집 종료 시 상품명 정렬
       const sortedData = sortTableData(tableData);
       applySortedData(sortedData);
+      // 체크박스 선택 초기화
+      setSelectedRows(new Set());
+      setBulkProductName("");
+      setBulkQuantity("");
     }
     setIsEditMode(next);
+  };
+
+  // 전체 체크박스 토글
+  const handleSelectAll = () => {
+    if (selectedRows.size === tableData.length - 1) {
+      setSelectedRows(new Set());
+    } else {
+      const allRows = new Set<number>();
+      for (let i = 1; i < tableData.length; i++) {
+        allRows.add(i);
+      }
+      setSelectedRows(allRows);
+    }
+  };
+
+  // 개별 체크박스 토글
+  const handleRowSelect = (rowIndex: number) => {
+    const newSelectedRows = new Set(selectedRows);
+    if (newSelectedRows.has(rowIndex)) {
+      newSelectedRows.delete(rowIndex);
+    } else {
+      newSelectedRows.add(rowIndex);
+    }
+    setSelectedRows(newSelectedRows);
+  };
+
+  // 일괄 적용 함수
+  const handleBulkApply = () => {
+    if (selectedRows.size === 0) {
+      alert("적용할 행을 선택해주세요.");
+      return;
+    }
+
+    if (!bulkProductName && !bulkQuantity) {
+      alert("상품명 또는 수량을 입력해주세요.");
+      return;
+    }
+
+    const headerRow = tableData[0];
+    const productNameIdx = headerIndex?.nameIdx || -1;
+    const qtyIdx = headerRow.findIndex((h: any) => h === "수량");
+    const mappingIdx = headerRow.findIndex((h: any) => h === "매핑코드");
+    const typeIdx = headerRow.findIndex((h: any) => h === "내외주");
+    const postTypeIdx = headerRow.findIndex((h: any) => h === "택배사");
+
+    const newTableData = [...tableData];
+    const newProductCodeMap = {...productCodeMap};
+
+    selectedRows.forEach((rowIndex) => {
+      // 수량 적용
+      if (bulkQuantity && qtyIdx !== -1) {
+        newTableData[rowIndex][qtyIdx] = bulkQuantity;
+      }
+
+      // 상품명 적용 및 매핑코드, 내외주, 택배사 자동 업데이트
+      if (bulkProductName && productNameIdx !== -1) {
+        const trimmedValue = bulkProductName.trim();
+        newTableData[rowIndex][productNameIdx] = trimmedValue;
+
+        // codes에서 매칭되는 상품 찾기
+        const matchedProduct = codes.find((c: any) => c.name === trimmedValue);
+
+        if (matchedProduct) {
+          // 매칭되는 상품이 있을 때: 데이터 자동 입력
+          // 매핑코드 업데이트
+          if (mappingIdx !== -1) {
+            newTableData[rowIndex][mappingIdx] = matchedProduct.code || "";
+          }
+
+          // 내외주 업데이트
+          if (typeIdx !== -1) {
+            newTableData[rowIndex][typeIdx] = matchedProduct.type || "";
+          }
+
+          // 택배사 업데이트
+          if (postTypeIdx !== -1) {
+            newTableData[rowIndex][postTypeIdx] = matchedProduct.postType || "";
+          }
+
+          // productCodeMap에도 저장
+          newProductCodeMap[trimmedValue] = matchedProduct.code || "";
+        } else {
+          // 매칭되는 상품이 없을 때: 모두 공란으로 처리
+          if (mappingIdx !== -1) {
+            newTableData[rowIndex][mappingIdx] = "";
+          }
+          if (typeIdx !== -1) {
+            newTableData[rowIndex][typeIdx] = "";
+          }
+          if (postTypeIdx !== -1) {
+            newTableData[rowIndex][postTypeIdx] = "";
+          }
+
+          // Map에서도 제거
+          if (trimmedValue) {
+            delete newProductCodeMap[trimmedValue];
+          }
+        }
+      }
+    });
+
+    setTableData(newTableData);
+    setProductCodeMap(newProductCodeMap);
+
+    // 파일 데이터도 업데이트
+    if (fileId) {
+      const updatedFile = {
+        ...file,
+        tableData: newTableData,
+        productCodeMap: newProductCodeMap,
+      };
+      setFile(updatedFile);
+      sessionStorage.setItem(
+        `uploadedFile_${fileId}`,
+        JSON.stringify(updatedFile)
+      );
+      const updatedFiles = uploadedFiles.map((f) =>
+        f.id === fileId ? updatedFile : f
+      );
+      setUploadedFiles(updatedFiles);
+    }
+
+    // 초기화
+    setBulkProductName("");
+    setBulkQuantity("");
+    setSelectedRows(new Set());
+    alert(`${selectedRows.size}개 행에 일괄 적용되었습니다.`);
+  };
+
+  // 선택된 행 삭제 함수
+  const handleBulkDelete = () => {
+    if (selectedRows.size === 0) {
+      alert("삭제할 행을 선택해주세요.");
+      return;
+    }
+
+    const deleteCount = selectedRows.size;
+    // if (!confirm(`선택한 ${deleteCount}개 행을 삭제하시겠습니까?`)) {
+    //   return;
+    // }
+
+    // 선택된 행을 제외한 새로운 테이블 데이터 생성
+    const newTableData = tableData.filter(
+      (row, index) => index === 0 || !selectedRows.has(index)
+    );
+
+    setTableData(newTableData);
+
+    // 파일 데이터도 업데이트
+    if (fileId) {
+      const updatedFile = {
+        ...file,
+        tableData: newTableData,
+        rowCount: newTableData.length - 1,
+        productCodeMap: {...productCodeMap},
+      };
+      setFile(updatedFile);
+      sessionStorage.setItem(
+        `uploadedFile_${fileId}`,
+        JSON.stringify(updatedFile)
+      );
+      const updatedFiles = uploadedFiles.map((f) =>
+        f.id === fileId ? updatedFile : f
+      );
+      setUploadedFiles(updatedFiles);
+    }
+
+    // 초기화
+    setSelectedRows(new Set());
+    // alert(`${deleteCount}개 행이 삭제되었습니다.`);
   };
 
   // 행 복제 함수
@@ -278,99 +481,37 @@ function FileViewContent() {
     }
   };
 
-  // 업체명 변경시 배송메시지 실시간 업데이트를 위한 함수
-  const updateVendorAndMessage = (newVendorName: string) => {
+  // 업체명만 업데이트하는 함수 (배송메시지는 업데이트하지 않음)
+  const updateVendorName = (newVendorName: string) => {
     const headerRow = tableData[0];
     const vendorIdx = headerRow.findIndex(
       (h: any) => h && typeof h === "string" && h === "업체명"
-    );
-    const messageIdx = headerRow.findIndex(
-      (h: any) =>
-        h &&
-        typeof h === "string" &&
-        (h === "배송메시지" ||
-          h === "배송메세지" ||
-          h === "배송요청" ||
-          h === "요청사항" ||
-          h === "배송요청사항")
     );
 
     if (vendorIdx === -1) return;
 
     const vendorStr = newVendorName.trim();
-    // 5글자 이상이면 2글자, 4글자 이하면 전체 글자수
-    const vendorPrefix =
-      vendorStr.length >= 5 ? vendorStr.substring(0, 2) : vendorStr;
-
     const updatedTable = tableData.map((row, idx) => {
       if (idx === 0) return row;
       const newRow = [...row];
       newRow[vendorIdx] = vendorStr;
-
-      // 배송메시지 업데이트
-      if (messageIdx !== -1) {
-        // 순수 원본 메시지 가져오기 (한 번만 추출하고 절대 변경하지 않음)
-        let pureOriginalMessage = pureOriginalMessagesRef.current[idx];
-
-        if (pureOriginalMessage === undefined) {
-          // 순수 원본이 저장되지 않았으면 원본 메시지를 그대로 저장
-          const originalMessage = originalMessagesRef.current[idx];
-
-          if (originalMessage === undefined) {
-            // 원본도 없으면 현재 메시지를 그대로 저장
-            const currentMessage = row[messageIdx];
-            const currentMessageStr =
-              currentMessage !== null && currentMessage !== undefined
-                ? String(currentMessage).trim()
-                : "";
-
-            // 기존 메시지를 그대로 순수 원본으로 저장 (첫 단어 제거하지 않음)
-            pureOriginalMessage = currentMessageStr;
-
-            // 원본 메시지도 저장
-            originalMessagesRef.current[idx] = currentMessageStr;
-          } else {
-            // 원본 메시지를 그대로 순수 원본으로 저장 (첫 단어 제거하지 않음)
-            pureOriginalMessage = originalMessage;
-          }
-
-          // 순수 원본 메시지 저장 (한 번만 저장하고 절대 변경하지 않음)
-          pureOriginalMessagesRef.current[idx] = pureOriginalMessage;
-        }
-        // 순수 원본이 이미 저장되어 있으면 절대 변경하지 않고 그대로 사용
-
-        // 업체명이 있으면 앞에 업체명 추가, 없으면 순수 원본 메시지만 표시
-        if (vendorStr) {
-          if (pureOriginalMessage) {
-            newRow[messageIdx] =
-              `${vendorPrefix} ${pureOriginalMessage}`.trim();
-          } else {
-            newRow[messageIdx] = vendorPrefix;
-          }
-        } else {
-          // 업체명이 비어있으면 순수 원본 메시지만 표시
-          newRow[messageIdx] = pureOriginalMessage || "";
-        }
-      }
-
       return newRow;
     });
 
     setTableData(updatedTable);
 
-    // 파일 데이터도 업데이트 (productCodeMap 유지)
+    // 파일 데이터도 업데이트
     if (fileId) {
       const updatedFile = {
         ...file,
         tableData: updatedTable,
-        productCodeMap: {...productCodeMap}, // 매핑코드 유지
+        productCodeMap: {...productCodeMap},
       };
       setFile(updatedFile);
       sessionStorage.setItem(
         `uploadedFile_${fileId}`,
         JSON.stringify(updatedFile)
       );
-      // store의 uploadedFiles도 업데이트
       const updatedFiles = uploadedFiles.map((f) =>
         f.id === fileId ? updatedFile : f
       );
@@ -682,7 +823,7 @@ function FileViewContent() {
                 onClick={handleToggleEditMode}
                 className={`px-4 py-1 rounded text-sm font-semibold transition-colors ${
                   isEditMode
-                    ? "bg-green-500 hover:bg-green-600 text-white"
+                    ? "bg-[#04a670] hover:bg-[#04a670]/60 text-white"
                     : "bg-blue-500 hover:bg-blue-600 text-white"
                 }`}
               >
@@ -695,8 +836,8 @@ function FileViewContent() {
                 onChange={(e) => {
                   const newValue = e.target.value;
                   setVendorName(newValue);
-                  // 실시간으로 업데이트 (빈 값일 때도 처리)
-                  updateVendorAndMessage(newValue);
+                  // 업체명만 업데이트 (배송메시지는 업데이트하지 않음)
+                  updateVendorName(newValue);
                 }}
                 className="border border-gray-300 px-3 py-1 rounded text-sm"
                 style={{minWidth: "150px"}}
@@ -704,10 +845,61 @@ function FileViewContent() {
               <span>{tableData.length - 1}건</span>
             </div>
           </div>
+          {isEditMode && (
+            <div className="mt-2 mb-2 p-4 bg-blue-50 border border-blue-200 rounded">
+              <div className="flex items-center gap-4">
+                <input
+                  type="text"
+                  placeholder="상품명"
+                  value={bulkProductName}
+                  onChange={(e) => setBulkProductName(e.target.value)}
+                  className="border border-gray-300 px-3 py-1 rounded text-sm"
+                  style={{minWidth: "200px"}}
+                />
+                <input
+                  type="text"
+                  placeholder="수량"
+                  value={bulkQuantity}
+                  onChange={(e) => setBulkQuantity(e.target.value)}
+                  className="border border-gray-300 px-3 py-1 rounded text-sm"
+                  style={{minWidth: "100px"}}
+                />
+                <button
+                  onClick={handleBulkApply}
+                  className="px-4 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-semibold"
+                >
+                  {selectedRows.size > 0
+                    ? `${selectedRows.size}건 적용`
+                    : "일괄 적용"}
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  className="px-4 py-1 bg-red-500 hover:bg-red-600 text-white rounded text-sm font-semibold"
+                >
+                  {selectedRows.size > 0
+                    ? `${selectedRows.size}건 삭제`
+                    : "선택 삭제"}
+                </button>
+              </div>
+            </div>
+          )}
           <div className="mt-2 w-full overflow-x-auto text-black mb-20">
             <table className="table-auto border border-collapse border-gray-400 w-full min-w-[800px]">
               <thead>
                 <tr>
+                  {isEditMode && (
+                    <th className="border bg-gray-100 px-2 py-1 text-xs text-center">
+                      <input
+                        type="checkbox"
+                        checked={
+                          tableData.length > 1 &&
+                          selectedRows.size === tableData.length - 1
+                        }
+                        onChange={handleSelectAll}
+                        className="cursor-pointer"
+                      />
+                    </th>
+                  )}
                   {tableData[0].map((header, hidx) => (
                     <th
                       key={hidx}
@@ -849,8 +1041,21 @@ function FileViewContent() {
                         "";
                     }
 
+                    // 실제 tableData에서의 행 인덱스 찾기
+                    const actualRowIndex = tableData.indexOf(row);
+
                     return (
                       <tr key={i}>
+                        {isEditMode && (
+                          <td className="border px-2 py-1 border-gray-300 text-xs text-center">
+                            <input
+                              type="checkbox"
+                              checked={selectedRows.has(actualRowIndex)}
+                              onChange={() => handleRowSelect(actualRowIndex)}
+                              className="cursor-pointer"
+                            />
+                          </td>
+                        )}
                         {tableData[0].map((_, j) => {
                           // 클라이언트 맵에 저장된 값이 있으면 우선 사용
                           let cellValue = row[j];
@@ -874,12 +1079,25 @@ function FileViewContent() {
                           const isDuplicateCell =
                             (isReceiverDup && j === receiverNameIdx) ||
                             (isAddressDup && j === addressIdx);
-                          const tdClass = `border px-2 py-1 border-gray-300 text-xs min-w-[60px]${
+
+                          // 컬럼별 너비 설정
+                          let minWidth = "60px";
+                          if (j === productNameIdx) {
+                            minWidth = "300px"; // 상품명은 넓게
+                          } else if (j === qtyIdx) {
+                            minWidth = "40px"; // 수량은 좁게
+                          } else if (j === receiverNameIdx) {
+                            minWidth = "70px"; // 수취인명은 좁게
+                          } else if (j === addressIdx) {
+                            minWidth = "250px"; // 주소는 넓게
+                          }
+
+                          const tdClass = `border px-2 py-1 border-gray-300 text-xs${
                             isDuplicateCell ? " bg-red-100" : ""
                           }`;
 
                           return (
-                            <td key={j} className={tdClass}>
+                            <td key={j} className={tdClass} style={{minWidth}}>
                               {isEditMode && isEditableColumn ? (
                                 <input
                                   type="text"
@@ -913,40 +1131,47 @@ function FileViewContent() {
                           {name ? (
                             <div className="flex items-center justify-center gap-1">
                               {mappingCode && <span>{mappingCode}</span>}
-                              <button
-                                className="w-[40px] p-1 rounded-sm text-[12px] hover:bg-blue-300 border border-[#9a9a9a85] bg-blue-400"
-                                type="button"
-                                onClick={() => handleRecommendClick(i, name)}
-                                disabled={!name}
-                              >
-                                <span
-                                  role="img"
-                                  aria-label="추천"
-                                  className="text-[#ffffff] font-bold"
-                                >
-                                  추천
-                                </span>
-                              </button>
-                              <button
-                                className="w-[40px] p-1 rounded-sm text-[12px] hover:bg-[#eaeaea44] border border-[#9a9a9a85] bg-[#eaeaea]"
-                                type="button"
-                                onClick={() => {
-                                  setCodeEditWindow({
-                                    open: true,
-                                    rowIdx: i,
-                                    productName: name,
-                                  });
-                                }}
-                                disabled={!name}
-                              >
-                                <span
-                                  role="img"
-                                  aria-label="검색"
-                                  className="text-[#333] font-bold"
-                                >
-                                  검색
-                                </span>
-                              </button>
+                              {/* 편집모드일 때는 항상 버튼 표시, 아닐 때는 매핑코드 없을 때만 표시 */}
+                              {(isEditMode || !mappingCode) && (
+                                <>
+                                  <button
+                                    className="w-[40px] p-1 rounded-sm text-[12px] hover:bg-blue-300 border border-[#9a9a9a85] bg-blue-400"
+                                    type="button"
+                                    onClick={() =>
+                                      handleRecommendClick(i, name)
+                                    }
+                                    disabled={!name}
+                                  >
+                                    <span
+                                      role="img"
+                                      aria-label="추천"
+                                      className="text-[#ffffff] font-bold"
+                                    >
+                                      추천
+                                    </span>
+                                  </button>
+                                  <button
+                                    className="w-[40px] p-1 rounded-sm text-[12px] hover:bg-[#eaeaea44] border border-[#9a9a9a85] bg-[#eaeaea]"
+                                    type="button"
+                                    onClick={() => {
+                                      setCodeEditWindow({
+                                        open: true,
+                                        rowIdx: i,
+                                        productName: name,
+                                      });
+                                    }}
+                                    disabled={!name}
+                                  >
+                                    <span
+                                      role="img"
+                                      aria-label="검색"
+                                      className="text-[#333] font-bold"
+                                    >
+                                      검색
+                                    </span>
+                                  </button>
+                                </>
+                              )}
                               {recommendIdx === i && (
                                 <RecommendModal
                                   open={recommendIdx === i}
@@ -1091,7 +1316,7 @@ function FileViewContent() {
                                 const actualRowIndex = tableData.indexOf(row);
                                 handleDuplicateRow(actualRowIndex);
                               }}
-                              className="px-2 py-1 bg-green-500 hover:bg-green-600 text-white rounded text-xs"
+                              className="px-2 py-1 bg-[#04a670] hover:bg-[#04a670]/60 text-white rounded text-xs font-bold"
                               type="button"
                             >
                               복제

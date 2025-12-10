@@ -25,6 +25,7 @@ interface BaseFilterProps {
   searchFieldOptions?: FilterOption[];
   uploadTimeFrom?: string;
   uploadTimeTo?: string;
+  itemsPerPage?: number;
   onTypeChange: (type: string) => void;
   onPostTypeChange: (postType: string) => void;
   onCategoryChange?: (category: string) => void;
@@ -34,12 +35,14 @@ interface BaseFilterProps {
   onSearchValueChange: (value: string) => void;
   onUploadTimeFromChange?: (value: string) => void;
   onUploadTimeToChange?: (value: string) => void;
+  onItemsPerPageChange?: (value: number) => void;
   onApplySearchFilter: () => void;
   onResetFilters: () => void;
   showCategory?: boolean;
   showVendor?: boolean;
   showOrderStatus?: boolean;
   showDateRange?: boolean;
+  showItemsPerPage?: boolean;
 }
 
 export default function BaseFilter({
@@ -58,6 +61,7 @@ export default function BaseFilter({
   ],
   uploadTimeFrom = "",
   uploadTimeTo = "",
+  itemsPerPage = 20,
   onTypeChange,
   onPostTypeChange,
   onCategoryChange,
@@ -67,12 +71,14 @@ export default function BaseFilter({
   onSearchValueChange,
   onUploadTimeFromChange,
   onUploadTimeToChange,
+  onItemsPerPageChange,
   onApplySearchFilter,
   onResetFilters,
   showCategory = false,
   showVendor = false,
   showOrderStatus = false,
   showDateRange = false,
+  showItemsPerPage = false,
 }: BaseFilterProps) {
   return (
     <div className="mb-4 flex flex-col gap-4">
@@ -86,11 +92,8 @@ export default function BaseFilter({
             onChange={(e) => onTypeChange(e.target.value)}
           >
             <option value="">전체</option>
-            {filters.types?.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
+            <option value="내주">내주</option>
+            <option value="외주">외주</option>
           </select>
         </label>
         <label className="text-sm font-medium">
@@ -101,11 +104,12 @@ export default function BaseFilter({
             onChange={(e) => onPostTypeChange(e.target.value)}
           >
             <option value="">전체</option>
-            {filters.postTypes?.map((postType) => (
-              <option key={postType} value={postType}>
-                {postType}
-              </option>
-            ))}
+            <option value="CJ대한통운">CJ대한통운</option>
+            <option value="우체국택배">우체국택배</option>
+            <option value="로젠택배">로젠택배</option>
+            <option value="롯데택배">롯데택배</option>
+            <option value="한진택배">한진택배</option>
+            <option value="천일택배">천일택배</option>
           </select>
         </label>
         {showCategory && onCategoryChange && (
@@ -122,7 +126,7 @@ export default function BaseFilter({
                   {category}
                 </option>
               ))}
-          </select>
+            </select>
           </label>
         )}
         {showVendor && onVendorChange && (
@@ -152,6 +156,22 @@ export default function BaseFilter({
             >
               <option value="공급중">공급중</option>
               <option value="취소">취소</option>
+            </select>
+          </label>
+        )}
+        {showItemsPerPage && onItemsPerPageChange && (
+          <label className="text-sm font-medium">
+            표시 개수:
+            <select
+              className="ml-2 px-2 py-1 border border-gray-300 rounded"
+              value={itemsPerPage}
+              onChange={(e) => onItemsPerPageChange(Number(e.target.value))}
+            >
+              <option value={20}>20개</option>
+              <option value={40}>40개</option>
+              <option value={100}>100개</option>
+              <option value={500}>500개</option>
+              <option value={1000}>1000개</option>
             </select>
           </label>
         )}
@@ -198,7 +218,7 @@ export default function BaseFilter({
             onChange={(e) => onSearchValueChange(e.target.value)}
             disabled={!searchField}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && searchField && searchValue) {
+              if (e.key === "Enter") {
                 onApplySearchFilter();
               }
             }}
@@ -222,4 +242,3 @@ export default function BaseFilter({
     </div>
   );
 }
-

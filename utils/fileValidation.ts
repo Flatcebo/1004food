@@ -16,16 +16,17 @@ export function checkFileValidation(file: UploadedFile | any): boolean {
   const vendorIdx = headerRow.findIndex(
     (h: any) => h === "업체명" || h === "업체"
   );
-  const messageIdx = headerRow.findIndex(
-    (h: any) =>
-      h &&
-      typeof h === "string" &&
-      (h === "배송메시지" ||
-        h === "배송메세지" ||
-        h === "배송요청" ||
-        h === "요청사항" ||
-        h === "배송요청사항")
-  );
+  // const messageIdx = headerRow.findIndex(
+  //   (h: any) =>
+  //     h &&
+  //     typeof h === "string" &&
+  //     (h === "배송메시지" ||
+  //       h === "배송메세지" ||
+  //       h === "배송요청" ||
+  //       h === "요청사항" ||
+  //       h === "배송요청사항")
+  // );
+  const qtyIdx = headerRow.findIndex((h: any) => h === "수량");
 
   // 상품명 인덱스가 없으면 유효로 간주 (데이터 구조가 맞지 않음)
   if (typeof nameIdx !== "number" || nameIdx === -1) {
@@ -66,8 +67,16 @@ export function checkFileValidation(file: UploadedFile | any): boolean {
       vendorIdx !== -1 ? String(row[vendorIdx] || "").trim() : "";
 
     // 배송메시지 확인
-    const message =
-      messageIdx !== -1 ? String(row[messageIdx] || "").trim() : "";
+    // const message =
+    //   messageIdx !== -1 ? String(row[messageIdx] || "").trim() : "";
+
+    // 수량 확인
+    const quantity = qtyIdx !== -1 ? Number(row[qtyIdx]) || 0 : 0;
+
+    // 수량이 2 이상이면 false
+    if (quantity >= 2) {
+      return false;
+    }
 
     // 매핑코드 체크: 상품명이 있으면 매핑코드가 반드시 있어야 함
     // 또는 매핑코드 컬럼이 있으면 매핑코드가 있어야 함
@@ -85,11 +94,11 @@ export function checkFileValidation(file: UploadedFile | any): boolean {
     }
 
     // 배송메시지 컬럼이 있는 경우: 배송메시지가 공란이 아니어야 함
-    if (messageIdx !== -1) {
-      if (!message) {
-        return false; // 배송메시지가 공란이면 false
-      }
-    }
+    // if (messageIdx !== -1) {
+    //   if (!message) {
+    //     return false; // 배송메시지가 공란이면 false
+    //   }
+    // }
   }
 
   return true; // 모든 row의 매핑코드와 업체명이 공란이 아니면 true

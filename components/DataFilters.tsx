@@ -16,6 +16,7 @@ interface DataFiltersProps {
   searchValue: string;
   uploadTimeFrom: string;
   uploadTimeTo: string;
+  itemsPerPage: number;
   onTypeChange: (type: string) => void;
   onPostTypeChange: (postType: string) => void;
   onVendorChange: (vendor: string) => void;
@@ -24,6 +25,7 @@ interface DataFiltersProps {
   onSearchValueChange: (value: string) => void;
   onUploadTimeFromChange: (value: string) => void;
   onUploadTimeToChange: (value: string) => void;
+  onItemsPerPageChange: (value: number) => void;
   onApplySearchFilter: () => void;
   onResetFilters: () => void;
 }
@@ -35,6 +37,7 @@ export default function DataFilters(props: DataFiltersProps) {
       showVendor={true}
       showOrderStatus={true}
       showDateRange={true}
+      showItemsPerPage={true}
       searchFieldOptions={[
         {label: "선택", value: ""},
         {label: "수취인명", value: "수취인명"},

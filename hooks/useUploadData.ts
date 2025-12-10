@@ -24,16 +24,24 @@ export function useUploadData() {
   const todayDate = getTodayDate();
   const [uploadTimeFrom, setUploadTimeFrom] = useState<string>(todayDate);
   const [uploadTimeTo, setUploadTimeTo] = useState<string>(todayDate);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+
   // 실제 적용되는 필터 (검색 버튼 클릭 시 적용)
+  const [appliedType, setAppliedType] = useState<string>("");
+  const [appliedPostType, setAppliedPostType] = useState<string>("");
+  const [appliedVendor, setAppliedVendor] = useState<string>("");
+  const [appliedOrderStatus, setAppliedOrderStatus] =
+    useState<string>("공급중");
   const [appliedSearchField, setAppliedSearchField] = useState<string>("");
   const [appliedSearchValue, setAppliedSearchValue] = useState<string>("");
   const [appliedUploadTimeFrom, setAppliedUploadTimeFrom] =
     useState<string>(todayDate);
   const [appliedUploadTimeTo, setAppliedUploadTimeTo] =
     useState<string>(todayDate);
+  const [appliedItemsPerPage, setAppliedItemsPerPage] = useState(20);
+
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 20;
 
   const [totalCount, setTotalCount] = useState(0);
 
@@ -42,11 +50,11 @@ export function useUploadData() {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (selectedType) params.append("type", selectedType);
-      if (selectedPostType) params.append("postType", selectedPostType);
-      if (selectedVendor) params.append("vendor", selectedVendor);
-      if (selectedOrderStatus)
-        params.append("orderStatus", selectedOrderStatus);
+      // 적용된 필터만 사용
+      if (appliedType) params.append("type", appliedType);
+      if (appliedPostType) params.append("postType", appliedPostType);
+      if (appliedVendor) params.append("vendor", appliedVendor);
+      if (appliedOrderStatus) params.append("orderStatus", appliedOrderStatus);
       // 적용된 검색 필드와 값만 사용
       if (appliedSearchField && appliedSearchValue) {
         params.append("searchField", appliedSearchField);
@@ -57,10 +65,10 @@ export function useUploadData() {
         params.append("uploadTimeFrom", appliedUploadTimeFrom);
       if (appliedUploadTimeTo)
         params.append("uploadTimeTo", appliedUploadTimeTo);
-      
+
       // 페이지네이션 파라미터 추가
       params.append("page", currentPage.toString());
-      params.append("limit", itemsPerPage.toString());
+      params.append("limit", appliedItemsPerPage.toString());
 
       const response = await fetch(`/api/upload/list?${params.toString()}`);
       const result = await response.json();
@@ -82,37 +90,40 @@ export function useUploadData() {
       setLoading(false);
     }
   }, [
-    selectedType,
-    selectedPostType,
-    selectedVendor,
-    selectedOrderStatus,
+    appliedType,
+    appliedPostType,
+    appliedVendor,
+    appliedOrderStatus,
     appliedSearchField,
     appliedSearchValue,
     appliedUploadTimeFrom,
     appliedUploadTimeTo,
+    appliedItemsPerPage,
     currentPage,
-    itemsPerPage,
   ]);
 
-  // 초기 로드 시 오늘 날짜 필터 자동 적용
+  // 초기 로드 시 기본 필터 자동 적용
   useEffect(() => {
-    // 초기 로드 시 오늘 날짜로 필터 적용
+    // 초기 로드 시 기본값으로 필터 적용
     setAppliedUploadTimeFrom(todayDate);
     setAppliedUploadTimeTo(todayDate);
+    setAppliedOrderStatus("공급중");
+    setAppliedItemsPerPage(20);
   }, []);
 
   // 필터 변경 시 첫 페이지로 이동하고 데이터 조회
   useEffect(() => {
     setCurrentPage(1);
   }, [
-    selectedType,
-    selectedPostType,
-    selectedVendor,
-    selectedOrderStatus,
+    appliedType,
+    appliedPostType,
+    appliedVendor,
+    appliedOrderStatus,
     appliedSearchField,
     appliedSearchValue,
     appliedUploadTimeFrom,
     appliedUploadTimeTo,
+    appliedItemsPerPage,
   ]);
 
   // currentPage 변경 시 데이터 조회
@@ -142,25 +153,28 @@ export function useUploadData() {
   }, [savedData]);
 
   // 헤더 순서 정의 (상수로 이동)
-  const headerOrder = useMemo(() => [
-    "id",
-    "file_name",
-    "upload_time",
-    "업체명",
-    "내외주",
-    "택배사",
-    "수취인명",
-    "수취인 전화번호",
-    "우편",
-    "주소",
-    "수량",
-    "상품명",
-    "주문자명",
-    "주문자 전화번호",
-    "배송메시지",
-    "매핑코드",
-    "주문상태",
-  ], []);
+  const headerOrder = useMemo(
+    () => [
+      "id",
+      "file_name",
+      "upload_time",
+      "업체명",
+      "내외주",
+      "택배사",
+      "수취인명",
+      "수취인 전화번호",
+      "우편",
+      "주소",
+      "수량",
+      "상품명",
+      "주문자명",
+      "주문자 전화번호",
+      "배송메시지",
+      "매핑코드",
+      "주문상태",
+    ],
+    []
+  );
 
   // 모든 컬럼 헤더 수집 (메모이제이션)
   const headers = useMemo(() => {
@@ -192,8 +206,8 @@ export function useUploadData() {
 
   // 페이지네이션 계산 (백엔드에서 받은 totalCount 사용)
   const totalPages = useMemo(() => {
-    return Math.ceil(totalCount / itemsPerPage);
-  }, [totalCount, itemsPerPage]);
+    return Math.ceil(totalCount / appliedItemsPerPage);
+  }, [totalCount, appliedItemsPerPage]);
 
   // 백엔드에서 이미 페이지네이션된 데이터를 받아오므로 그대로 사용
   const paginatedRows = useMemo(() => {
@@ -202,12 +216,27 @@ export function useUploadData() {
 
   // 검색 필터 적용 함수 (검색 버튼 클릭 시 호출)
   const applySearchFilter = useCallback(() => {
+    setAppliedType(selectedType);
+    setAppliedPostType(selectedPostType);
+    setAppliedVendor(selectedVendor);
+    setAppliedOrderStatus(selectedOrderStatus);
     setAppliedSearchField(searchField);
     setAppliedSearchValue(searchValue);
     setAppliedUploadTimeFrom(uploadTimeFrom);
     setAppliedUploadTimeTo(uploadTimeTo);
+    setAppliedItemsPerPage(itemsPerPage);
     setCurrentPage(1);
-  }, [searchField, searchValue, uploadTimeFrom, uploadTimeTo]);
+  }, [
+    selectedType,
+    selectedPostType,
+    selectedVendor,
+    selectedOrderStatus,
+    searchField,
+    searchValue,
+    uploadTimeFrom,
+    uploadTimeTo,
+    itemsPerPage,
+  ]);
 
   // 필터 초기화 함수
   const resetFilters = useCallback(() => {
@@ -219,10 +248,16 @@ export function useUploadData() {
     setSearchValue("");
     setUploadTimeFrom(todayDate);
     setUploadTimeTo(todayDate);
+    setItemsPerPage(20);
+    setAppliedType("");
+    setAppliedPostType("");
+    setAppliedVendor("");
+    setAppliedOrderStatus("공급중");
     setAppliedSearchField("");
     setAppliedSearchValue("");
     setAppliedUploadTimeFrom(todayDate);
     setAppliedUploadTimeTo(todayDate);
+    setAppliedItemsPerPage(20);
     setCurrentPage(1);
   }, [todayDate]);
 
@@ -245,10 +280,21 @@ export function useUploadData() {
     setUploadTimeFrom,
     uploadTimeTo,
     setUploadTimeTo,
+    itemsPerPage,
+    setItemsPerPage,
+    appliedType,
+    appliedPostType,
+    appliedVendor,
+    appliedOrderStatus,
     appliedSearchField,
     appliedSearchValue,
     appliedUploadTimeFrom,
     appliedUploadTimeTo,
+    appliedItemsPerPage,
+    setAppliedType,
+    setAppliedPostType,
+    setAppliedVendor,
+    setAppliedOrderStatus,
     setAppliedSearchField,
     setAppliedSearchValue,
     setAppliedUploadTimeFrom,

@@ -52,6 +52,8 @@ export function mapDataToTemplate(
     "배송 메시지": "배송메시지",
     배송메세지: "배송메시지",
     배송메시지: "배송메시지",
+    받는사람: "수취인명",
+    주문하신분: "주문자명",
   };
 
   // 매핑된 헤더명 사용
@@ -67,6 +69,27 @@ export function mapDataToTemplate(
     const postalValue =
       row["우편"] || row["우편번호"] || row["우편 번호"] || "";
     if (postalValue) return postalValue;
+  }
+
+  // 전화번호1 (수취인 전화번호) 관련 특별 처리
+  if (header === "전화번호1" || normalizedHeader === "전화번호1") {
+    const phoneValue =
+      row["전화번호"] ||
+      row["수취인전화번호"] ||
+      row["수취인 전화번호"] ||
+      row["전화번호1"] ||
+      "";
+    if (phoneValue) return phoneValue;
+  }
+
+  // 전화번호 (주문자 전화번호) 관련 특별 처리
+  if (
+    (header === "전화번호" || normalizedHeader === "전화번호") &&
+    !header.includes("1")
+  ) {
+    const phoneValue =
+      row["주문자전화번호"] || row["주문자 전화번호"] || row["전화번호"] || "";
+    if (phoneValue) return phoneValue;
   }
 
   // 공급가 관련 특별 처리 (salePrice 우선 사용)
@@ -197,15 +220,15 @@ export function sortExcelData(
     (h: string) =>
       h === "수취인명" ||
       h === "수취인" ||
-      h.includes("수취인명") ||
-      h.includes("수취인")
+      (h && h.includes("수취인명")) ||
+      (h && h.includes("수취인"))
   );
   const 상품명Idx = columnOrder.findIndex(
     (h: string) =>
       h === "상품명" ||
       h === "상품" ||
-      h.includes("상품명") ||
-      h.includes("상품")
+      (h && h.includes("상품명")) ||
+      (h && h.includes("상품"))
   );
 
   if (수취인명Idx === -1 && 상품명Idx === -1) {

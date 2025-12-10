@@ -47,7 +47,9 @@ export async function GET(request: NextRequest) {
       conditions.push(sql`u.created_at >= ${uploadTimeFrom}::date`);
     }
     if (uploadTimeTo) {
-      conditions.push(sql`u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')`);
+      conditions.push(
+        sql`u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')`
+      );
     }
 
     // 조건부 쿼리 구성
@@ -57,19 +59,19 @@ export async function GET(request: NextRequest) {
           ? sql`${selectClause} ORDER BY u.created_at DESC, ur.id DESC LIMIT ${limit} OFFSET ${offset}`
           : selectClause;
       }
-      
+
       // 첫 번째 조건으로 WHERE 시작
       let query = sql`${selectClause} WHERE ${conditions[0]}`;
-      
+
       // 나머지 조건들을 AND로 연결
       for (let i = 1; i < conditions.length; i++) {
         query = sql`${query} AND ${conditions[i]}`;
       }
-      
+
       if (includeLimit) {
         query = sql`${query} ORDER BY u.created_at DESC, ur.id DESC LIMIT ${limit} OFFSET ${offset}`;
       }
-      
+
       return query;
     };
 
@@ -94,20 +96,18 @@ export async function GET(request: NextRequest) {
     );
 
     // 두 쿼리를 병렬로 실행
-    const [countResult, rows] = await Promise.all([
-      countQuery,
-      dataQuery,
-    ]);
+    const [countResult, rows] = await Promise.all([countQuery, dataQuery]);
 
-    const totalCount = Array.isArray(countResult) && countResult.length > 0
-      ? parseInt(countResult[0].total as string, 10)
-      : 0;
+    const totalCount =
+      Array.isArray(countResult) && countResult.length > 0
+        ? parseInt(countResult[0].total as string, 10)
+        : 0;
 
     // 필터 목록 조회
     const [typeList, postTypeList, vendorList] = await Promise.all([
       sql`SELECT DISTINCT row_data->>'내외주' as type FROM upload_rows WHERE row_data->>'내외주' IS NOT NULL ORDER BY type`,
       sql`SELECT DISTINCT row_data->>'택배사' as post_type FROM upload_rows WHERE row_data->>'택배사' IS NOT NULL ORDER BY post_type`,
-      sql`SELECT DISTINCT row_data->>'업체명' as vendor FROM upload_rows WHERE row_data->>'업체명' IS NOT NULL ORDER BY vendor`,
+      sql`SELECT DISTINCT name as vendor FROM purchase WHERE name IS NOT NULL ORDER BY name`,
     ]);
 
     return NextResponse.json({

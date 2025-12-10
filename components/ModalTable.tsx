@@ -3,11 +3,13 @@ export default function ModalTable({
   onClose,
   onSubmit,
   children,
+  disabled,
 }: {
   open: boolean;
   onClose: () => void;
   onSubmit: () => void;
   children: React.ReactNode;
+  disabled?: boolean;
 }) {
   if (!open) return null;
   return (
@@ -32,7 +34,12 @@ export default function ModalTable({
           <div className="flex flex-row items-center justify-end gap-[16px] text-white font-semibold">
             <button
               onClick={onSubmit}
-              className="px-[32px] py-[10px] rounded-md transition-colors bg-[#1ca2fb] hover:bg-[#1ca2fba0]"
+              disabled={disabled}
+              className={`px-[32px] py-[10px] rounded-md transition-colors ${
+                disabled
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-[#1ca2fb] hover:bg-[#1ca2fba0]"
+              }`}
             >
               Upload
             </button>

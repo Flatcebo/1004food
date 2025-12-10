@@ -76,10 +76,21 @@ export default function UploadPage() {
     setUploadTimeFrom,
     uploadTimeTo,
     setUploadTimeTo,
+    itemsPerPage,
+    setItemsPerPage,
+    appliedType,
+    appliedPostType,
+    appliedVendor,
+    appliedOrderStatus,
     appliedSearchField,
     appliedSearchValue,
     appliedUploadTimeFrom,
     appliedUploadTimeTo,
+    appliedItemsPerPage,
+    setAppliedType,
+    setAppliedPostType,
+    setAppliedVendor,
+    setAppliedOrderStatus,
     setAppliedSearchField,
     setAppliedSearchValue,
     setAppliedUploadTimeFrom,
@@ -99,42 +110,41 @@ export default function UploadPage() {
 
   // 필터 제거 함수
   const handleRemoveFilter = (filterType: string) => {
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(
+      today.getMonth() + 1
+    ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
     switch (filterType) {
       case "type":
         setSelectedType("");
-        // 상태 변경 후 useEffect가 자동으로 fetchSavedData 호출
+        setAppliedType("");
         break;
       case "postType":
         setSelectedPostType("");
+        setAppliedPostType("");
         break;
       case "vendor":
         setSelectedVendor("");
+        setAppliedVendor("");
         break;
       case "orderStatus":
         setSelectedOrderStatus("공급중");
+        setAppliedOrderStatus("공급중");
         break;
       case "search":
         setSearchField("");
         setSearchValue("");
-        // 검색 필터 초기화 - 빈 값으로 적용
         setAppliedSearchField("");
         setAppliedSearchValue("");
-        // appliedSearchField/appliedSearchValue 변경 시 useEffect가 자동 호출
         break;
       case "dateRange":
-        const today = new Date();
-        const todayStr = `${today.getFullYear()}-${String(
-          today.getMonth() + 1
-        ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
         setUploadTimeFrom(todayStr);
         setUploadTimeTo(todayStr);
-        // 날짜 필터 초기화 - 오늘 날짜로 적용
         setAppliedUploadTimeFrom(todayStr);
         setAppliedUploadTimeTo(todayStr);
-        // appliedUploadTimeFrom/appliedUploadTimeTo 변경 시 useEffect가 자동 호출
         break;
     }
-    // useEffect가 상태 변경을 감지하여 자동으로 fetchSavedData 호출
   };
 
   // 파일 검증 관련 훅
@@ -415,6 +425,11 @@ export default function UploadPage() {
     setHeaderIndex(null);
   };
 
+  // 유효하지 않은 파일이 있는지 체크 (빨간 배경이 있는 파일)
+  const hasInvalidFiles = uploadedFiles.some(
+    (file) => fileValidationStatus[file.id] === false
+  );
+
   return (
     <div className="w-full h-full flex flex-col items-start justify-start pt-4 px-4">
       <div className="w-full bg-[#ffffff] rounded-lg px-8 shadow-md pb-12">
@@ -450,6 +465,7 @@ export default function UploadPage() {
             searchValue={searchValue}
             uploadTimeFrom={uploadTimeFrom}
             uploadTimeTo={uploadTimeTo}
+            itemsPerPage={itemsPerPage}
             onTypeChange={setSelectedType}
             onPostTypeChange={setSelectedPostType}
             onVendorChange={setSelectedVendor}
@@ -459,6 +475,7 @@ export default function UploadPage() {
             onSearchValueChange={setSearchValue}
             onUploadTimeFromChange={setUploadTimeFrom}
             onUploadTimeToChange={setUploadTimeTo}
+            onItemsPerPageChange={setItemsPerPage}
             onApplySearchFilter={applySearchFilter}
             onResetFilters={resetFilters}
           />
@@ -473,10 +490,10 @@ export default function UploadPage() {
             totalCount={totalCount}
             onPageChange={setCurrentPage}
             onDataUpdate={fetchSavedData}
-            selectedType={selectedType}
-            selectedPostType={selectedPostType}
-            selectedVendor={selectedVendor}
-            selectedOrderStatus={selectedOrderStatus}
+            selectedType={appliedType}
+            selectedPostType={appliedPostType}
+            selectedVendor={appliedVendor}
+            selectedOrderStatus={appliedOrderStatus}
             appliedSearchField={appliedSearchField}
             appliedSearchValue={appliedSearchValue}
             uploadTimeFrom={appliedUploadTimeFrom}
@@ -495,6 +512,7 @@ export default function UploadPage() {
             handleCloseModal();
           }
         }}
+        disabled={hasInvalidFiles}
       >
         <FileUploadArea
           dragActive={dragActive}

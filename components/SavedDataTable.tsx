@@ -94,20 +94,20 @@ const SavedDataTable = memo(function SavedDataTable({
     fetchTemplates();
   }, []);
 
-  // 엑셀 다운로드
+  // 엑셀 다운로드 (외주 발주서 포함)
   const handleDownload = async () => {
     if (!selectedTemplate) {
       alert("템플릿을 선택해주세요.");
       return;
     }
 
-    const rowIdsToDownload =
+    let rowIdsToDownload =
       selectedRows.size > 0 ? Array.from(selectedRows) : null;
 
     setIsDownloading(true);
     try {
       // 현재 적용된 필터 정보를 다운로드 요청에 포함
-      const filters = {
+      let filters = {
         type: selectedType || undefined,
         postType: selectedPostType || undefined,
         vendor: selectedVendor || undefined,
@@ -118,7 +118,49 @@ const SavedDataTable = memo(function SavedDataTable({
         uploadTimeTo: uploadTimeTo || undefined,
       };
 
-      const response = await fetch("/api/upload/download", {
+      // 템플릿 확인
+      const selectedTemplateObj = templates.find(
+        (t) => t.id === selectedTemplate
+      );
+      const templateName = selectedTemplateObj?.name || "";
+
+      // CJ외주 발주서인지 확인
+      const isCJOutsource = templateName.includes("CJ외주");
+      // 일반 외주 발주서인지 확인 (CJ외주가 아닌 "외주"가 포함된 경우)
+      const isOutsource = templateName.includes("외주") && !isCJOutsource;
+
+      // CJ외주 발주서인 경우: 매핑코드 106464만 필터링
+      if (isCJOutsource) {
+        // 선택된 행이 있으면 그 중에서 106464만, 없으면 필터에 매핑코드 조건 추가
+        if (rowIdsToDownload) {
+          // 선택된 행 중 매핑코드가 106464인 것만 필터링
+          const filteredRows = tableRows.filter(
+            (row: any) =>
+              rowIdsToDownload!.includes(row.id) && row.매핑코드 === "106464"
+          );
+          rowIdsToDownload = filteredRows.map((row: any) => row.id);
+
+          if (rowIdsToDownload.length === 0) {
+            alert("선택된 행 중 매핑코드가 106464인 데이터가 없습니다.");
+            setIsDownloading(false);
+            return;
+          }
+        } else {
+          // 필터에 매핑코드 106464 조건 추가
+          filters = {
+            ...filters,
+            searchField: "매핑코드",
+            searchValue: "106464",
+          };
+        }
+      }
+
+      // 외주 발주서면 download-outsource API, 아니면 download API 호출
+      const apiUrl = isOutsource
+        ? "/api/upload/download-outsource"
+        : "/api/upload/download";
+
+      const response = await fetch(apiUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -141,7 +183,7 @@ const SavedDataTable = memo(function SavedDataTable({
       const a = document.createElement("a");
       a.href = url;
       const contentDisposition = response.headers.get("Content-Disposition");
-      let fileName = "download.xlsx";
+      let fileName = isOutsource ? "outsource.zip" : "download.xlsx";
       if (contentDisposition) {
         // filename* 우선
         const filenameStarMatch = contentDisposition.match(
