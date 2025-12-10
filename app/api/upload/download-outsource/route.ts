@@ -3,11 +3,6 @@ import sql from "@/lib/db";
 import ExcelJS from "exceljs";
 import {mapDataToTemplate, sortExcelData} from "@/utils/excelDataMapping";
 import {copyCellStyle, applyHeaderStyle} from "@/utils/excelStyles";
-import {prepareExcelCellValue} from "@/utils/excelTypeConversion";
-import {
-  prepareWorkbookForExcel,
-  initializeWorkbookProperties,
-} from "@/utils/excelCompatibility";
 import JSZip from "jszip";
 
 // 외주 발주서 다운로드 (매입처별로 파일 분리, ZIP으로 압축)
@@ -256,302 +251,144 @@ export async function POST(request: NextRequest) {
 
       if (templateData.originalFile) {
         // 원본 파일 로드
-        let originalBuffer: Buffer;
-        try {
-          const buffer = Buffer.from(templateData.originalFile, "base64");
-          if (!buffer || buffer.length === 0) {
-            throw new Error("원본 파일 데이터가 비어있습니다.");
-          }
-          originalBuffer = buffer as Buffer;
-        } catch (bufferError: any) {
-          console.error("Base64 디코딩 실패:", bufferError);
-          throw new Error(
-            `원본 파일을 디코딩할 수 없습니다: ${bufferError.message}`
-          );
-        }
+        const originalBuffer = Buffer.from(templateData.originalFile, "base64");
+        await workbook.xlsx.load(originalBuffer as any);
 
-        try {
-          await workbook.xlsx.load(originalBuffer as any);
-        } catch (loadError: any) {
-          console.error("원본 파일 로드 실패:", loadError);
-          console.error("버퍼 크기:", originalBuffer.length);
-          throw new Error(
-            `원본 파일을 로드할 수 없습니다: ${loadError.message}`
-          );
+        // 워크북 속성 초기화
+        if (!workbook.properties) {
+          workbook.properties = {date1904: false};
         }
-
-        // 워크북이 제대로 로드되었는지 확인
-        if (!workbook) {
-          throw new Error("워크북 객체가 생성되지 않았습니다.");
-        }
-
-        // 워크북 속성 초기화 (Excel 호환성)
-        initializeWorkbookProperties(workbook);
 
         // 워크시트 가져오기
-        let originalSheetName = templateData.worksheetName;
-        let hasOriginalWorksheet = false;
-        let tempWorksheet: ExcelJS.Worksheet | undefined = undefined;
+        worksheet = workbook.worksheets[0] || workbook.addWorksheet("Sheet1");
 
-        // 워크시트가 있는 경우
-        if (workbook.worksheets.length > 0) {
-          // 워크시트 이름이 지정되어 있으면 해당 워크시트 사용
-          if (originalSheetName) {
-            const foundWorksheet = workbook.getWorksheet(originalSheetName);
-            if (foundWorksheet) {
-              tempWorksheet = foundWorksheet;
-            }
-          }
+        // 헤더 행 정보 저장
+        const headerRow = worksheet.getRow(1);
+        const headerRowHeight = headerRow?.height;
+        const headerCells: {[colNumber: number]: ExcelJS.Cell} = {};
 
-          // 워크시트를 찾지 못했으면 첫 번째 워크시트 사용
-          if (!tempWorksheet && workbook.worksheets.length > 0) {
-            tempWorksheet = workbook.worksheets[0];
-            originalSheetName = tempWorksheet.name;
-          }
-
-          hasOriginalWorksheet = true;
-        } else {
-          // 워크시트가 없으면 새로 생성 (원본 파일이 손상되었을 수 있음)
-          console.warn(
-            "원본 파일에 워크시트가 없습니다. 새 워크시트를 생성합니다."
-          );
-          tempWorksheet = workbook.addWorksheet(originalSheetName || "Sheet1");
-          hasOriginalWorksheet = false;
+        if (headerRow) {
+          headerRow.eachCell({includeEmpty: true}, (cell, colNumber) => {
+            headerCells[colNumber] = cell;
+          });
         }
 
-        // 워크시트가 여전히 undefined인 경우 에러
-        if (!tempWorksheet) {
-          throw new Error("워크시트를 생성할 수 없습니다.");
-        }
+        // 데이터 행 스타일 저장
+        const dataRowHeight =
+          worksheet.rowCount > 1 ? worksheet.getRow(2).height : undefined;
+        const dataCells: {[colNumber: number]: ExcelJS.Cell} = {};
 
-        worksheet = tempWorksheet;
-
-        // 원본 워크시트가 있는 경우 - 원본 파일을 그대로 사용하고 값만 업데이트
-        if (hasOriginalWorksheet) {
-          // 헤더 행이 없으면 생성
-          if (worksheet.rowCount === 0) {
-            worksheet.addRow(columnOrder);
-          }
-
-          // 헤더 행의 원본 셀 객체를 직접 저장 (데이터 삭제 전에 미리 저장)
-          const headerRow = worksheet.getRow(1);
-          const headerRowHeight = headerRow?.height;
-          const headerCells: {[colNumber: number]: ExcelJS.Cell} = {};
-
-          if (headerRow) {
-            headerRow.eachCell({includeEmpty: true}, (cell, colNumber) => {
-              // 원본 셀 객체를 직접 저장
-              headerCells[colNumber] = cell;
-            });
-          }
-
-          // 원본 데이터 행의 셀 객체 저장 (2행이 있으면 사용)
-          // 데이터 행 삭제 전에 미리 저장해야 참조가 유효함
-          const dataRowHeight =
-            worksheet.rowCount > 1 ? worksheet.getRow(2).height : undefined;
-          const dataCells: {[colNumber: number]: ExcelJS.Cell} = {};
-
-          if (worksheet.rowCount > 1) {
-            const originalDataRow = worksheet.getRow(2);
-            if (originalDataRow) {
-              originalDataRow.eachCell(
-                {includeEmpty: true},
-                (cell, colNumber) => {
-                  // 원본 셀 객체를 저장 (데이터 삭제 전이므로 참조가 유효함)
-                  dataCells[colNumber] = cell;
-                }
-              );
-            }
-          }
-
-          // 원본 열 너비 저장
-          const columnWidths: {[key: number]: number} = {};
-          worksheet.columns.forEach((column, index) => {
-            if (column.width) {
-              columnWidths[index + 1] = column.width;
-            }
-          });
-
-          // 기존 데이터 행 삭제 (헤더 행 제외)
-          const lastRow = worksheet.rowCount;
-          if (lastRow > 1) {
-            for (let rowNum = lastRow; rowNum > 1; rowNum--) {
-              try {
-                worksheet.spliceRows(rowNum, 1);
-              } catch (e) {
-                const row = worksheet.getRow(rowNum);
-                if (row) {
-                  row.eachCell({includeEmpty: true}, (cell) => {
-                    cell.value = null;
-                  });
-                }
+        if (worksheet.rowCount > 1) {
+          const originalDataRow = worksheet.getRow(2);
+          if (originalDataRow) {
+            originalDataRow.eachCell(
+              {includeEmpty: true},
+              (cell, colNumber) => {
+                dataCells[colNumber] = cell;
               }
-            }
-          }
-
-          // 헤더 행 높이 복사
-          if (headerRowHeight) {
-            worksheet.getRow(1).height = headerRowHeight;
-          }
-
-          // 헤더 행 업데이트 - 원본 셀을 직접 사용하고 값만 업데이트
-          columnOrder.forEach((header: string, colIdx: number) => {
-            const colNumber = colIdx + 1;
-
-            // 원본 셀이 있으면 그대로 사용하고 값만 업데이트
-            if (headerCells[colNumber]) {
-              const originalCell = headerCells[colNumber];
-              // 원본 셀의 값만 업데이트하면 스타일은 그대로 유지됨
-              originalCell.value = prepareExcelCellValue(header, false);
-            } else {
-              // 원본 셀이 없으면 새로 생성
-              const cell = worksheet.getCell(1, colNumber);
-              cell.value = prepareExcelCellValue(header, false);
-            }
-          });
-
-          // 열 너비 복사
-          Object.keys(columnWidths).forEach((colNumStr) => {
-            const colNum = parseInt(colNumStr);
-            if (colNum <= columnOrder.length) {
-              worksheet.getColumn(colNum).width = columnWidths[colNum];
-            }
-          });
-
-          // 새 데이터 추가 - 원본 셀 스타일 복사
-          excelData.forEach((rowData, rowIdx) => {
-            const rowNumber = rowIdx + 2; // 헤더 다음 행부터
-            const row = worksheet.getRow(rowNumber);
-
-            // 행 높이 복사
-            if (dataRowHeight) {
-              row.height = dataRowHeight;
-            }
-
-            rowData.forEach((cellValue: any, colIdx: number) => {
-              const colNumber = colIdx + 1;
-              const cell = row.getCell(colNumber);
-
-              // 원본 데이터 행 셀의 스타일 복사 (없으면 헤더 셀 스타일 사용)
-              const sourceCell = dataCells[colNumber] || headerCells[colNumber];
-              if (sourceCell) {
-                copyCellStyle(sourceCell, cell);
-              }
-
-              // 값 설정 - cellValue는 이미 mapDataToTemplate에서 정규화되었지만
-              // 혹시 모를 경우를 대비해 최종 검증
-              const normalizedValue = prepareExcelCellValue(cellValue, false);
-              cell.value = normalizedValue;
-
-              // 숫자 포맷 명시적 설정 (Excel에서 텍스트로 인식되는 문제 방지)
-              if (typeof normalizedValue === "number") {
-                cell.numFmt = "0"; // 정수 형식
-              }
-            });
-          });
-        } else {
-          // 원본 워크시트가 없으면 헤더 행만 업데이트
-          if (worksheet.rowCount === 0) {
-            const normalizedHeaders = columnOrder.map((h: any) =>
-              prepareExcelCellValue(h, false)
             );
-            worksheet.addRow(normalizedHeaders);
+          }
+        }
+
+        // 열 너비 저장
+        const columnWidths: {[key: number]: number} = {};
+        worksheet.columns.forEach((column, index) => {
+          if (column.width) {
+            columnWidths[index + 1] = column.width;
+          }
+        });
+
+        // 기존 데이터 행 삭제
+        const lastRow = worksheet.rowCount;
+        if (lastRow > 1) {
+          for (let rowNum = lastRow; rowNum > 1; rowNum--) {
+            worksheet.spliceRows(rowNum, 1);
+          }
+        }
+
+        // 헤더 행 복원
+        if (headerRowHeight) {
+          worksheet.getRow(1).height = headerRowHeight;
+        }
+
+        columnOrder.forEach((header: string, colIdx: number) => {
+          const colNumber = colIdx + 1;
+          if (headerCells[colNumber]) {
+            headerCells[colNumber].value = header;
           } else {
-            columnOrder.forEach((header: string, colIdx: number) => {
-              const colNumber = colIdx + 1;
-              const cell = worksheet.getCell(1, colNumber);
-              cell.value = prepareExcelCellValue(header, false);
-            });
+            const cell = worksheet.getCell(1, colNumber);
+            cell.value = header;
+          }
+        });
+
+        // 열 너비 복원
+        Object.keys(columnWidths).forEach((colNumStr) => {
+          const colNum = parseInt(colNumStr);
+          if (colNum <= columnOrder.length) {
+            worksheet.getColumn(colNum).width = columnWidths[colNum];
+          }
+        });
+
+        // 새 데이터 추가
+        excelData.forEach((rowData, rowIdx) => {
+          const rowNumber = rowIdx + 2;
+          const row = worksheet.getRow(rowNumber);
+
+          if (dataRowHeight) {
+            row.height = dataRowHeight;
           }
 
-          // 헤더 행 스타일 적용
-          const headerRow = worksheet.getRow(1);
-          applyHeaderStyle(headerRow, columnOrder, templateData.columnWidths);
+          rowData.forEach((cellValue: any, colIdx: number) => {
+            const colNumber = colIdx + 1;
+            const cell = row.getCell(colNumber);
 
-          // 데이터 행 추가 (값 정규화)
-          excelData.forEach((rowData) => {
-            const normalizedRowData = rowData.map((cellValue: any) =>
-              prepareExcelCellValue(cellValue, false)
-            );
-            const addedRow = worksheet.addRow(normalizedRowData);
+            const sourceCell = dataCells[colNumber] || headerCells[colNumber];
+            if (sourceCell) {
+              copyCellStyle(sourceCell, cell);
+            }
 
-            // 숫자 셀에 대한 포맷 설정
-            addedRow.eachCell({includeEmpty: true}, (cell) => {
-              if (typeof cell.value === "number") {
-                cell.numFmt = "0";
+            cell.value = cellValue;
+
+            // 1번 열(A열) 배경색 설정
+            if (colNumber === 1) {
+              if (!cell.fill || (cell.fill as any).type !== "pattern") {
+                cell.fill = {
+                  type: "pattern",
+                  pattern: "solid",
+                  fgColor: {argb: "FFDAEDF3"},
+                };
+              } else {
+                (cell.fill as any).fgColor = {argb: "FFDAEDF3"};
               }
-            });
+            }
           });
-        }
+        });
       } else {
         // 원본 파일이 없으면 새로 생성
         worksheet = workbook.addWorksheet("Sheet1");
+        worksheet.addRow(columnOrder);
 
-        // 헤더 행 추가 (값 정규화)
-        const normalizedHeaders = columnOrder.map((h: any) =>
-          prepareExcelCellValue(h, false)
-        );
-        worksheet.addRow(normalizedHeaders);
-
-        // 헤더 행 스타일 적용
         const headerRow = worksheet.getRow(1);
         applyHeaderStyle(headerRow, columnOrder, templateData.columnWidths);
 
-        // 데이터 행 추가 (값 정규화)
         excelData.forEach((rowData) => {
-          const normalizedRowData = rowData.map((cellValue: any) =>
-            prepareExcelCellValue(cellValue, false)
-          );
-          const addedRow = worksheet.addRow(normalizedRowData);
-
-          // 숫자 셀에 대한 포맷 설정
-          addedRow.eachCell({includeEmpty: true}, (cell) => {
-            if (typeof cell.value === "number") {
-              cell.numFmt = "0";
-            }
-          });
+          const row = worksheet.addRow(rowData);
+          // 1번 열 배경색 설정
+          const firstCell = row.getCell(1);
+          firstCell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: {argb: "FFDAEDF3"},
+          };
         });
 
-        // 새 워크북의 속성 초기화 (Excel 호환성)
-        initializeWorkbookProperties(workbook);
+        if (!workbook.properties) {
+          workbook.properties = {date1904: false};
+        }
       }
 
-      // 워크북이 제대로 초기화되었는지 확인
-      if (!workbook) {
-        throw new Error("워크북이 초기화되지 않았습니다.");
-      }
-
-      if (!workbook.xlsx) {
-        throw new Error("워크북의 xlsx 모듈이 없습니다.");
-      }
-
-      // 워크시트가 있는지 확인
-      if (!worksheet) {
-        throw new Error("워크시트가 없습니다.");
-      }
-
-      // 워크북을 Excel 호환 모드로 완전히 정리
-      prepareWorkbookForExcel(workbook, {
-        removeFormulas: false, // 수식은 유지 (필요시 true로 변경)
-        removeDataValidations: false, // 데이터 검증은 유지
-      });
-
-      // 엑셀 파일 생성
-      let buffer: ArrayBuffer;
-      try {
-        const writeBuffer = await workbook.xlsx.writeBuffer();
-        buffer = writeBuffer as ArrayBuffer;
-      } catch (writeError: any) {
-        console.error("엑셀 파일 생성 실패:", writeError);
-        console.error("워크북 상태:", {
-          hasProperties: !!workbook.properties,
-          hasCalcProperties: !!(workbook as any).calcProperties,
-          worksheetCount: workbook.worksheets.length,
-        });
-        throw new Error(
-          `엑셀 파일을 생성할 수 없습니다: ${writeError.message}`
-        );
-      }
+      // 엑셀 파일을 버퍼로 생성
+      const buffer = await workbook.xlsx.writeBuffer();
 
       // ZIP에 파일 추가
       const fileName = `${dateStr}_외주발주_${vendor}.xlsx`;

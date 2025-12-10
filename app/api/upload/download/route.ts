@@ -515,8 +515,19 @@ export async function POST(request: NextRequest) {
             const normalizedValue = prepareExcelCellValue(cellValue, false);
             cell.value = normalizedValue;
 
-            // 숫자 포맷 명시적 설정 (Excel에서 텍스트로 인식되는 문제 방지)
-            if (typeof normalizedValue === "number") {
+            // 전화번호 컬럼은 텍스트 포맷으로 설정 (앞자리 0 유지)
+            const headerName = columnOrder[colIdx] || "";
+            const isPhoneColumn =
+              headerName.includes("전화") ||
+              headerName.includes("전번") ||
+              headerName.includes("핸드폰") ||
+              headerName.includes("휴대폰") ||
+              headerName.includes("연락처");
+
+            if (isPhoneColumn) {
+              cell.numFmt = "@"; // 텍스트 포맷
+            } else if (typeof normalizedValue === "number") {
+              // 숫자 포맷 명시적 설정 (Excel에서 텍스트로 인식되는 문제 방지)
               cell.numFmt = "0"; // 정수 형식
             }
           });
@@ -548,9 +559,19 @@ export async function POST(request: NextRequest) {
           });
           const addedRow = worksheet.addRow(normalizedRowData);
 
-          // 숫자 셀에 대한 포맷 설정
-          addedRow.eachCell({includeEmpty: true}, (cell) => {
-            if (typeof cell.value === "number") {
+          // 숫자 셀 및 전화번호 셀에 대한 포맷 설정
+          addedRow.eachCell({includeEmpty: true}, (cell, colNumber) => {
+            const headerName = columnOrder[colNumber - 1] || "";
+            const isPhoneColumn =
+              headerName.includes("전화") ||
+              headerName.includes("전번") ||
+              headerName.includes("핸드폰") ||
+              headerName.includes("휴대폰") ||
+              headerName.includes("연락처");
+
+            if (isPhoneColumn) {
+              cell.numFmt = "@"; // 텍스트 포맷
+            } else if (typeof cell.value === "number") {
               cell.numFmt = "0";
             }
           });
@@ -577,9 +598,19 @@ export async function POST(request: NextRequest) {
         );
         const addedRow = worksheet.addRow(normalizedRowData);
 
-        // 숫자 셀에 대한 포맷 설정
-        addedRow.eachCell({includeEmpty: true}, (cell) => {
-          if (typeof cell.value === "number") {
+        // 숫자 셀 및 전화번호 셀에 대한 포맷 설정
+        addedRow.eachCell({includeEmpty: true}, (cell, colNumber) => {
+          const headerName = columnOrder[colNumber - 1] || "";
+          const isPhoneColumn =
+            headerName.includes("전화") ||
+            headerName.includes("전번") ||
+            headerName.includes("핸드폰") ||
+            headerName.includes("휴대폰") ||
+            headerName.includes("연락처");
+
+          if (isPhoneColumn) {
+            cell.numFmt = "@"; // 텍스트 포맷
+          } else if (typeof cell.value === "number") {
             cell.numFmt = "0";
           }
         });

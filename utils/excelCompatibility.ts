@@ -46,10 +46,8 @@ export function cleanWorkbookForExcel(workbook: ExcelJS.Workbook): void {
       delete model.definedNames;
     }
 
-    // 5. 최상위 definedNames 제거
-    if ((workbook as any).definedNames) {
-      (workbook as any).definedNames = {};
-    }
+    // 5. 최상위 definedNames 제거 (getter 전용 프로퍼티이므로 내부 모델만 처리)
+    // workbook.definedNames는 getter만 있으므로 직접 할당 불가
 
     // 6. VBA 프로젝트 제거 (있다면)
     if (model.vbaProject) {

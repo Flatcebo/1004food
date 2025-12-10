@@ -155,9 +155,6 @@ const SavedDataTable = memo(function SavedDataTable({
         }
       }
 
-      // 내주 발주서인지 확인
-      const isInhouse = templateName.includes("내주");
-
       // 외주 발주서면 download-outsource API, 아니면 download API 호출
       const apiUrl = isOutsource
         ? "/api/upload/download-outsource"
@@ -172,7 +169,6 @@ const SavedDataTable = memo(function SavedDataTable({
           templateId: selectedTemplate,
           rowIds: rowIdsToDownload,
           filters: rowIdsToDownload ? undefined : filters, // 선택된 행이 있으면 필터 무시, 없으면 필터 적용
-          isInhouse: isInhouse, // 내주 발주서 여부
         }),
       });
 
