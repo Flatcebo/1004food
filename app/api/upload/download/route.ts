@@ -8,7 +8,7 @@ import {copyCellStyle, applyHeaderStyle} from "@/utils/excelStyles";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const {templateId, rowIds, filters} = body;
+    const {templateId, rowIds, filters, isInhouse} = body;
 
     if (!templateId) {
       return NextResponse.json(
@@ -176,6 +176,20 @@ export async function POST(request: NextRequest) {
           }
           return rowData;
         });
+      }
+    }
+
+    // 내주 발주서인 경우: 내외주가 "내주"인 것들만 필터링 + 매핑코드 106464 제외
+    if (isInhouse) {
+      rows = rows.filter(
+        (row: any) => row.내외주 === "내주" && row.매핑코드 !== "106464"
+      );
+
+      if (rows.length === 0) {
+        return NextResponse.json(
+          {success: false, error: "내주 데이터가 없습니다."},
+          {status: 404}
+        );
       }
     }
 
