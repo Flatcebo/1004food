@@ -149,8 +149,11 @@ export function removeFormulasFromWorksheet(
  */
 export function removeDataValidations(worksheet: ExcelJS.Worksheet): void {
   try {
-    // 데이터 검증 제거
-    worksheet.dataValidations = {};
+    // ExcelJS 내부 모델을 통해 데이터 검증 제거
+    const model = (worksheet as any).model;
+    if (model && model.dataValidations) {
+      model.dataValidations = {};
+    }
   } catch (error) {
     console.warn("데이터 검증 제거 중 오류 (무시됨):", error);
   }
