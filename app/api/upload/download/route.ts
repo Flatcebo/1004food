@@ -3,6 +3,11 @@ import sql from "@/lib/db";
 import ExcelJS from "exceljs";
 import {mapDataToTemplate, sortExcelData} from "@/utils/excelDataMapping";
 import {copyCellStyle, applyHeaderStyle} from "@/utils/excelStyles";
+import {prepareExcelCellValue} from "@/utils/excelTypeConversion";
+import {
+  prepareWorkbookForExcel,
+  initializeWorkbookProperties,
+} from "@/utils/excelCompatibility";
 
 // 템플릿 양식으로 엑셀 다운로드
 export async function POST(request: NextRequest) {
@@ -352,46 +357,8 @@ export async function POST(request: NextRequest) {
         throw new Error("워크북 객체가 생성되지 않았습니다.");
       }
 
-      // 워크북 properties 초기화 (필요한 경우)
-      if (!workbook.properties) {
-        workbook.properties = {
-          date1904: false,
-        };
-      } else if (workbook.properties.date1904 === undefined) {
-        workbook.properties.date1904 = false;
-      }
-
-      // 테마 관련 속성 제거 (복구 알림 방지)
-      try {
-        const model = (workbook as any).model;
-        if (model) {
-          // 테마 관련 속성 제거
-          if (model.theme) {
-            delete model.theme;
-          }
-          if (model.themeManager) {
-            delete model.themeManager;
-          }
-          // 스타일 테마 제거
-          if (model.styles && model.styles.themes) {
-            delete model.styles.themes;
-          }
-        }
-      } catch (themeError) {
-        // 테마 제거 실패는 무시 (필수 아님)
-        console.warn("테마 제거 중 오류 (무시됨):", themeError);
-      }
-
-      // calcProperties 초기화 (fullCalcOnLoad 에러 방지)
-      if (!(workbook as any).calcProperties) {
-        (workbook as any).calcProperties = {
-          fullCalcOnLoad: false,
-        };
-      } else if (
-        (workbook as any).calcProperties.fullCalcOnLoad === undefined
-      ) {
-        (workbook as any).calcProperties.fullCalcOnLoad = false;
-      }
+      // 워크북 속성 초기화 (Excel 호환성)
+      initializeWorkbookProperties(workbook);
 
       // 워크시트 가져오기
       let originalSheetName = templateData.worksheetName;
@@ -507,11 +474,11 @@ export async function POST(request: NextRequest) {
           if (headerCells[colNumber]) {
             const originalCell = headerCells[colNumber];
             // 원본 셀의 값만 업데이트하면 스타일은 그대로 유지됨
-            originalCell.value = header;
+            originalCell.value = prepareExcelCellValue(header, false);
           } else {
             // 원본 셀이 없으면 새로 생성
             const cell = worksheet.getCell(1, colNumber);
-            cell.value = header;
+            cell.value = prepareExcelCellValue(header, false);
           }
         });
 
@@ -543,19 +510,29 @@ export async function POST(request: NextRequest) {
               copyCellStyle(sourceCell, cell);
             }
 
-            // 값 설정
-            cell.value = cellValue;
+            // 값 설정 - cellValue는 이미 mapDataToTemplate에서 정규화되었지만
+            // 혹시 모를 경우를 대비해 최종 검증
+            const normalizedValue = prepareExcelCellValue(cellValue, false);
+            cell.value = normalizedValue;
+
+            // 숫자 포맷 명시적 설정 (Excel에서 텍스트로 인식되는 문제 방지)
+            if (typeof normalizedValue === "number") {
+              cell.numFmt = "0"; // 정수 형식
+            }
           });
         });
       } else {
         // 원본 워크시트가 없으면 헤더 행만 업데이트
         if (worksheet.rowCount === 0) {
-          worksheet.addRow(columnOrder);
+          const normalizedHeaders = columnOrder.map((h: any) =>
+            prepareExcelCellValue(h, false)
+          );
+          worksheet.addRow(normalizedHeaders);
         } else {
           columnOrder.forEach((header: string, colIdx: number) => {
             const colNumber = colIdx + 1;
             const cell = worksheet.getCell(1, colNumber);
-            cell.value = header;
+            cell.value = prepareExcelCellValue(header, false);
           });
         }
 
@@ -563,46 +540,53 @@ export async function POST(request: NextRequest) {
         const headerRow = worksheet.getRow(1);
         applyHeaderStyle(headerRow, columnOrder, templateData.columnWidths);
 
-        // 데이터 행 추가
+        // 데이터 행 추가 (값 정규화)
         excelData.forEach((rowData) => {
-          worksheet.addRow(rowData);
+          const normalizedRowData = rowData.map((cellValue: any) => {
+            const normalized = prepareExcelCellValue(cellValue, false);
+            return normalized;
+          });
+          const addedRow = worksheet.addRow(normalizedRowData);
+
+          // 숫자 셀에 대한 포맷 설정
+          addedRow.eachCell({includeEmpty: true}, (cell) => {
+            if (typeof cell.value === "number") {
+              cell.numFmt = "0";
+            }
+          });
         });
       }
     } else {
       // 원본 파일이 없으면 새로 생성
       worksheet = workbook.addWorksheet("Sheet1");
 
-      // 헤더 행 추가
-      worksheet.addRow(columnOrder);
+      // 헤더 행 추가 (값 정규화)
+      const normalizedHeaders = columnOrder.map((h: any) =>
+        prepareExcelCellValue(h, false)
+      );
+      worksheet.addRow(normalizedHeaders);
 
       // 헤더 행 스타일 적용
       const headerRow = worksheet.getRow(1);
       applyHeaderStyle(headerRow, columnOrder, templateData.columnWidths);
 
-      // 데이터 행 추가
+      // 데이터 행 추가 (값 정규화)
       excelData.forEach((rowData) => {
-        worksheet.addRow(rowData);
+        const normalizedRowData = rowData.map((cellValue: any) =>
+          prepareExcelCellValue(cellValue, false)
+        );
+        const addedRow = worksheet.addRow(normalizedRowData);
+
+        // 숫자 셀에 대한 포맷 설정
+        addedRow.eachCell({includeEmpty: true}, (cell) => {
+          if (typeof cell.value === "number") {
+            cell.numFmt = "0";
+          }
+        });
       });
 
-      // 새 워크북의 properties 초기화
-      if (!workbook.properties) {
-        workbook.properties = {
-          date1904: false,
-        };
-      }
-
-      // calcProperties 초기화
-      const workbookModel = (workbook as any).model;
-      if (workbookModel && !workbookModel.calcProperties) {
-        workbookModel.calcProperties = {
-          fullCalcOnLoad: false,
-        };
-      }
-      if (!(workbook as any).calcProperties) {
-        (workbook as any).calcProperties = {
-          fullCalcOnLoad: false,
-        };
-      }
+      // 새 워크북의 속성 초기화 (Excel 호환성)
+      initializeWorkbookProperties(workbook);
     }
 
     // 워크북이 제대로 초기화되었는지 확인
@@ -619,72 +603,11 @@ export async function POST(request: NextRequest) {
       throw new Error("워크시트가 없습니다.");
     }
 
-    // properties 초기화
-    if (!workbook.properties) {
-      workbook.properties = {
-        date1904: false,
-      };
-    } else if (workbook.properties.date1904 === undefined) {
-      workbook.properties.date1904 = false;
-    }
-
-    // calcProperties 초기화 (fullCalcOnLoad 에러 방지)
-    // ExcelJS의 내부 모델 구조 확인
-    const workbookModel = (workbook as any).model;
-    if (workbookModel) {
-      if (!workbookModel.calcProperties) {
-        workbookModel.calcProperties = {
-          fullCalcOnLoad: false,
-        };
-      } else if (workbookModel.calcProperties.fullCalcOnLoad === undefined) {
-        workbookModel.calcProperties.fullCalcOnLoad = false;
-      }
-    }
-
-    // 최상위 calcProperties도 확인
-    if (!(workbook as any).calcProperties) {
-      (workbook as any).calcProperties = {
-        fullCalcOnLoad: false,
-      };
-    } else if ((workbook as any).calcProperties.fullCalcOnLoad === undefined) {
-      (workbook as any).calcProperties.fullCalcOnLoad = false;
-    }
-
-    // 워크북 저장 전 최종 정리 (테마 관련 속성 제거 - 복구 알림 방지)
-    try {
-      const model = (workbook as any).model;
-      if (model) {
-        // 테마 관련 속성 제거
-        if (model.theme) {
-          delete model.theme;
-        }
-        if (model.themeManager) {
-          delete model.themeManager;
-        }
-        // 스타일 테마 제거
-        if (model.styles && model.styles.themes) {
-          delete model.styles.themes;
-        }
-        // 워크북 테마 속성 제거
-        if (model.workbook && model.workbook.theme) {
-          delete model.workbook.theme;
-        }
-        // Named ranges 제거 (XML 오류 방지)
-        if (model.definedNames) {
-          delete model.definedNames;
-        }
-        if (model.workbook && model.workbook.definedNames) {
-          delete model.workbook.definedNames;
-        }
-      }
-      // 최상위 definedNames 제거
-      if ((workbook as any).definedNames) {
-        (workbook as any).definedNames = {};
-      }
-    } catch (cleanupError) {
-      // 정리 실패는 무시
-      console.warn("워크북 정리 중 오류 (무시됨):", cleanupError);
-    }
+    // 워크북을 Excel 호환 모드로 완전히 정리
+    prepareWorkbookForExcel(workbook, {
+      removeFormulas: false, // 수식은 유지 (필요시 true로 변경)
+      removeDataValidations: false, // 데이터 검증은 유지
+    });
 
     // 엑셀 파일 생성
     let buffer: ArrayBuffer;

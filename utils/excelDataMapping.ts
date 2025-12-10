@@ -1,3 +1,9 @@
+import {
+  prepareExcelCellValue,
+  normalizeNumberValue,
+  normalizeStringValue,
+} from "./excelTypeConversion";
+
 // 데이터 매핑 함수 - 템플릿 헤더에 맞게 데이터 변환
 export function mapDataToTemplate(
   row: any,
@@ -7,7 +13,7 @@ export function mapDataToTemplate(
   // 절대값으로 설정할 필드들
   const normalizedHeader = header.replace(/\s+/g, "").toLowerCase();
 
-  // 박스단위: 항상 2로 설정
+  // 박스단위: 항상 2로 설정 (숫자 타입)
   if (
     normalizedHeader.includes("박스") ||
     normalizedHeader === "박스" ||
@@ -15,10 +21,10 @@ export function mapDataToTemplate(
     normalizedHeader === "박스정보" ||
     normalizedHeader === "박스크기"
   ) {
-    return 2;
+    return prepareExcelCellValue(2, true);
   }
 
-  // 부피단위: 항상 60으로 설정
+  // 부피단위: 항상 60으로 설정 (숫자 타입)
   if (
     normalizedHeader.includes("부피") ||
     normalizedHeader === "부피" ||
@@ -27,10 +33,10 @@ export function mapDataToTemplate(
     normalizedHeader === "중량" ||
     normalizedHeader === "무게"
   ) {
-    return 60;
+    return prepareExcelCellValue(60, true);
   }
 
-  // 포장재: 항상 "05"로 설정
+  // 포장재: 항상 "05"로 설정 (문자열 타입 - 숫자로 변환되면 안됨)
   if (
     normalizedHeader.includes("포장") ||
     normalizedHeader === "포장재" ||
@@ -38,7 +44,7 @@ export function mapDataToTemplate(
     normalizedHeader === "포장방법" ||
     normalizedHeader === "포장"
   ) {
-    return "05";
+    return "05"; // 문자열로 유지
   }
 
   // 헤더명 매핑 규칙 (템플릿 헤더 → 내부 데이터 필드명)
@@ -59,7 +65,7 @@ export function mapDataToTemplate(
   // 매핑된 헤더명 사용
   const mappedHeader = headerMap[header] || header;
 
-  // 우편번호 관련 특별 처리
+  // 우편번호 관련 특별 처리 (문자열로 유지)
   if (
     normalizedHeader.includes("우편") ||
     normalizedHeader.includes("우편번호") ||
@@ -68,10 +74,10 @@ export function mapDataToTemplate(
     // 우편번호 또는 우편 필드 찾기
     const postalValue =
       row["우편"] || row["우편번호"] || row["우편 번호"] || "";
-    if (postalValue) return postalValue;
+    if (postalValue) return normalizeStringValue(postalValue);
   }
 
-  // 전화번호1 (수취인 전화번호) 관련 특별 처리
+  // 전화번호1 (수취인 전화번호) 관련 특별 처리 (문자열로 유지)
   if (header === "전화번호1" || normalizedHeader === "전화번호1") {
     const phoneValue =
       row["전화번호"] ||
@@ -79,20 +85,20 @@ export function mapDataToTemplate(
       row["수취인 전화번호"] ||
       row["전화번호1"] ||
       "";
-    if (phoneValue) return phoneValue;
+    if (phoneValue) return normalizeStringValue(phoneValue);
   }
 
-  // 전화번호 (주문자 전화번호) 관련 특별 처리
+  // 전화번호 (주문자 전화번호) 관련 특별 처리 (문자열로 유지)
   if (
     (header === "전화번호" || normalizedHeader === "전화번호") &&
     !header.includes("1")
   ) {
     const phoneValue =
       row["주문자전화번호"] || row["주문자 전화번호"] || row["전화번호"] || "";
-    if (phoneValue) return phoneValue;
+    if (phoneValue) return normalizeStringValue(phoneValue);
   }
 
-  // 공급가 관련 특별 처리 (salePrice 우선 사용)
+  // 공급가 관련 특별 처리 (salePrice 우선 사용, 숫자로 변환)
   // 공급가 헤더인 경우 명시적으로 처리
   if (
     normalizedHeader.includes("공급가") ||
@@ -107,40 +113,36 @@ export function mapDataToTemplate(
       row["sale_price"] ||
       row["가격"] ||
       "";
-    // 숫자로 변환 시도 (문자열이면 숫자로 변환)
-    if (priceValue !== null && priceValue !== undefined && priceValue !== "") {
-      const numValue =
-        typeof priceValue === "string"
-          ? parseFloat(priceValue.replace(/,/g, ""))
-          : Number(priceValue);
-      if (!isNaN(numValue)) {
-        return numValue;
-      }
-      return priceValue;
-    }
-    return "";
+
+    // 숫자로 변환 (normalizeNumberValue 사용)
+    const numValue = normalizeNumberValue(priceValue);
+    return numValue === "" ? "" : prepareExcelCellValue(numValue, true);
   }
 
-  // 일반 가격 필드 처리 (공급가가 아닌 경우)
+  // 일반 가격 필드 처리 (공급가가 아닌 경우, 숫자로 변환)
   if (
     normalizedHeader.includes("가격") &&
     !normalizedHeader.includes("공급가")
   ) {
     const priceValue = row["가격"] || row["price"] || "";
-    if (priceValue !== null && priceValue !== undefined && priceValue !== "") {
-      const numValue =
-        typeof priceValue === "string"
-          ? parseFloat(priceValue.replace(/,/g, ""))
-          : Number(priceValue);
-      if (!isNaN(numValue)) {
-        return numValue;
-      }
-      return priceValue;
-    }
-    return "";
+    const numValue = normalizeNumberValue(priceValue);
+    return numValue === "" ? "" : prepareExcelCellValue(numValue, true);
   }
 
-  // 상품명 컬럼: 사방넷명이 있으면 무조건 사방넷명 우선 사용
+  // 수량 관련 필드 처리 (숫자로 변환)
+  if (
+    normalizedHeader.includes("수량") ||
+    normalizedHeader.includes("개수") ||
+    header.includes("수량") ||
+    header.includes("개수")
+  ) {
+    const qtyValue =
+      row["수량"] || row["개수"] || row["quantity"] || row[header] || "";
+    const numValue = normalizeNumberValue(qtyValue);
+    return numValue === "" ? "" : prepareExcelCellValue(numValue, true);
+  }
+
+  // 상품명 컬럼: 사방넷명이 있으면 무조건 사방넷명 우선 사용 (문자열로 정규화)
   if (
     normalizedHeader.includes("상품명") ||
     header === "상품명" ||
@@ -160,7 +162,7 @@ export function mapDataToTemplate(
     const sabangValue =
       row["사방넷명"] || row["sabangName"] || row["sabang_name"] || "";
     if (sabangValue !== null && sabangValue !== undefined) {
-      const sabangStr = String(sabangValue).trim();
+      const sabangStr = normalizeStringValue(sabangValue);
       if (sabangStr) {
         // 맨 앞의 'ㄱ'만 제거
         const cleaned =
@@ -171,7 +173,7 @@ export function mapDataToTemplate(
           console.log(`✓ 사방넷명 사용: ${cleaned}`);
           row._logged2 = true;
         }
-        return cleaned;
+        return prepareExcelCellValue(cleaned, false);
       }
     }
 
@@ -182,7 +184,7 @@ export function mapDataToTemplate(
       console.log(`→ 원본 상품명 사용 (사방넷명 없음): ${productName}`);
       row._logged2 = true;
     }
-    return productName || "";
+    return prepareExcelCellValue(productName, false);
   }
 
   // 다양한 변형으로 값 찾기
@@ -208,7 +210,17 @@ export function mapDataToTemplate(
     value = "";
   }
 
-  return value;
+  // 매핑코드는 문자열로 유지 (숫자로 변환되면 안됨)
+  if (
+    normalizedHeader.includes("매핑코드") ||
+    normalizedHeader.includes("코드") ||
+    header.includes("코드")
+  ) {
+    return normalizeStringValue(value);
+  }
+
+  // 일반 값은 Excel 셀 값으로 정규화
+  return prepareExcelCellValue(value, false);
 }
 
 // 정렬 함수: 상품명 오름차순 후 수취인명 오름차순
