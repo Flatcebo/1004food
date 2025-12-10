@@ -669,6 +669,17 @@ export async function POST(request: NextRequest) {
         if (model.workbook && model.workbook.theme) {
           delete model.workbook.theme;
         }
+        // Named ranges 제거 (XML 오류 방지)
+        if (model.definedNames) {
+          delete model.definedNames;
+        }
+        if (model.workbook && model.workbook.definedNames) {
+          delete model.workbook.definedNames;
+        }
+      }
+      // 최상위 definedNames 제거
+      if ((workbook as any).definedNames) {
+        (workbook as any).definedNames = {};
       }
     } catch (cleanupError) {
       // 정리 실패는 무시
