@@ -276,7 +276,7 @@ export async function POST(request: NextRequest) {
 
         if (headerRow) {
           // 모든 컬럼에 대해 스타일 저장 (빈 셀 포함)
-          columnOrder.forEach((_, colIdx) => {
+          columnOrder.forEach((_header: any, colIdx: number) => {
             const colNumber = colIdx + 1;
             const cell = headerRow.getCell(colNumber);
             // 셀의 모든 속성을 깊은 복사로 저장
@@ -297,7 +297,7 @@ export async function POST(request: NextRequest) {
           const originalDataRow = worksheet.getRow(2);
           if (originalDataRow) {
             // 모든 컬럼에 대해 스타일 저장 (빈 셀 포함)
-            columnOrder.forEach((_, colIdx) => {
+            columnOrder.forEach((_header: any, colIdx: number) => {
               const colNumber = colIdx + 1;
               const cell = originalDataRow.getCell(colNumber);
               // 셀의 모든 속성을 깊은 복사로 저장
@@ -347,7 +347,7 @@ export async function POST(request: NextRequest) {
         });
 
         // 열 너비 복원 (모든 열에 대해)
-        columnOrder.forEach((_, colIdx) => {
+        columnOrder.forEach((_header: any, colIdx: number) => {
           const colNum = colIdx + 1;
           if (columnWidths[colNum]) {
             worksheet.getColumn(colNum).width = columnWidths[colNum];
