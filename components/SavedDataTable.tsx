@@ -131,6 +131,32 @@ const SavedDataTable = memo(function SavedDataTable({
       // 내주 발주서인지 확인
       const isInhouse = templateName.includes("내주");
 
+      // 내주 발주서인 경우: 내외주가 "내주"인 것만 필터링
+      if (isInhouse) {
+        if (rowIdsToDownload) {
+          // 선택된 행 중 내외주가 "내주"인 것만 필터링
+          const filteredRows = tableRows.filter(
+            (row: any) =>
+              rowIdsToDownload!.includes(row.id) &&
+              row.내외주?.trim() === "내주" &&
+              row.매핑코드 !== "106464"
+          );
+          rowIdsToDownload = filteredRows.map((row: any) => row.id);
+
+          if (rowIdsToDownload.length === 0) {
+            alert("선택된 행 중 내주 데이터가 없습니다.");
+            setIsDownloading(false);
+            return;
+          }
+        } else {
+          // 필터에 내외주 "내주" 조건 추가
+          filters = {
+            ...filters,
+            type: "내주",
+          };
+        }
+      }
+
       // CJ외주 발주서인 경우: 매핑코드 106464만 필터링
       if (isCJOutsource) {
         // 선택된 행이 있으면 그 중에서 106464만, 없으면 필터에 매핑코드 조건 추가
