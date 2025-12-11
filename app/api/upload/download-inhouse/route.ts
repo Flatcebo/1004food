@@ -207,9 +207,35 @@ export async function POST(request: NextRequest) {
       return columnOrder.map((header: any) => {
         const headerStr =
           typeof header === "string" ? header : String(header || "");
-        return mapDataToTemplate(row, headerStr, {
+        const value = mapDataToTemplate(row, headerStr, {
           templateName: templateData.name,
         });
+
+        // 모든 값을 문자열로 변환 (0 유지)
+        let stringValue = value != null ? String(value) : "";
+
+        // 전화번호가 10-11자리 숫자이고 0으로 시작하지 않으면 앞에 0 추가
+        if (headerStr.includes("전화") || headerStr.includes("연락")) {
+          const numOnly = stringValue.replace(/\D/g, ""); // 숫자만 추출
+          if (
+            (numOnly.length === 10 || numOnly.length === 11) &&
+            !numOnly.startsWith("0")
+          ) {
+            stringValue = "0" + numOnly; // 숫자만 사용하고 0 추가
+          } else if (numOnly.length > 0) {
+            stringValue = numOnly; // 하이픈 등 제거하고 숫자만
+          }
+        }
+
+        // 우편번호가 4-5자리 숫자면 5자리로 맞춤 (앞에 0 추가)
+        if (headerStr.includes("우편")) {
+          const numOnly = stringValue.replace(/\D/g, "");
+          if (numOnly.length >= 4 && numOnly.length <= 5) {
+            stringValue = numOnly.padStart(5, "0");
+          }
+        }
+
+        return stringValue;
       });
     });
 
@@ -258,11 +284,13 @@ export async function POST(request: NextRequest) {
 
       // 열 너비 저장
       const columnWidths: {[key: number]: number} = {};
-      worksheet.columns.forEach((column, index) => {
-        if (column.width) {
-          columnWidths[index + 1] = column.width;
-        }
-      });
+      if (worksheet.columns) {
+        worksheet.columns.forEach((column, index) => {
+          if (column.width) {
+            columnWidths[index + 1] = column.width;
+          }
+        });
+      }
 
       // 기존 데이터 행 삭제
       const lastRow = worksheet.rowCount;
@@ -311,27 +339,23 @@ export async function POST(request: NextRequest) {
           const colNumber = colIdx + 1;
           const cell = row.getCell(colNumber);
 
-          // 데이터 셀 스타일 복사
-          if (dataCells[colNumber]) {
-            copyCellStyle(dataCells[colNumber], cell);
-          }
+          // 모든 값을 문자열로 처리 (숫자의 앞자리 0 유지)
+          const normalizedValue = cellValue != null ? String(cellValue) : "";
 
-          const normalizedValue = prepareExcelCellValue(cellValue, false);
+          // 값과 텍스트 형식 먼저 설정
           cell.value = normalizedValue;
+          cell.numFmt = "@"; // 모든 셀을 텍스트 형식으로
 
-          // 전화번호 컬럼은 텍스트 포맷으로 설정
-          const headerName = columnOrder[colIdx] || "";
-          const isPhoneColumn =
-            headerName.includes("전화") ||
-            headerName.includes("전번") ||
-            headerName.includes("핸드폰") ||
-            headerName.includes("휴대폰") ||
-            headerName.includes("연락처");
-
-          if (isPhoneColumn) {
-            cell.numFmt = "@";
-          } else if (typeof normalizedValue === "number") {
-            cell.numFmt = "0";
+          // 스타일 복사 (numFmt는 이미 설정했으므로 텍스트 형식 유지됨)
+          if (dataCells[colNumber]) {
+            const sourceStyle = dataCells[colNumber].style;
+            if (sourceStyle) {
+              cell.font = sourceStyle.font as ExcelJS.Font;
+              cell.alignment = sourceStyle.alignment as ExcelJS.Alignment;
+              cell.border = sourceStyle.border as ExcelJS.Borders;
+              cell.fill = sourceStyle.fill as ExcelJS.Fill;
+              // numFmt는 복사하지 않음 (위에서 "@"로 설정한 것 유지)
+            }
           }
         });
       });
@@ -347,25 +371,15 @@ export async function POST(request: NextRequest) {
       applyHeaderStyle(headerRow, columnOrder, templateData.columnWidths);
 
       excelData.forEach((rowData) => {
-        const normalizedRowData = rowData.map((cellValue: any) =>
-          prepareExcelCellValue(cellValue, false)
-        );
+        // 모든 값을 문자열로 처리
+        const normalizedRowData = rowData.map((cellValue: any) => {
+          return cellValue != null ? String(cellValue) : "";
+        });
         const addedRow = worksheet.addRow(normalizedRowData);
 
-        addedRow.eachCell({includeEmpty: true}, (cell, colNumber) => {
-          const headerName = columnOrder[colNumber - 1] || "";
-          const isPhoneColumn =
-            headerName.includes("전화") ||
-            headerName.includes("전번") ||
-            headerName.includes("핸드폰") ||
-            headerName.includes("휴대폰") ||
-            headerName.includes("연락처");
-
-          if (isPhoneColumn) {
-            cell.numFmt = "@";
-          } else if (typeof cell.value === "number") {
-            cell.numFmt = "0";
-          }
+        // 모든 셀을 텍스트 형식으로 설정
+        addedRow.eachCell({includeEmpty: true}, (cell) => {
+          cell.numFmt = "@";
         });
       });
 

@@ -122,7 +122,10 @@ const SavedDataTable = memo(function SavedDataTable({
       const selectedTemplateObj = templates.find(
         (t) => t.id === selectedTemplate
       );
-      const templateName = selectedTemplateObj?.name || "";
+      // 한글 자모 분리 문제 해결을 위해 정규화 (macOS NFD -> NFC)
+      const templateName = (selectedTemplateObj?.name || "")
+        .normalize("NFC")
+        .trim();
 
       // CJ외주 발주서인지 확인
       const isCJOutsource = templateName.includes("CJ외주");
