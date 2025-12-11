@@ -388,7 +388,8 @@ export async function POST(request: NextRequest) {
       }
 
       // 엑셀 파일을 버퍼로 생성
-      const buffer = await workbook.xlsx.writeBuffer();
+      const buffers = await workbook.xlsx.writeBuffer();
+      const buffer = new Uint8Array(buffers);
 
       // ZIP에 파일 추가
       const fileName = `${dateStr}_외주발주_${vendor}.xlsx`;
