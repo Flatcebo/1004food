@@ -183,9 +183,11 @@ const SavedDataTable = memo(function SavedDataTable({
         }
       }
 
-      // 외주 발주서면 download-outsource API, 아니면 download API 호출
+      // 외주/내주/일반 발주서에 따라 API 선택
       const apiUrl = isOutsource
         ? "/api/upload/download-outsource"
+        : isInhouse
+        ? "/api/upload/download-inhouse"
         : "/api/upload/download";
 
       const response = await fetch(apiUrl, {
@@ -197,7 +199,6 @@ const SavedDataTable = memo(function SavedDataTable({
           templateId: selectedTemplate,
           rowIds: rowIdsToDownload,
           filters: rowIdsToDownload ? undefined : filters, // 선택된 행이 있으면 필터 무시, 없으면 필터 적용
-          isInhouse: isInhouse, // 내주 발주서 여부 전달
         }),
       });
 
