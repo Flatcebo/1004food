@@ -128,6 +128,8 @@ const SavedDataTable = memo(function SavedDataTable({
       const isCJOutsource = templateName.includes("CJ외주");
       // 일반 외주 발주서인지 확인 (CJ외주가 아닌 "외주"가 포함된 경우)
       const isOutsource = templateName.includes("외주") && !isCJOutsource;
+      // 내주 발주서인지 확인
+      const isInhouse = templateName.includes("내주");
 
       // CJ외주 발주서인 경우: 매핑코드 106464만 필터링
       if (isCJOutsource) {
@@ -169,6 +171,7 @@ const SavedDataTable = memo(function SavedDataTable({
           templateId: selectedTemplate,
           rowIds: rowIdsToDownload,
           filters: rowIdsToDownload ? undefined : filters, // 선택된 행이 있으면 필터 무시, 없으면 필터 적용
+          isInhouse: isInhouse, // 내주 발주서 여부 전달
         }),
       });
 
