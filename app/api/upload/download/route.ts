@@ -184,10 +184,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 내주 발주서인 경우: 내외주가 "내주"인 것들만 필터링 + 매핑코드 106464 제외
+    // 내주 발주서인 경우: 내외주가 "내주"인 것들만 필터링 + 매핑코드 106464 제외 + 공란 제외
     if (isInhouse) {
       rows = rows.filter(
-        (row: any) => row.내외주 === "내주" && row.매핑코드 !== "106464"
+        (row: any) => row.내외주?.trim() === "내주" && row.매핑코드 !== "106464"
       );
 
       if (rows.length === 0) {

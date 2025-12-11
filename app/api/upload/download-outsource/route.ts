@@ -266,47 +266,39 @@ export async function POST(request: NextRequest) {
         const originalBuffer = Buffer.from(templateData.originalFile, "base64");
         await workbook.xlsx.load(originalBuffer as any);
 
+        // 워크북 속성 초기화
+        if (!workbook.properties) {
+          workbook.properties = {date1904: false};
+        }
+
         // 워크시트 가져오기
         worksheet = workbook.worksheets[0] || workbook.addWorksheet("Sheet1");
 
-        // 헤더 행 정보 저장 (스타일 포함)
+        // 헤더 행 정보 저장
         const headerRow = worksheet.getRow(1);
         const headerRowHeight = headerRow?.height;
-        const headerCells: {[colNumber: number]: any} = {};
+        const headerCells: {[colNumber: number]: ExcelJS.Cell} = {};
 
         if (headerRow) {
-          // 모든 컬럼에 대해 스타일 저장 (빈 셀 포함)
-          columnOrder.forEach((_header: any, colIdx: number) => {
-            const colNumber = colIdx + 1;
-            const cell = headerRow.getCell(colNumber);
-            // 셀의 모든 속성을 깊은 복사로 저장
-            headerCells[colNumber] = {
-              value: cell.value,
-              style: JSON.parse(JSON.stringify(cell.style)),
-              address: cell.address,
-            };
+          headerRow.eachCell({includeEmpty: true}, (cell, colNumber) => {
+            headerCells[colNumber] = cell;
           });
         }
 
         // 데이터 행 스타일 저장
         const dataRowHeight =
           worksheet.rowCount > 1 ? worksheet.getRow(2).height : undefined;
-        const dataCells: {[colNumber: number]: any} = {};
+        const dataCells: {[colNumber: number]: ExcelJS.Cell} = {};
 
         if (worksheet.rowCount > 1) {
           const originalDataRow = worksheet.getRow(2);
           if (originalDataRow) {
-            // 모든 컬럼에 대해 스타일 저장 (빈 셀 포함)
-            columnOrder.forEach((_header: any, colIdx: number) => {
-              const colNumber = colIdx + 1;
-              const cell = originalDataRow.getCell(colNumber);
-              // 셀의 모든 속성을 깊은 복사로 저장
-              dataCells[colNumber] = {
-                value: cell.value,
-                style: JSON.parse(JSON.stringify(cell.style)),
-                address: cell.address,
-              };
-            });
+            originalDataRow.eachCell(
+              {includeEmpty: true},
+              (cell, colNumber) => {
+                dataCells[colNumber] = cell;
+              }
+            );
           }
         }
 
@@ -336,20 +328,18 @@ export async function POST(request: NextRequest) {
           const colNumber = colIdx + 1;
           const cell = newHeaderRow.getCell(colNumber);
 
-          // 헤더 스타일 복원
+          // 헤더 스타일 복사
           if (headerCells[colNumber]) {
-            cell.style = JSON.parse(
-              JSON.stringify(headerCells[colNumber].style)
-            );
+            copyCellStyle(headerCells[colNumber], cell);
           }
 
           cell.value = header;
         });
 
-        // 열 너비 복원 (모든 열에 대해)
-        columnOrder.forEach((_header: any, colIdx: number) => {
-          const colNum = colIdx + 1;
-          if (columnWidths[colNum]) {
+        // 열 너비 복원
+        Object.keys(columnWidths).forEach((colNumStr) => {
+          const colNum = parseInt(colNumStr);
+          if (colNum <= columnOrder.length) {
             worksheet.getColumn(colNum).width = columnWidths[colNum];
           }
         });
@@ -367,20 +357,9 @@ export async function POST(request: NextRequest) {
             const colNumber = colIdx + 1;
             const cell = row.getCell(colNumber);
 
-            // 스타일 복원: 데이터 셀 우선, 없으면 헤더 셀 사용
+            // 데이터 셀 스타일만 복사 (헤더 스타일은 복사하지 않음)
             if (dataCells[colNumber]) {
-              cell.style = JSON.parse(
-                JSON.stringify(dataCells[colNumber].style)
-              );
-            } else if (headerCells[colNumber]) {
-              // 헤더 셀 스타일을 복사하되, 폰트는 데이터용으로 조정
-              const style = JSON.parse(
-                JSON.stringify(headerCells[colNumber].style)
-              );
-              if (style.font) {
-                style.font.bold = false;
-              }
-              cell.style = style;
+              copyCellStyle(dataCells[colNumber], cell);
             }
 
             cell.value = cellValue;
@@ -417,6 +396,10 @@ export async function POST(request: NextRequest) {
             fgColor: {argb: "FFDAEDF3"},
           };
         });
+
+        if (!workbook.properties) {
+          workbook.properties = {date1904: false};
+        }
       }
 
       // Excel 호환성을 위한 워크북 정리
