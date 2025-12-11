@@ -3,6 +3,7 @@ import sql from "@/lib/db";
 import ExcelJS from "exceljs";
 import {mapDataToTemplate, sortExcelData} from "@/utils/excelDataMapping";
 import {copyCellStyle, applyHeaderStyle} from "@/utils/excelStyles";
+import {prepareWorkbookForExcel} from "@/utils/excelCompatibility";
 import JSZip from "jszip";
 
 // 외주 발주서 다운로드 (매입처별로 파일 분리, ZIP으로 압축)
@@ -236,9 +237,20 @@ export async function POST(request: NextRequest) {
         return columnOrder.map((header: any) => {
           const headerStr =
             typeof header === "string" ? header : String(header || "");
-          return mapDataToTemplate(row, headerStr, {
+          const value = mapDataToTemplate(row, headerStr, {
             templateName: templateData.name,
           });
+
+          // "받는사람" 컬럼에 값이 있으면 앞에 ★ 추가
+          if (
+            headerStr === "받는사람" &&
+            value &&
+            String(value).trim() !== ""
+          ) {
+            return "★" + value;
+          }
+
+          return value;
         });
       });
 
@@ -307,18 +319,21 @@ export async function POST(request: NextRequest) {
         }
 
         // 헤더 행 복원
+        const newHeaderRow = worksheet.getRow(1);
         if (headerRowHeight) {
-          worksheet.getRow(1).height = headerRowHeight;
+          newHeaderRow.height = headerRowHeight;
         }
 
         columnOrder.forEach((header: string, colIdx: number) => {
           const colNumber = colIdx + 1;
+          const cell = newHeaderRow.getCell(colNumber);
+
+          // 헤더 스타일 복사
           if (headerCells[colNumber]) {
-            headerCells[colNumber].value = header;
-          } else {
-            const cell = worksheet.getCell(1, colNumber);
-            cell.value = header;
+            copyCellStyle(headerCells[colNumber], cell);
           }
+
+          cell.value = header;
         });
 
         // 열 너비 복원
@@ -342,9 +357,9 @@ export async function POST(request: NextRequest) {
             const colNumber = colIdx + 1;
             const cell = row.getCell(colNumber);
 
-            const sourceCell = dataCells[colNumber] || headerCells[colNumber];
-            if (sourceCell) {
-              copyCellStyle(sourceCell, cell);
+            // 데이터 셀 스타일만 복사 (헤더 스타일은 복사하지 않음)
+            if (dataCells[colNumber]) {
+              copyCellStyle(dataCells[colNumber], cell);
             }
 
             cell.value = cellValue;
@@ -386,6 +401,12 @@ export async function POST(request: NextRequest) {
           workbook.properties = {date1904: false};
         }
       }
+
+      // Excel 호환성을 위한 워크북 정리
+      prepareWorkbookForExcel(workbook, {
+        removeFormulas: false,
+        removeDataValidations: false,
+      });
 
       // 엑셀 파일을 버퍼로 생성
       const buffers = await workbook.xlsx.writeBuffer();
