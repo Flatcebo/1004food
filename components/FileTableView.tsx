@@ -34,10 +34,6 @@ export default function FileTableView({
     getSuggestions,
     openDirectInputModal,
     setRecommendIdx: setGlobalRecommendIdx,
-    directInputModal,
-    setDirectInputValue,
-    closeDirectInputModal,
-    saveDirectInputModal,
   } = useUploadStore();
 
   const [localProductCodeMap, setLocalProductCodeMap] = useState<{
@@ -47,19 +43,18 @@ export default function FileTableView({
   const headerIndex = file.headerIndex || globalHeaderIndex;
   const tableData = file.tableData;
 
-  // 필드명 한글 매핑
+  // 추천 모달 테이블 고정 헤더 순서 및 필드명 매핑
   const fieldNameMap: {[key: string]: string} = {
-    name: "상품명",
-    code: "매핑코드",
     type: "내외주",
     postType: "택배사",
-    pkg: "합포수량",
+    name: "상품명",
+    code: "매핑코드",
     price: "가격",
     postFee: "택배비",
+    pkg: "합포수량",
     etc: "기타",
   };
 
-  // 추천 모달 테이블 고정 헤더 순서
   const fixedRecommendTableHeaders = [
     "type",
     "postType",
@@ -82,6 +77,7 @@ export default function FileTableView({
   const handleLocalRecommendClick = async (rowIdx: number, value: string) => {
     const suggestions = await getSuggestions(value);
     if (!suggestions.length) {
+      // uploadStore의 openDirectInputModal 사용
       openDirectInputModal(value, rowIdx);
       return;
     }
@@ -113,10 +109,7 @@ export default function FileTableView({
       (h.includes("수취인명") || h.includes("이름"))
   );
   const addressIdx = tableData[0]?.findIndex(
-    (h: any) =>
-      h &&
-      typeof h === "string" &&
-      h.includes("주소")
+    (h: any) => h && typeof h === "string" && h.includes("주소")
   );
   const duplicateReceiverSet = (() => {
     const set = new Set<string>();
@@ -171,16 +164,11 @@ export default function FileTableView({
           <thead>
             <tr>
               {tableData[0].map((header, hidx) => (
-                <th
-                  key={hidx}
-                  className="border bg-gray-100 px-2 py-1 text-xs"
-                >
+                <th key={hidx} className="border bg-gray-100 px-2 py-1 text-xs">
                   {header}
                 </th>
               ))}
-              <th className="border bg-gray-100 px-2 py-1 text-xs">
-                매핑코드
-              </th>
+              <th className="border bg-gray-100 px-2 py-1 text-xs">매핑코드</th>
             </tr>
           </thead>
           <tbody>
@@ -190,9 +178,7 @@ export default function FileTableView({
                 name = row[headerIndex.nameIdx] as string;
               }
               const receiverValue =
-                receiverIdx !== -1
-                  ? String(row[receiverIdx] ?? "").trim()
-                  : "";
+                receiverIdx !== -1 ? String(row[receiverIdx] ?? "").trim() : "";
               const addressValue =
                 addressIdx !== -1 ? String(row[addressIdx] ?? "").trim() : "";
               const isReceiverDup =
@@ -200,9 +186,7 @@ export default function FileTableView({
               const isAddressDup =
                 addressValue && duplicateAddressSet.has(addressValue);
               return (
-                <tr
-                  key={i}
-                >
+                <tr key={i}>
                   {tableData[0].map((_, j) => {
                     const isDuplicateCell =
                       (isReceiverDup && j === receiverIdx) ||
@@ -211,13 +195,8 @@ export default function FileTableView({
                       isDuplicateCell ? " bg-red-100" : ""
                     }`;
                     return (
-                      <td
-                        key={j}
-                        className={tdClass}
-                      >
-                        {row[j] !== undefined && row[j] !== null
-                          ? row[j]
-                          : ""}
+                      <td key={j} className={tdClass}>
+                        {row[j] !== undefined && row[j] !== null ? row[j] : ""}
                       </td>
                     );
                   })}
@@ -263,9 +242,8 @@ export default function FileTableView({
                                   <tr>
                                     {fixedRecommendTableHeaders
                                       .filter((key) => {
-                                        return recommendList.some(
-                                          (item: any) =>
-                                            item.hasOwnProperty(key)
+                                        return recommendList.some((item: any) =>
+                                          item.hasOwnProperty(key)
                                         );
                                       })
                                       .map((key) => (
@@ -306,15 +284,12 @@ export default function FileTableView({
                                             <td
                                               key={key}
                                               className={`border border-gray-200 px-2 py-1 break-all text-black whitespace-pre-line min-w-[85px] ${
-                                                key === "code" ||
-                                                key === "pkg"
+                                                key === "code" || key === "pkg"
                                                   ? "text-center"
                                                   : ""
                                               }`}
                                             >
-                                              {String(
-                                                (item as any)[key] ?? ""
-                                              )}
+                                              {String((item as any)[key] ?? "")}
                                             </td>
                                           ))}
                                       </tr>
@@ -327,6 +302,7 @@ export default function FileTableView({
                                   type="button"
                                   className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-100 text-gray-600"
                                   onClick={() => {
+                                    // uploadStore의 openDirectInputModal 사용
                                     openDirectInputModal(name || "", i);
                                     setRecommendIdx(null);
                                   }}
@@ -352,109 +328,6 @@ export default function FileTableView({
           </tbody>
         </table>
       </div>
-      {directInputModal.open && (
-        <div
-          onClick={closeDirectInputModal}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#00000080] bg-opacity-30"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="bg-white shadow-xl rounded-xl px-8 py-7 min-w-[340px] max-w-[90vw] overflow-y-auto relative flex flex-col items-start"
-          >
-            <div className="font-bold text-lg mb-4 text-center text-[#333]">
-              신규 상품정보 직접 입력
-            </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                saveDirectInputModal();
-              }}
-              className="w-full"
-            >
-              <table className="w-full text-xs mb-3 ">
-                <tbody className="w-full flex flex-col gap-[10px]">
-                  {directInputModal.fields.map((key) => (
-                    <tr key={key} className="flex gap-[6px]">
-                      <td className="pr-2 py-1 text-right font-medium text-gray-500 w-[75px]">
-                        {fieldNameMap[key] || key}
-                      </td>
-                      <td className="w-full">
-                        {key === "name" ? (
-                          <input
-                            type="text"
-                            className="border border-[#e1e0e0] px-2 py-1 rounded w-full bg-gray-100 text-[#333]"
-                            value={directInputModal.values.name || ""}
-                            readOnly
-                          />
-                        ) : key === "type" ? (
-                          <select
-                            className="border border-[#e1e0e0] px-2 py-1 rounded w-full text-[#333]"
-                            value={directInputModal.values[key] || ""}
-                            onChange={(e) =>
-                              setDirectInputValue(key, e.target.value)
-                            }
-                          >
-                            <option value="">선택하세요</option>
-                            <option value="내주">내주</option>
-                            <option value="외주">외주</option>
-                          </select>
-                        ) : key === "postType" ? (
-                          <select
-                            className="border border-[#e1e0e0] px-2 py-1 rounded w-full text-[#333]"
-                            value={directInputModal.values[key] || ""}
-                            onChange={(e) =>
-                              setDirectInputValue(key, e.target.value)
-                            }
-                          >
-                            <option value="">선택하세요</option>
-                            <option value="CJ대한통운">CJ대한통운</option>
-                            <option value="우체국택배">우체국택배</option>
-                            <option value="로젠택배">로젠택배</option>
-                            <option value="롯데택배">롯데택배</option>
-                            <option value="한진택배">한진택배</option>
-                            <option value="천일택배">천일택배</option>
-                          </select>
-                        ) : (
-                          <input
-                            type="text"
-                            className="border border-[#e1e0e0] px-2 py-1 rounded w-full text-[#333]"
-                            value={directInputModal.values[key] || ""}
-                            onChange={(e) =>
-                              setDirectInputValue(key, e.target.value)
-                            }
-                          />
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="flex flex-row gap-4 justify-end mt-4">
-                <button
-                  type="button"
-                  className="bg-gray-200 px-4 py-2 rounded hover:bg-gray-300 text-xs font-semibold"
-                  onClick={closeDirectInputModal}
-                >
-                  닫기
-                </button>
-                <button
-                  type="submit"
-                  className="bg-blue-600 px-4 py-2 rounded hover:bg-blue-700 text-xs text-white font-semibold"
-                >
-                  저장
-                </button>
-              </div>
-            </form>
-            <button
-              className="absolute top-2 right-4 text-gray-400 hover:text-black text-[24px]"
-              onClick={closeDirectInputModal}
-            >
-              ×
-            </button>
-          </div>
-        </div>
-      )}
     </>
   );
 }
-

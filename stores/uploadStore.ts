@@ -416,57 +416,6 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             }
           }
 
-          // 업체명 기반 배송메시지 자동 입력
-          if (jsonData.length > 1) {
-            const headerRow = jsonData[0] as any[];
-            const vendorIdx = headerRow.findIndex(
-              (h: any) => h && typeof h === "string" && h === "업체명"
-            );
-            const messageIdx = headerRow.findIndex(
-              (h: any) =>
-                h &&
-                typeof h === "string" &&
-                (h === "배송메시지" ||
-                  h === "배송메세지" ||
-                  h === "배송요청" ||
-                  h === "요청사항" ||
-                  h === "배송요청사항")
-            );
-
-            if (vendorIdx !== -1 && messageIdx !== -1) {
-              for (let i = 1; i < jsonData.length; i += 1) {
-                const row = jsonData[i];
-                const vendorName = row[vendorIdx];
-                const currentMessage = row[messageIdx];
-
-                // 업체명이 있으면 배송메시지에 자동 입력
-                if (vendorName && typeof vendorName === "string") {
-                  const vendorStr = String(vendorName).trim();
-                  if (vendorStr) {
-                    // 5글자 이상이면 앞 2글자만, 4글자 이하면 전체
-                    const vendorPrefix =
-                      vendorStr.length > 4
-                        ? vendorStr.substring(0, 2)
-                        : vendorStr;
-
-                    // 배송메시지가 비어있으면 업체명만 입력
-                    if (
-                      !currentMessage ||
-                      currentMessage === null ||
-                      String(currentMessage).trim() === ""
-                    ) {
-                      row[messageIdx] = vendorPrefix;
-                    } else {
-                      // 배송메시지가 이미 있으면 앞에 업체명 + 띄어쓰기 추가
-                      const existingMessage = String(currentMessage).trim();
-                      row[messageIdx] = `${vendorPrefix} ${existingMessage}`;
-                    }
-                  }
-                }
-              }
-            }
-          }
-
           // 주문자명/주문자 전화번호가 공란인 경우 수취인명/수취인 전화번호로 자동 입력
           if (jsonData.length > 1) {
             const headerRow = jsonData[0] as any[];

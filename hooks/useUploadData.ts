@@ -158,6 +158,7 @@ export function useUploadData() {
       "id",
       "file_name",
       "upload_time",
+      "내부코드",
       "업체명",
       "내외주",
       "택배사",

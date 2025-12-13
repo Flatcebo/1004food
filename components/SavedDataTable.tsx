@@ -52,6 +52,7 @@ const SavedDataTable = memo(function SavedDataTable({
 }: SavedDataTableProps) {
   // 숨길 헤더 목록
   const hiddenHeaders = [
+    "id",
     "file_name",
     "가격",
     "기타",

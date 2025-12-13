@@ -37,6 +37,8 @@ export default function RowDetailWindow({
                       ? "ID"
                       : key === "upload_time"
                       ? "업로드 시간"
+                      : key === "내부코드"
+                      ? "내부코드"
                       : key === "매핑코드"
                       ? "매핑코드"
                       : key === "상품명"

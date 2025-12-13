@@ -44,6 +44,7 @@ export default function DataFilters(props: DataFiltersProps) {
         {label: "주문자명", value: "주문자명"},
         {label: "상품명", value: "상품명"},
         {label: "매핑코드", value: "매핑코드"},
+        {label: "내부코드", value: "내부코드"},
       ]}
     />
   );

@@ -246,6 +246,8 @@ export async function POST(request: NextRequest) {
     const workbook = new ExcelJS.Workbook();
     let worksheet: ExcelJS.Worksheet;
 
+    delete (workbook as any)._themes;
+
     if (templateData.originalFile) {
       // 원본 파일 로드
       const originalBuffer = Buffer.from(templateData.originalFile, "base64");
@@ -393,7 +395,10 @@ export async function POST(request: NextRequest) {
     });
 
     // 엑셀 파일 생성
-    const buffer = await workbook.xlsx.writeBuffer();
+    const buffer = await workbook.xlsx.writeBuffer({
+      useStyles: false,
+      useSharedStrings: false,
+    });
 
     // 파일명 생성
     const dateStr = new Date().toISOString().split("T")[0];

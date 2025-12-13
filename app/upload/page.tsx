@@ -2,6 +2,7 @@
 
 import {useEffect} from "react";
 import {useUploadStore} from "@/stores/uploadStore";
+import {useLoadingStore} from "@/stores/loadingStore";
 import ModalTable from "@/components/ModalTable";
 import FileUploadArea from "@/components/FileUploadArea";
 import UploadedFilesList from "@/components/UploadedFilesList";
@@ -9,6 +10,7 @@ import SavedDataTable from "@/components/SavedDataTable";
 import DataFilters from "@/components/DataFilters";
 import DirectInputModal from "@/components/DirectInputModal";
 import DataTable from "@/components/DataTable";
+import LoadingOverlay from "@/components/LoadingOverlay";
 import {useUploadData} from "@/hooks/useUploadData";
 import {useFileValidation} from "@/hooks/useFileValidation";
 import {useFileMessageHandler} from "@/hooks/useFileMessageHandler";
@@ -56,6 +58,9 @@ export default function UploadPage() {
     removeUploadedFile,
     handleFileChange,
   } = useUploadStore();
+
+  // 로딩 상태
+  const {isLoading, title, message, subMessage} = useLoadingStore();
 
   // 저장된 데이터 관련 훅
   const {
@@ -432,6 +437,14 @@ export default function UploadPage() {
 
   return (
     <div className="w-full h-full flex flex-col items-start justify-start pt-4 px-4">
+      {/* 업로드 로딩 오버레이 */}
+      <LoadingOverlay
+        isOpen={isLoading}
+        title={title}
+        message={message}
+        subMessage={subMessage}
+      />
+
       <div className="w-full bg-[#ffffff] rounded-lg px-8 shadow-md pb-12">
         {/* 저장된 데이터 테이블 */}
         <div className="w-full mt-6">

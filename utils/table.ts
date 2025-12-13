@@ -9,6 +9,7 @@ export function getColumnWidth(header: string): string {
   const widthMap: Record<string, string> = {
     id: "60px",
     ID: "60px",
+    내부코드: "110px",
     매핑코드: "100px",
     주문상태: "80px",
     우편: "60px",
@@ -38,4 +39,3 @@ export function getColumnWidth(header: string): string {
   };
   return widthMap[header] || "100px";
 }
-

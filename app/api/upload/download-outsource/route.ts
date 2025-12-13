@@ -261,6 +261,8 @@ export async function POST(request: NextRequest) {
       const workbook = new ExcelJS.Workbook();
       let worksheet: ExcelJS.Worksheet;
 
+      delete (workbook as any)._themes;
+
       if (templateData.originalFile) {
         // 원본 파일 로드
         const originalBuffer = Buffer.from(templateData.originalFile, "base64");
@@ -409,7 +411,10 @@ export async function POST(request: NextRequest) {
       });
 
       // 엑셀 파일을 버퍼로 생성
-      const buffers = await workbook.xlsx.writeBuffer();
+      const buffers = await workbook.xlsx.writeBuffer({
+        // useStyles: false,
+        // useSharedStrings: false,
+      });
       const buffer = new Uint8Array(buffers);
 
       // ZIP에 파일 추가

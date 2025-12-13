@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
       주문자명: "주문자명",
       상품명: "상품명",
       매핑코드: "매핑코드",
+      내부코드: "내부코드",
     };
     const dbField = searchField ? fieldMap[searchField] : null;
     const searchPattern = searchValue ? `%${searchValue}%` : null;
