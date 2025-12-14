@@ -66,7 +66,9 @@ export default function SideBar() {
           </div>
         </div>
 
-        <div className="w-full text-center text-sm text-white py-2">v0.0.1</div>
+        <div className="w-full text-center text-sm text-white py-2">
+          beta0.0.2
+        </div>
       </div>
     </div>
   );

@@ -35,71 +35,80 @@ export function cleanWorkbookForExcel(workbook: ExcelJS.Workbook): void {
         delete model.workbook.theme;
       }
 
-      // Named ranges 제거 (XML 오류 방지)
+      // Named ranges 제거 (XML 오류 방지) - 안전하게
       if (model.workbook.definedNames) {
-        model.workbook.definedNames = [];
+        if (Array.isArray(model.workbook.definedNames)) {
+          model.workbook.definedNames = [];
+        } else {
+          delete model.workbook.definedNames;
+        }
       }
     }
 
-    // 4. Named ranges 제거 (최상위)
+    // 4. Named ranges 제거 (최상위) - 안전하게
     if (model.definedNames) {
-      model.definedNames = [];
+      if (Array.isArray(model.definedNames)) {
+        model.definedNames = [];
+      } else {
+        delete model.definedNames;
+      }
     }
 
-    // 5. VBA 프로젝트 제거 (있다면)
+    // 5. VBA 프로젝트 제거
     if (model.vbaProject) {
       delete model.vbaProject;
     }
 
-    // 6. 외부 링크 제거 (있다면)
+    // 6. 외부 링크 제거 - 안전하게
     if (model.externalLinks) {
-      delete model.externalLinks;
+      if (Array.isArray(model.externalLinks)) {
+        model.externalLinks = [];
+      } else {
+        delete model.externalLinks;
+      }
     }
 
-    // 7. 매크로 제거 (있다면)
+    // 7. 매크로 제거
     if (model.macros) {
       delete model.macros;
     }
 
-    // 8. Custom XML 제거 (호환성 문제 방지)
+    // 8. Custom XML 제거
     if (model.customXml) {
       delete model.customXml;
     }
 
-    // 9. 워크북 뷰의 문제 속성 제거
+    // 9. 워크북 뷰의 문제 속성 제거 - 안전하게
     if (model.views && Array.isArray(model.views)) {
       model.views.forEach((view: any) => {
-        // 활성 탭은 유지하되, 문제가 될 수 있는 속성 제거
-        if (view.xWindow && !isFinite(view.xWindow)) {
-          delete view.xWindow;
-        }
-        if (view.yWindow && !isFinite(view.yWindow)) {
-          delete view.yWindow;
+        if (view) {
+          // 활성 탭은 유지하되, 문제가 될 수 있는 속성 제거
+          if (view.xWindow !== undefined && !isFinite(view.xWindow)) {
+            delete view.xWindow;
+          }
+          if (view.yWindow !== undefined && !isFinite(view.yWindow)) {
+            delete view.yWindow;
+          }
         }
       });
     }
 
-    // 10. 워크북 보호 제거 (복구 문제의 원인)
+    // 10. 워크북 보호 제거
     if (model.workbookProtection) {
       delete model.workbookProtection;
     }
 
-    // 11. 공유 문자열 테이블 정리
-    if (model.sharedStrings) {
+    // 11. 공유 문자열 테이블 정리 - 안전하게
+    if (model.sharedStrings && model.sharedStrings.values && Array.isArray(model.sharedStrings.values)) {
       // 유효하지 않은 문자열 제거
-      if (Array.isArray(model.sharedStrings.values)) {
-        model.sharedStrings.values = model.sharedStrings.values.filter(
-          (str: any) => str !== null && str !== undefined
-        );
-      }
+      model.sharedStrings.values = model.sharedStrings.values.filter(
+        (str: any) => str !== null && str !== undefined
+      );
     }
 
-    // 12. 워크북 계산 속성 정리
-    if (model.calcProperties) {
-      // 문제가 될 수 있는 속성만 제거
-      if (model.calcProperties.calcId) {
-        delete model.calcProperties.calcId;
-      }
+    // 12. 워크북 계산 속성 정리 - 안전하게
+    if (model.calcProperties && model.calcProperties.calcId !== undefined) {
+      delete model.calcProperties.calcId;
     }
 
   } catch (error) {
@@ -243,61 +252,60 @@ export function cleanWorksheetForExcel(worksheet: ExcelJS.Worksheet): void {
       delete model.sheetProtection;
     }
 
-    // 2. 조건부 서식 제거 (호환성 문제 가능)
-    if (model.conditionalFormattings) {
+    // 2. 조건부 서식 제거 - 안전하게
+    if (model.conditionalFormattings && Array.isArray(model.conditionalFormattings)) {
       model.conditionalFormattings = [];
     }
 
-    // 3. 자동 필터 제거 (문제가 될 수 있음)
+    // 3. 자동 필터 제거
     if (model.autoFilter) {
       delete model.autoFilter;
     }
 
     // 4. 페이지 설정의 문제 속성 제거
-    if (model.pageSetup) {
-      // 잘못된 페이지 설정 제거
-      if (model.pageSetup.errors) {
-        delete model.pageSetup.errors;
-      }
+    if (model.pageSetup && model.pageSetup.errors) {
+      delete model.pageSetup.errors;
     }
 
-    // 5. 그림/도형 제거 (복구 문제의 원인)
-    if (model.drawings) {
+    // 5. 그림/도형 제거 - 안전하게
+    if (model.drawings && Array.isArray(model.drawings)) {
       model.drawings = [];
     }
-    if (model.images) {
+    if (model.images && Array.isArray(model.images)) {
       model.images = [];
     }
 
-    // 6. 하이퍼링크 정리 (잘못된 링크 제거)
+    // 6. 하이퍼링크 정리
     if (model.hyperlinks) {
       model.hyperlinks = {};
     }
 
-    // 7. 테이블 정리 (문제가 될 수 있음)
-    if (model.tables) {
+    // 7. 테이블 정리 - 안전하게
+    if (model.tables && Array.isArray(model.tables)) {
       model.tables = [];
     }
 
-    // 8. 피벗 테이블 제거
-    if (model.pivotTables) {
+    // 8. 피벗 테이블 제거 - 안전하게
+    if (model.pivotTables && Array.isArray(model.pivotTables)) {
       model.pivotTables = [];
     }
 
-    // 9. 워크시트 뷰의 문제 속성 제거
+    // 9. 워크시트 뷰의 문제 속성 제거 - 안전하게
     if (model.views && Array.isArray(model.views)) {
       model.views.forEach((view: any) => {
-        // 창 고정 정보는 유지하되, 문제가 될 수 있는 속성만 제거
-        if (view.xSplit && !isFinite(view.xSplit)) {
-          delete view.xSplit;
-        }
-        if (view.ySplit && !isFinite(view.ySplit)) {
-          delete view.ySplit;
+        if (view) {
+          // 창 고정 정보는 유지하되, 문제가 될 수 있는 속성만 제거
+          if (view.xSplit !== undefined && !isFinite(view.xSplit)) {
+            delete view.xSplit;
+          }
+          if (view.ySplit !== undefined && !isFinite(view.ySplit)) {
+            delete view.ySplit;
+          }
         }
       });
     }
 
-    // 10. 셀 병합의 잘못된 참조 제거
+    // 10. 셀 병합의 잘못된 참조 제거 - 안전하게
     if (model.merges && Array.isArray(model.merges)) {
       model.merges = model.merges.filter((merge: any) => {
         // 유효한 병합 범위인지 확인
@@ -364,7 +372,7 @@ export function finalCleanupWorkbook(workbook: ExcelJS.Workbook): void {
       return;
     }
 
-    // 1. 스타일 정리 (불필요한 스타일 제거)
+    // 1. 스타일 정리 (불필요한 스타일 제거) - 안전하게
     if (model.styles) {
       // 테마 색상 제거
       if (model.styles.themeElements) {
@@ -376,43 +384,27 @@ export function finalCleanupWorkbook(workbook: ExcelJS.Workbook): void {
       }
     }
 
-    // 2. 미디어 파일 정리 (이미지 등)
-    if (model.media && Array.isArray(model.media)) {
+    // 2. 미디어 파일 정리 - 삭제 대신 빈 배열로 (ExcelJS가 배열 존재를 기대할 수 있음)
+    if (model.media && Array.isArray(model.media) && model.media.length > 0) {
       model.media = [];
     }
 
-    // 3. 코멘트 정리 (문제가 될 수 있음)
+    // 3. 코멘트 정리 - 안전하게
     workbook.worksheets.forEach((worksheet) => {
       const wsModel = (worksheet as any).model;
-      if (wsModel && wsModel.comments) {
+      if (wsModel && wsModel.comments && Array.isArray(wsModel.comments) && wsModel.comments.length > 0) {
         wsModel.comments = [];
       }
     });
 
-    // 4. 빈 워크시트 속성 정리
-    workbook.worksheets.forEach((worksheet) => {
-      const wsModel = (worksheet as any).model;
-      if (wsModel) {
-        // 빈 행/열 속성 제거
-        if (wsModel.rows && Array.isArray(wsModel.rows)) {
-          wsModel.rows = wsModel.rows.filter((row: any) => 
-            row && (row.cells || row.height || row.style)
-          );
-        }
+    // 4. 명명된 범위 다시 한 번 확인 - 완전 삭제 대신 빈 배열로
+    if (model.workbook) {
+      if (model.workbook.definedNames && Array.isArray(model.workbook.definedNames)) {
+        model.workbook.definedNames = [];
       }
-    });
-
-    // 5. 명명된 범위 다시 한 번 확인 및 제거
-    if (model.workbook && model.workbook.definedNames) {
-      model.workbook.definedNames = [];
     }
-    if (model.definedNames) {
+    if (model.definedNames && Array.isArray(model.definedNames)) {
       model.definedNames = [];
-    }
-
-    // 6. 테마 파일 경로 제거 (XML 참조 오류 방지)
-    if (model.media) {
-      delete model.media;
     }
 
   } catch (error) {
