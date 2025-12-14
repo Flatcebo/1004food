@@ -114,6 +114,8 @@ export function cleanWorkbookForExcel(workbook: ExcelJS.Workbook): void {
  */
 export function initializeWorkbookProperties(workbook: ExcelJS.Workbook): void {
   // properties 초기화 (date1904 false 설정)
+  const existingProps = workbook.properties as any;
+  
   if (!workbook.properties) {
     workbook.properties = {
       date1904: false,
@@ -122,12 +124,12 @@ export function initializeWorkbookProperties(workbook: ExcelJS.Workbook): void {
     // 기존 속성이 있으면 안전한 값으로 초기화
     workbook.properties = {
       date1904: false,
-      // 기존 속성 중 안전한 것들만 유지
-      ...(workbook.properties.creator && {creator: workbook.properties.creator}),
-      ...(workbook.properties.lastModifiedBy && {lastModifiedBy: workbook.properties.lastModifiedBy}),
-      ...(workbook.properties.created && {created: workbook.properties.created}),
-      ...(workbook.properties.modified && {modified: workbook.properties.modified}),
-    };
+      // 기존 속성 중 안전한 것들만 유지 (any로 캐스팅하여 타입 오류 방지)
+      ...(existingProps.creator && {creator: existingProps.creator}),
+      ...(existingProps.lastModifiedBy && {lastModifiedBy: existingProps.lastModifiedBy}),
+      ...(existingProps.created && {created: existingProps.created}),
+      ...(existingProps.modified && {modified: existingProps.modified}),
+    } as any;
   }
 
   // calcProperties 초기화 (fullCalcOnLoad false 설정)
