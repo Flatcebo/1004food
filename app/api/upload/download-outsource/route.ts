@@ -4,8 +4,6 @@ import ExcelJS from "exceljs";
 import {mapDataToTemplate, sortExcelData} from "@/utils/excelDataMapping";
 import {copyCellStyle, applyHeaderStyle} from "@/utils/excelStyles";
 import {prepareWorkbookForExcel} from "@/utils/excelCompatibility";
-import {prepareExcelCellValue} from "@/utils/excelTypeConversion";
-import {initializeWorkbookProperties} from "@/utils/excelCompatibility";
 import JSZip from "jszip";
 
 // 외주 발주서 다운로드 (매입처별로 파일 분리, ZIP으로 압축)
@@ -263,18 +261,18 @@ export async function POST(request: NextRequest) {
       const workbook = new ExcelJS.Workbook();
       let worksheet: ExcelJS.Worksheet;
 
-      delete (workbook as any)._themes;
-
       if (templateData.originalFile) {
         // 원본 파일 로드
         const originalBuffer = Buffer.from(templateData.originalFile, "base64");
         await workbook.xlsx.load(originalBuffer as any);
 
-        // 워크북 로드 직후 즉시 정리 (복구 알림 방지)
-        prepareWorkbookForExcel(workbook, {
-          removeFormulas: false,
-          removeDataValidations: false,
-        });
+        // 모든 명명된 범위 제거
+        (workbook.definedNames as any).model = [];
+
+        // 워크북 속성 초기화
+        if (!workbook.properties) {
+          workbook.properties = {date1904: false};
+        }
 
         // 워크시트 가져오기
         worksheet = workbook.worksheets[0] || workbook.addWorksheet("Sheet1");
@@ -309,19 +307,19 @@ export async function POST(request: NextRequest) {
 
         // 열 너비 저장
         const columnWidths: {[key: number]: number} = {};
-        if (worksheet.columns) {
-          worksheet.columns.forEach((column, index) => {
-            if (column.width) {
-              columnWidths[index + 1] = column.width;
-            }
-          });
-        }
+        worksheet.columns.forEach((column, index) => {
+          if (column.width) {
+            columnWidths[index + 1] = column.width;
+          }
+        });
 
         // 기존 데이터 행 삭제
         const lastRow = worksheet.rowCount;
         if (lastRow > 1) {
           for (let rowNum = lastRow; rowNum > 1; rowNum--) {
-            worksheet.spliceRows(rowNum, 1);
+            if (worksheet.rowCount > 1) {
+              worksheet.spliceRows(2, worksheet.rowCount - 1);
+            }
           }
         }
 
@@ -340,7 +338,7 @@ export async function POST(request: NextRequest) {
             copyCellStyle(headerCells[colNumber], cell);
           }
 
-          cell.value = prepareExcelCellValue(header, false);
+          cell.value = header;
 
           for (
             let i = columnOrder.length + 1;
@@ -381,21 +379,22 @@ export async function POST(request: NextRequest) {
 
             // 1번 열(A열) 배경색 설정
             if (colNumber === 1) {
+              // if (!cell.fill || (cell.fill as any).type !== "pattern") {
               cell.fill = {
                 type: "pattern",
                 pattern: "solid",
                 fgColor: {argb: "FFDAEDF3"},
               };
+              // } else {
+              // (cell.fill as any).fgColor = {argb: "FFDAEDF3"};
+              // }
             }
           });
         });
       } else {
         // 원본 파일이 없으면 새로 생성
         worksheet = workbook.addWorksheet("Sheet1");
-        const normalizedHeaders = columnOrder.map((h: any) =>
-          prepareExcelCellValue(h, false)
-        );
-        worksheet.addRow(normalizedHeaders);
+        worksheet.addRow(columnOrder);
 
         const headerRow = worksheet.getRow(1);
         applyHeaderStyle(headerRow, columnOrder, templateData.columnWidths);
@@ -411,20 +410,23 @@ export async function POST(request: NextRequest) {
           };
         });
 
-        initializeWorkbookProperties(workbook);
+        if (!workbook.properties) {
+          workbook.properties = {date1904: false};
+        }
       }
 
-      // 엑셀 파일 생성 전 최종 정리 (중복 호출이지만 안전성 확보)
+      // Excel 호환성을 위한 워크북 정리
       prepareWorkbookForExcel(workbook, {
         removeFormulas: false,
         removeDataValidations: false,
       });
 
       // 엑셀 파일을 버퍼로 생성
-      const buffer = await workbook.xlsx.writeBuffer({
-        useStyles: false,
-        useSharedStrings: false,
+      const buffers = await workbook.xlsx.writeBuffer({
+        useStyles: true,
+        useSharedStrings: true,
       });
+      const buffer = new Uint8Array(buffers);
 
       // ZIP에 파일 추가
       const fileName = `${dateStr}_외주발주_${vendor}.xlsx`;

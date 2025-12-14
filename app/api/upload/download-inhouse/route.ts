@@ -253,11 +253,8 @@ export async function POST(request: NextRequest) {
       const originalBuffer = Buffer.from(templateData.originalFile, "base64");
       await workbook.xlsx.load(originalBuffer as any);
 
-      // 워크북 로드 직후 즉시 정리 (복구 알림 방지)
-      prepareWorkbookForExcel(workbook, {
-        removeFormulas: false,
-        removeDataValidations: false,
-      });
+      // 워크북 속성 초기화
+      initializeWorkbookProperties(workbook);
 
       // 워크시트 가져오기
       worksheet = workbook.worksheets[0] || workbook.addWorksheet("Sheet1");
@@ -391,7 +388,7 @@ export async function POST(request: NextRequest) {
       initializeWorkbookProperties(workbook);
     }
 
-    // 엑셀 파일 생성 전 최종 정리 (중복 호출이지만 안전성 확보)
+    // Excel 호환성을 위한 워크북 정리
     prepareWorkbookForExcel(workbook, {
       removeFormulas: false,
       removeDataValidations: false,
