@@ -150,11 +150,11 @@ export function mapDataToTemplate(
   ) {
     // 디버깅 로그 (처음 3개만)
     if (!row._logged) {
-      console.log(`\n[mapDataToTemplate] 상품명 매핑`);
-      console.log(`- 템플릿명: ${options?.templateName}`);
-      console.log(`- row["사방넷명"]: ${row["사방넷명"]}`);
-      console.log(`- row["sabangName"]: ${row["sabangName"]}`);
-      console.log(`- row["상품명"]: ${row["상품명"]}`);
+      // console.log(`\n[mapDataToTemplate] 상품명 매핑`);
+      // console.log(`- 템플릿명: ${options?.templateName}`);
+      // console.log(`- row["사방넷명"]: ${row["사방넷명"]}`);
+      // console.log(`- row["sabangName"]: ${row["sabangName"]}`);
+      // console.log(`- row["상품명"]: ${row["상품명"]}`);
       row._logged = true;
     }
 

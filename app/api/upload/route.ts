@@ -1,6 +1,8 @@
 import sql from "@/lib/db";
 import {NextRequest, NextResponse} from "next/server";
 import * as Excel from "exceljs";
+import {mapDataToTemplate, sortExcelData} from "@/utils/excelDataMapping";
+import JSZip from "jszip";
 
 export async function POST(request: NextRequest) {
   try {
@@ -39,9 +41,10 @@ export async function POST(request: NextRequest) {
       ? templateData.columnOrder
       : headers;
 
-    const columnWidths = Array.isArray(templateData.columnWidths)
-      ? templateData.columnWidths
-      : {};
+    const columnWidths =
+      templateData.columnWidths && typeof templateData.columnWidths === "object"
+        ? templateData.columnWidths
+        : {};
 
     if (!columnOrder || columnOrder.length === 0) {
       return NextResponse.json(
@@ -49,8 +52,6 @@ export async function POST(request: NextRequest) {
         {status: 400}
       );
     }
-
-    // console.log("templateData", templateData);
 
     const wb = new Excel.Workbook();
     // sheet 생성
@@ -102,25 +103,411 @@ export async function POST(request: NextRequest) {
         horizontal: "center",
         wrapText: true,
       };
+    });
 
-      // 열 너비 설정 (columnWidths에서 가져오기)
-      const headerName = headers[colNum - 1];
-      const width = columnWidths[headerName] || 15;
+    // 열 너비 설정 (헤더 루프 밖에서 한번에 처리)
+    headers.forEach((headerName: string, index: number) => {
+      const colNum = index + 1;
+      const width =
+        typeof columnWidths === "object" && columnWidths[headerName]
+          ? columnWidths[headerName]
+          : 15;
       sheet.getColumn(colNum).width = width;
     });
 
-    rows.forEach((row: any) => {
-      const rowDatas = headers.map((header: any) => row[header]);
+    // DB에서 데이터 조회
+    let dataRows: any[] = [];
+
+    if (rows) {
+      // rows가 직접 전달된 경우 (app/page.tsx에서 테스트용)
+      dataRows = rows;
+    } else if (rowIds && rowIds.length > 0) {
+      // 선택된 행 ID들로 조회
+      const rowData = await sql`
+        SELECT row_data
+        FROM upload_rows
+        WHERE id = ANY(${rowIds})
+      `;
+      dataRows = rowData.map((r: any) => r.row_data || {});
+    } else if (filters && Object.keys(filters).length > 0) {
+      // 필터 조건으로 조회
+      const {
+        type,
+        postType,
+        vendor,
+        orderStatus,
+        searchField,
+        searchValue,
+        uploadTimeFrom,
+        uploadTimeTo,
+      } = filters;
+
+      const fieldMap: {[key: string]: string} = {
+        수취인명: "수취인명",
+        주문자명: "주문자명",
+        상품명: "상품명",
+        매핑코드: "매핑코드",
+      };
+      const dbField = searchField ? fieldMap[searchField] : null;
+      const searchPattern = searchValue ? `%${searchValue}%` : null;
+
+      const conditions: any[] = [];
+      if (type) {
+        conditions.push(sql`ur.row_data->>'내외주' = ${type}`);
+      }
+      if (postType) {
+        conditions.push(sql`ur.row_data->>'택배사' = ${postType}`);
+      }
+      if (vendor) {
+        conditions.push(sql`ur.row_data->>'업체명' = ${vendor}`);
+      }
+      if (orderStatus) {
+        conditions.push(sql`ur.row_data->>'주문상태' = ${orderStatus}`);
+      }
+
+      if (dbField && searchPattern) {
+        conditions.push(sql`ur.row_data->>${dbField} ILIKE ${searchPattern}`);
+      }
+      if (uploadTimeFrom) {
+        conditions.push(sql`u.created_at >= ${uploadTimeFrom}::date`);
+      }
+      if (uploadTimeTo) {
+        conditions.push(
+          sql`u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')`
+        );
+      }
+
+      const buildQuery = () => {
+        if (conditions.length === 0) {
+          return sql`
+            SELECT ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        }
+
+        let query = sql`
+          SELECT ur.row_data
+          FROM upload_rows ur
+          INNER JOIN uploads u ON ur.upload_id = u.id
+          WHERE ${conditions[0]}
+        `;
+
+        for (let i = 1; i < conditions.length; i++) {
+          query = sql`${query} AND ${conditions[i]}`;
+        }
+
+        query = sql`${query} ORDER BY u.created_at DESC, ur.id DESC`;
+        return query;
+      };
+
+      const filteredData = await buildQuery();
+      dataRows = filteredData.map((r: any) => r.row_data || {});
+    } else {
+      // 조건 없으면 모든 데이터 조회
+      const allData = await sql`
+        SELECT ur.row_data
+        FROM upload_rows ur
+        INNER JOIN uploads u ON ur.upload_id = u.id
+        ORDER BY u.created_at DESC, ur.id DESC
+      `;
+      dataRows = allData.map((r: any) => r.row_data || {});
+    }
+
+    // 템플릿명 확인 (외주 발주서인지 체크)
+    const templateName = (templateData.name || "").normalize("NFC").trim();
+    const isOutsource = templateName.includes("외주");
+
+    // 외주 발주서인 경우: 매입처별로 그룹화하여 ZIP 생성
+    if (isOutsource) {
+      // 내외주가 "외주"인 것들만 필터링 + 매핑코드 106464 제외
+      dataRows = dataRows.filter(
+        (row: any) => row.내외주 === "외주" && row.매핑코드 !== "106464"
+      );
+
+      if (dataRows.length === 0) {
+        return NextResponse.json(
+          {success: false, error: "외주 데이터가 없습니다."},
+          {status: 404}
+        );
+      }
+
+      // 매핑코드별 가격, 사방넷명, 업체명 정보 조회
+      const productCodes = [
+        ...new Set(dataRows.map((row: any) => row.매핑코드).filter(Boolean)),
+      ];
+      const productSalePriceMap: {[code: string]: number | null} = {};
+      const productSabangNameMap: {[code: string]: string | null} = {};
+      const productVendorNameMap: {[code: string]: string | null} = {};
+
+      if (productCodes.length > 0) {
+        const products = await sql`
+          SELECT code, sale_price, sabang_name as "sabangName", purchase as "vendorName"
+          FROM products
+          WHERE code = ANY(${productCodes})
+        `;
+
+        products.forEach((p: any) => {
+          if (p.code) {
+            if (p.sale_price !== null && p.sale_price !== undefined) {
+              productSalePriceMap[p.code] = p.sale_price;
+            }
+            if (p.sabangName !== undefined) {
+              productSabangNameMap[p.code] = p.sabangName;
+            }
+            if (p.vendorName !== undefined) {
+              productVendorNameMap[p.code] = p.vendorName;
+            }
+          }
+        });
+      }
+
+      // 매핑코드를 통해 매입처로 업체명 업데이트
+      dataRows.forEach((row: any) => {
+        if (row.매핑코드 && productVendorNameMap[row.매핑코드]) {
+          row.업체명 = productVendorNameMap[row.매핑코드];
+        } else {
+          row.업체명 = "매입처미지정";
+        }
+
+        // 공급가와 사방넷명 주입
+        if (row.매핑코드) {
+          if (productSalePriceMap[row.매핑코드] !== undefined) {
+            const salePrice = productSalePriceMap[row.매핑코드];
+            if (salePrice !== null) {
+              row["공급가"] = salePrice;
+            }
+          }
+          if (productSabangNameMap[row.매핑코드] !== undefined) {
+            const sabangName = productSabangNameMap[row.매핑코드];
+            if (
+              sabangName !== null &&
+              sabangName !== undefined &&
+              String(sabangName).trim() !== ""
+            ) {
+              row["사방넷명"] = sabangName;
+            }
+          }
+        }
+      });
+
+      // 매입처별로 그룹화
+      const vendorGroups: {[vendor: string]: any[]} = {};
+      dataRows.forEach((row) => {
+        const vendor = row.업체명;
+        if (!vendorGroups[vendor]) {
+          vendorGroups[vendor] = [];
+        }
+        vendorGroups[vendor].push(row);
+      });
+
+      // ZIP 파일 생성
+      const zip = new JSZip();
+      const dateStr = new Date().toISOString().split("T")[0];
+
+      // 각 매입처별로 엑셀 파일 생성
+      for (const [vendor, vendorRows] of Object.entries(vendorGroups)) {
+        const wb = new Excel.Workbook();
+        const sheet = wb.addWorksheet(templateData.worksheetName);
+
+        // 헤더 추가
+        const headerRow = sheet.addRow(headers);
+        headerRow.height = 30.75;
+
+        // 헤더 스타일
+        headerRow.eachCell((cell, colNum) => {
+          let bgColor = "ffffffff";
+          if (
+            [
+              1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+              24, 25, 26,
+            ].includes(colNum)
+          ) {
+            bgColor = "ffdaeef3"; // #daeef3
+          } else if (colNum === 10 || colNum === 11) {
+            bgColor = "ffffff00"; // #ffff00 (노란색)
+          }
+
+          let fontColor = "ff000000";
+
+          if ([9, 11].includes(colNum)) {
+            fontColor = "ffff0000"; // 빨간색
+          } else if (colNum === 10) {
+            fontColor = "ff0070c0"; // 파란색
+          }
+
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: {argb: bgColor},
+          };
+
+          cell.border = {
+            top: {style: "thin", color: {argb: "ff000000"}},
+            left: {style: "thin", color: {argb: "ff000000"}},
+            bottom: {style: "thin", color: {argb: "ff000000"}},
+            right: {style: "thin", color: {argb: "ff000000"}},
+          };
+
+          cell.font = {
+            name: "Arial",
+            size: 12,
+            bold: true,
+            color: {argb: fontColor},
+          };
+
+          cell.alignment = {
+            vertical: "middle",
+            horizontal: "center",
+            wrapText: true,
+          };
+        });
+
+        // 열 너비 설정
+        headers.forEach((headerName: string, index: number) => {
+          const colNum = index + 1;
+          const width =
+            typeof columnWidths === "object" && columnWidths[headerName]
+              ? columnWidths[headerName]
+              : 15;
+          sheet.getColumn(colNum).width = width;
+        });
+
+        // 데이터를 2차원 배열로 변환
+        let excelData = vendorRows.map((row: any) => {
+          return headers.map((header: any) => {
+            let value = mapDataToTemplate(row, header, {
+              templateName: templateData.name,
+            });
+
+            let stringValue = value != null ? String(value) : "";
+
+            if (header.includes("전화") || header.includes("연락")) {
+              const numOnly = stringValue.replace(/\D/g, "");
+              if (
+                (numOnly.length === 10 || numOnly.length === 11) &&
+                !numOnly.startsWith("0")
+              ) {
+                stringValue = "0" + numOnly;
+              } else if (numOnly.length > 0) {
+                stringValue = numOnly;
+              }
+            }
+
+            if (header.includes("우편")) {
+              const numOnly = stringValue.replace(/\D/g, "");
+              if (numOnly.length >= 4 && numOnly.length <= 5) {
+                stringValue = numOnly.padStart(5, "0");
+              }
+            }
+
+            return stringValue;
+          });
+        });
+
+        // 정렬
+        excelData = sortExcelData(excelData, columnOrder);
+
+        // 데이터 추가
+        excelData.forEach((rowDatas) => {
+          const appendRow = sheet.addRow(rowDatas);
+
+          appendRow.eachCell((cell: any, colNum: any) => {
+            const headerName = headers[colNum - 1];
+            const normalizedHeader =
+              headerName?.replace(/\s+/g, "").toLowerCase() || "";
+
+            const isTextColumn =
+              normalizedHeader.includes("전화") ||
+              normalizedHeader.includes("연락") ||
+              normalizedHeader.includes("우편") ||
+              normalizedHeader.includes("코드");
+
+            if (isTextColumn) {
+              cell.numFmt = "@";
+            }
+          });
+        });
+
+        // 엑셀 버퍼 생성
+        const buffer = await wb.xlsx.writeBuffer();
+        const fileName = `${dateStr}_외주발주_${vendor}.xlsx`;
+        zip.file(fileName, buffer);
+      }
+
+      // ZIP 파일 생성
+      const zipBuffer = await zip.generateAsync({type: "nodebuffer"});
+      const zipFileName = `${dateStr}_외주발주.zip`;
+      const encodedZipFileName = encodeURIComponent(zipFileName);
+      const contentDisposition = `attachment; filename="outsource.zip"; filename*=UTF-8''${encodedZipFileName}`;
+
+      const responseHeaders = new Headers();
+      responseHeaders.set("Content-Type", "application/zip");
+      responseHeaders.set("Content-Disposition", contentDisposition);
+
+      return new Response(Buffer.from(zipBuffer), {
+        headers: responseHeaders,
+      });
+    }
+
+    // 데이터를 2차원 배열로 변환 (mapDataToTemplate 함수 사용)
+    let excelData = dataRows.map((row: any) => {
+      // 각 헤더에 대해 mapDataToTemplate을 사용하여 데이터 매핑
+      return headers.map((header: any) => {
+        let value = mapDataToTemplate(row, header, {
+          templateName: templateData.name,
+        });
+
+        // 모든 값을 문자열로 변환 (0 유지)
+        let stringValue = value != null ? String(value) : "";
+
+        // 전화번호가 10-11자리 숫자이고 0으로 시작하지 않으면 앞에 0 추가
+        if (header.includes("전화") || header.includes("연락")) {
+          const numOnly = stringValue.replace(/\D/g, ""); // 숫자만 추출
+          if (
+            (numOnly.length === 10 || numOnly.length === 11) &&
+            !numOnly.startsWith("0")
+          ) {
+            stringValue = "0" + numOnly; // 숫자만 사용하고 0 추가
+          } else if (numOnly.length > 0) {
+            stringValue = numOnly; // 하이픈 등 제거하고 숫자만
+          }
+        }
+
+        // 우편번호가 4-5자리 숫자면 5자리로 맞춤 (앞에 0 추가)
+        if (header.includes("우편")) {
+          const numOnly = stringValue.replace(/\D/g, "");
+          if (numOnly.length >= 4 && numOnly.length <= 5) {
+            stringValue = numOnly.padStart(5, "0");
+          }
+        }
+
+        return stringValue;
+      });
+    });
+
+    // 정렬: 상품명 오름차순 후 수취인명 오름차순
+    excelData = sortExcelData(excelData, columnOrder);
+
+    // 정렬된 데이터를 엑셀에 추가
+    excelData.forEach((rowDatas) => {
       const appendRow = sheet.addRow(rowDatas);
 
+      // 전화번호, 우편번호, 코드 관련 필드는 텍스트 형식으로 설정 (앞자리 0 유지)
       appendRow.eachCell((cell: any, colNum: any) => {
-        if (colNum === 1) {
-          cell.font = {
-            color: {argb: "ff1890ff"},
-          };
-        }
-        if (colNum === 3) {
-          cell.numFmt = "0,000";
+        const headerName = headers[colNum - 1];
+        const normalizedHeader =
+          headerName?.replace(/\s+/g, "").toLowerCase() || "";
+
+        const isTextColumn =
+          normalizedHeader.includes("전화") ||
+          normalizedHeader.includes("연락") ||
+          normalizedHeader.includes("우편") ||
+          normalizedHeader.includes("코드");
+
+        if (isTextColumn) {
+          cell.numFmt = "@"; // 텍스트 형식
         }
       });
     });
