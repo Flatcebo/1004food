@@ -21,7 +21,7 @@ export default function FileUploadArea({
 }: FileUploadAreaProps) {
   return (
     <div
-      className={`border-2 border-dashed rounded-lg px-8 py-10 flex flex-col items-center justify-center transition-colors hover:bg-[#9a9a9a51] ${
+      className={`w-full border-2 border-dashed rounded-lg px-8 py-16 flex flex-col items-center justify-center transition-colors hover:bg-[#9a9a9a51] ${
         dragActive
           ? "border-blue-500 bg-blue-50"
           : "border-gray-300 bg-gray-100"
@@ -49,4 +49,3 @@ export default function FileUploadArea({
     </div>
   );
 }
-

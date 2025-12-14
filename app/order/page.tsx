@@ -1,21 +1,25 @@
 "use client";
 
-import DirectInputModal from "@/components/DirectInputModal";
+import {useEffect} from "react";
+import {useUploadStore} from "@/stores/uploadStore";
+import {useLoadingStore} from "@/stores/loadingStore";
+import ModalTable from "@/components/ModalTable";
 import FileUploadArea from "@/components/FileUploadArea";
 import UploadedFilesList from "@/components/UploadedFilesList";
+import SavedDataTable from "@/components/SavedDataTable";
+import DataFilters from "@/components/DataFilters";
+import DirectInputModal from "@/components/DirectInputModal";
+import DataTable from "@/components/DataTable";
+import LoadingOverlay from "@/components/LoadingOverlay";
+import {useUploadData} from "@/hooks/useUploadData";
+import {useFileValidation} from "@/hooks/useFileValidation";
+import {useFileMessageHandler} from "@/hooks/useFileMessageHandler";
 import {useAutoMapping} from "@/hooks/useAutoMapping";
 import {useFileSave} from "@/hooks/useFileSave";
-import {useFileValidation} from "@/hooks/useFileValidation";
-import {useUploadData} from "@/hooks/useUploadData";
-import {useUploadStore} from "@/stores/uploadStore";
-import {fieldNameMap} from "@/constants/fieldMappings";
-import DataTable from "@/components/DataTable";
-import {useEffect} from "react";
 import {useDragAndDrop} from "@/hooks/useDragAndDrop";
-import {useLoadingStore} from "@/stores/loadingStore";
-import LoadingOverlay from "@/components/LoadingOverlay";
+import {fieldNameMap} from "@/constants/fieldMappings";
 
-export default function Page() {
+export default function UploadPage() {
   const {
     tableData,
     setTableData,
@@ -55,23 +59,10 @@ export default function Page() {
     handleFileChange,
   } = useUploadStore();
 
+  // 로딩 상태
   const {isLoading, title, message, subMessage} = useLoadingStore();
 
-  const {fileValidationStatus, updateValidationStatus} = useFileValidation(
-    uploadedFiles,
-    productCodeMap
-  );
-
-  const {codesOriginRef} = useAutoMapping({
-    tableData,
-    codes,
-    productCodeMap,
-    headerIndex,
-    setTableData,
-    setProductCodeMap,
-    setHeaderIndex,
-  });
-
+  // 저장된 데이터 관련 훅
   const {
     filters,
     selectedType,
@@ -122,24 +113,113 @@ export default function Page() {
     fetchSavedData,
   } = useUploadData();
 
-  const resetData = () => {
-    setTableData([]);
-    setFileName("");
-    setProductCodeMap({});
-    setUploadedFiles([]);
-    setHeaderIndex(null);
-    setRecommendIdx(null);
-    setRecommendList([]);
-    codesOriginRef.current = [];
+  // 필터 제거 함수
+  const handleRemoveFilter = (filterType: string) => {
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(
+      today.getMonth() + 1
+    ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+    switch (filterType) {
+      case "type":
+        setSelectedType("");
+        setAppliedType("");
+        break;
+      case "postType":
+        setSelectedPostType("");
+        setAppliedPostType("");
+        break;
+      case "vendor":
+        setSelectedVendor("");
+        setAppliedVendor("");
+        break;
+      case "orderStatus":
+        setSelectedOrderStatus("공급중");
+        setAppliedOrderStatus("공급중");
+        break;
+      case "search":
+        setSearchField("");
+        setSearchValue("");
+        setAppliedSearchField("");
+        setAppliedSearchValue("");
+        break;
+      case "dateRange":
+        setUploadTimeFrom(todayStr);
+        setUploadTimeTo(todayStr);
+        setAppliedUploadTimeFrom(todayStr);
+        setAppliedUploadTimeTo(todayStr);
+        break;
+    }
   };
 
-  const {handleSaveWithConfirmedFiles} = useFileSave({
-    confirmedFiles,
+  // 파일 검증 관련 훅
+  const {fileValidationStatus, updateValidationStatus} = useFileValidation(
     uploadedFiles,
+    productCodeMap
+  );
+
+  // 검증이 통과한 파일들을 자동으로 확인 처리
+  useEffect(() => {
+    if (uploadedFiles.length === 0) return;
+
+    // 약간의 지연을 두어 검증 완료 후 실행
+    const timeoutId = setTimeout(() => {
+      uploadedFiles.forEach((file) => {
+        const isValid = fileValidationStatus[file.id] !== false; // 기본값은 true
+        const isConfirmed = confirmedFiles.has(file.id);
+
+        // 검증이 통과했고 아직 확인되지 않은 파일만 자동 확인
+        if (isValid && !isConfirmed) {
+          // sessionStorage에서 최신 파일 데이터 가져오기
+          const storedFile = sessionStorage.getItem(`uploadedFile_${file.id}`);
+          let fileToConfirm = file;
+
+          if (storedFile) {
+            try {
+              fileToConfirm = JSON.parse(storedFile);
+            } catch (error) {
+              console.error("파일 데이터 파싱 실패:", error);
+            }
+          }
+
+          // sessionStorage에 최신 상태 저장 (확인 처리와 동일한 로직)
+          try {
+            sessionStorage.setItem(
+              `uploadedFile_${file.id}`,
+              JSON.stringify(fileToConfirm)
+            );
+          } catch (error) {
+            console.error("sessionStorage 업데이트 실패:", error);
+          }
+
+          // 자동 확인 처리
+          confirmFile(file.id);
+        }
+      });
+    }, 500); // 검증 완료 후 약간의 지연
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [fileValidationStatus, uploadedFiles, confirmedFiles, confirmFile]);
+
+  // 메시지 핸들러 훅
+  useFileMessageHandler({
+    uploadedFiles,
+    setUploadedFiles,
+    confirmFile,
+    updateValidationStatus,
+  });
+
+  // 자동 매핑 훅
+  const {codesOriginRef} = useAutoMapping({
+    tableData,
     codes,
-    fetchSavedData,
-    resetData,
-    unconfirmFile,
+    productCodeMap,
+    headerIndex,
+    setTableData,
+    setProductCodeMap,
+    setHeaderIndex,
   });
 
   // 각 업로드된 파일에 자동 매핑 적용
@@ -290,37 +370,11 @@ export default function Page() {
     loadProducts();
   }, [isModalOpen, setCodes]);
 
+  // 드래그 앤 드롭 훅
   const {handleDrop, handleDragOver, handleDragLeave} = useDragAndDrop({
     setDragActive,
     handleFileChange,
   });
-
-  // const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-  //   e.preventDefault();
-  //   setDragActive(false);
-  // };
-
-  // const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-  //   e.preventDefault();
-  //   setDragActive(true);
-  // };
-
-  // const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-  //   e.preventDefault();
-  //   setDragActive(false);
-  // };
-
-  const handleFileDelete = (fileId: string) => {
-    removeUploadedFile(fileId);
-    sessionStorage.removeItem(`uploadedFile_${fileId}`);
-  };
-
-  const handleResetData = () => {
-    setTableData([]);
-    setFileName("");
-    setProductCodeMap({});
-    setHeaderIndex(null);
-  };
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
@@ -343,12 +397,46 @@ export default function Page() {
     });
   };
 
+  // 파일 저장 훅
+  const resetData = () => {
+    setTableData([]);
+    setFileName("");
+    setProductCodeMap({});
+    setUploadedFiles([]);
+    setHeaderIndex(null);
+    setRecommendIdx(null);
+    setRecommendList([]);
+    codesOriginRef.current = [];
+  };
+
+  const {handleSaveWithConfirmedFiles} = useFileSave({
+    confirmedFiles,
+    uploadedFiles,
+    codes,
+    fetchSavedData,
+    resetData,
+    unconfirmFile,
+  });
+
+  const handleFileDelete = (fileId: string) => {
+    removeUploadedFile(fileId);
+    sessionStorage.removeItem(`uploadedFile_${fileId}`);
+  };
+
+  const handleResetData = () => {
+    setTableData([]);
+    setFileName("");
+    setProductCodeMap({});
+    setHeaderIndex(null);
+  };
+
+  // 유효하지 않은 파일이 있는지 체크 (빨간 배경이 있는 파일)
   const hasInvalidFiles = uploadedFiles.some(
     (file) => fileValidationStatus[file.id] === false
   );
 
   return (
-    <div className="w-full h-full flex flex-col items-start justify-start p-4">
+    <div className="w-full h-full flex flex-col items-start justify-start pt-4 px-4">
       {/* 업로드 로딩 오버레이 */}
       <LoadingOverlay
         isOpen={isLoading}
@@ -357,7 +445,88 @@ export default function Page() {
         subMessage={subMessage}
       />
 
-      <div className="w-full h-full flex flex-col items-center justify-start bg-white p-8 rounded-lg shadow-md">
+      <div className="w-full bg-[#ffffff] rounded-lg px-8 shadow-md pb-12">
+        {/* 저장된 데이터 테이블 */}
+        <div className="w-full mt-6">
+          <div className="mb-4 flex gap-4 items-center justify-between">
+            <h2 className="text-xl font-bold">저장된 데이터</h2>
+
+            <div className="flex gap-2 items-center mb-0">
+              <button
+                className="px-5 py-2 bg-blue-600 text-white text-sm font-bold rounded hover:bg-blue-800"
+                onClick={() => setIsModalOpen(true)}
+              >
+                엑셀 업로드
+              </button>
+
+              <button
+                className="px-5 py-2 bg-gray-500 text-white text-sm rounded hover:bg-gray-600"
+                onClick={fetchSavedData}
+                disabled={loading}
+              >
+                새로고침
+              </button>
+            </div>
+          </div>
+
+          <DataFilters
+            filters={filters}
+            selectedType={selectedType}
+            selectedPostType={selectedPostType}
+            selectedVendor={selectedVendor}
+            searchField={searchField}
+            searchValue={searchValue}
+            uploadTimeFrom={uploadTimeFrom}
+            uploadTimeTo={uploadTimeTo}
+            itemsPerPage={itemsPerPage}
+            onTypeChange={setSelectedType}
+            onPostTypeChange={setSelectedPostType}
+            onVendorChange={setSelectedVendor}
+            selectedOrderStatus={selectedOrderStatus}
+            onOrderStatusChange={setSelectedOrderStatus}
+            onSearchFieldChange={setSearchField}
+            onSearchValueChange={setSearchValue}
+            onUploadTimeFromChange={setUploadTimeFrom}
+            onUploadTimeToChange={setUploadTimeTo}
+            onItemsPerPageChange={setItemsPerPage}
+            onApplySearchFilter={applySearchFilter}
+            onResetFilters={resetFilters}
+          />
+
+          <SavedDataTable
+            loading={loading}
+            tableRows={tableRows}
+            headers={headers}
+            paginatedRows={paginatedRows}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalCount={totalCount}
+            onPageChange={setCurrentPage}
+            onDataUpdate={fetchSavedData}
+            selectedType={appliedType}
+            selectedPostType={appliedPostType}
+            selectedVendor={appliedVendor}
+            selectedOrderStatus={appliedOrderStatus}
+            appliedSearchField={appliedSearchField}
+            appliedSearchValue={appliedSearchValue}
+            uploadTimeFrom={appliedUploadTimeFrom}
+            uploadTimeTo={appliedUploadTimeTo}
+            onRemoveFilter={handleRemoveFilter}
+          />
+        </div>
+      </div>
+
+      <ModalTable
+        open={isModalOpen}
+        onClose={handleCloseModal}
+        onSubmit={async () => {
+          const success = await handleSaveWithConfirmedFiles();
+          if (success) {
+            handleCloseModal();
+          }
+        }}
+        disabled={hasInvalidFiles}
+      >
         <FileUploadArea
           dragActive={dragActive}
           fileInputRef={fileInputRef}
@@ -385,6 +554,7 @@ export default function Page() {
           onValueChange={setDirectInputValue}
         />
 
+        {/* 테이블 데이터 표시 */}
         {uploadedFiles.length === 0 && (
           <DataTable
             tableData={tableData}
@@ -458,28 +628,7 @@ export default function Page() {
             onCloseRecommend={() => setRecommendIdx(null)}
           />
         )}
-
-        <div className="relative bottom-0 w-full h-[80px] flex flex-col items-end gap-[8px] mt-4">
-          <div className="flex flex-row items-center justify-end gap-[16px] text-white font-semibold">
-            <button
-              onSubmit={async () => {
-                const success = await handleSaveWithConfirmedFiles();
-                if (success) {
-                  handleCloseModal();
-                }
-              }}
-              disabled={hasInvalidFiles}
-              className={`px-[32px] py-[10px] rounded-md transition-colors ${
-                hasInvalidFiles
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-[#1ca2fb] hover:bg-[#1ca2fba0]"
-              }`}
-            >
-              Upload
-            </button>
-          </div>
-        </div>
-      </div>
+      </ModalTable>
     </div>
   );
 }

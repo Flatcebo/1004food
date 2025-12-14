@@ -4,14 +4,39 @@ import Image from "next/image";
 import Link from "next/link";
 import {usePathname} from "next/navigation";
 
+const menuNames: {path: string; name: string}[] = [
+  // {
+  //   path: "/",
+  //   name: "홈",
+  // },
+  {
+    path: "/upload",
+    name: "발주서 업로드",
+  },
+  {
+    path: "/order",
+    name: "주문 리스트",
+  },
+  {
+    path: "/products",
+    name: "상품 관리",
+  },
+  {
+    path: "/upload/templates",
+    name: "양식 템플릿 관리",
+  },
+];
+
 export default function SideBar() {
   const pathname = usePathname();
+
   const isUploadActive =
     pathname === "/upload" ||
     pathname?.startsWith("/upload/view") ||
     pathname?.startsWith("/upload/preview");
-  const isTemplatesActive = pathname === "/upload/templates";
+  const isOrderActive = pathname === "/order";
   const isProductsActive = pathname === "/products";
+  const isTemplatesActive = pathname === "/upload/templates";
 
   return (
     <div className="w-60 h-full bg-[#25323c] shrink-0">
@@ -31,7 +56,20 @@ export default function SideBar() {
 
         <div className="w-full flex-1 flex mx-4 my-6">
           <div className="w-full flex flex-col items-start font-semibold text-[16px] gap-2">
-            <Link
+            {menuNames.map((menu, key) => (
+              <Link
+                key={key}
+                href={menu.path}
+                className={`w-full px-4 py-2 rounded-lg transition-all duration-200 ${
+                  pathname === menu.path
+                    ? "text-[#888eab]"
+                    : "hover:bg-gray-700 hover:translate-x-1 active:scale-95 text-white"
+                }`}
+              >
+                <span>{menu.name}</span>
+              </Link>
+            ))}
+            {/* <Link
               href="/upload"
               className={`w-full px-4 py-2 rounded-lg transition-all duration-200 ${
                 isUploadActive
@@ -62,7 +100,7 @@ export default function SideBar() {
               }`}
             >
               <span>상품 관리</span>
-            </Link>
+            </Link> */}
           </div>
         </div>
 

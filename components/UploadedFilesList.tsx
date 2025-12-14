@@ -17,33 +17,38 @@ export default function UploadedFilesList({
   onFileDelete,
   onResetData,
 }: UploadedFilesListProps) {
-  if (uploadedFiles.length === 0) return null;
+  // if (uploadedFiles.length === 0) return null;
 
   return (
-    <div className="w-full mt-4">
+    <div className="w-full h-auto mt-4">
       <div className="font-bold text-lg mb-2 text-black flex flex-row justify-between">
         <span>업로드된 파일 목록 ({uploadedFiles.length}개)</span>
         <span>
-          전체{" "}
-          {uploadedFiles.reduce((sum, file) => sum + file.rowCount, 0)}건
+          전체 {uploadedFiles.reduce((sum, file) => sum + file.rowCount, 0)}건
         </span>
       </div>
-      <div className="border border-gray-300 rounded-lg overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
+      <div className="w-full h-[500px] border border-gray-300 rounded-lg overflow-y-auto">
+        <table className="w-full text-sm border-collapse">
+          <thead className="sticky top-0 z-10">
             <tr className="bg-gray-100">
-              <th className="border border-gray-300 px-4 py-2 text-left">
+              <th className="border border-gray-300 px-4 py-2 text-center w-[200px]">
+                업체명
+              </th>
+              <th className="border border-gray-300 px-4 py-2 text-center w-[160px]">
+                업로드 일시
+              </th>
+              <th className="border border-gray-300 px-4 py-2 text-center">
                 파일명
               </th>
-              <th className="border border-gray-300 px-4 py-2 text-center">
+              <th className="border border-gray-300 px-4 py-2 text-center w-[100px]">
                 건수
               </th>
-              <th className="border border-gray-300 px-4 py-2 text-center">
+              <th className="border border-gray-300 px-4 py-2 text-center w-[160px]">
                 작업
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="h-full">
             {uploadedFiles.map((file) => {
               const isValid = fileValidationStatus[file.id] !== false; // 기본값은 true
               return (
@@ -61,6 +66,12 @@ export default function UploadedFilesList({
                     }
                   }}
                 >
+                  <td className="border border-gray-300 px-4 py-2">
+                    {/* {file.venderName} */}
+                  </td>
+                  <td className="border border-gray-300 px-4 py-2">
+                    {/* {file.uploadTime} */}
+                  </td>
                   <td className="border border-gray-300 px-4 py-2">
                     {file.fileName}
                   </td>
@@ -119,4 +130,3 @@ export default function UploadedFilesList({
     </div>
   );
 }
-
