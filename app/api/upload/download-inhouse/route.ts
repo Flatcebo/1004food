@@ -214,6 +214,58 @@ export async function POST(request: NextRequest) {
       dataRows = allData.map((r: any) => r.row_data || {});
     }
 
+    // 매핑코드별 가격, 사방넷명, 업체명 정보 조회
+    const productCodes = [
+      ...new Set(dataRows.map((row: any) => row.매핑코드).filter(Boolean)),
+    ];
+    const productSalePriceMap: {[code: string]: number | null} = {};
+    const productSabangNameMap: {[code: string]: string | null} = {};
+    const productVendorNameMap: {[code: string]: string | null} = {};
+
+    if (productCodes.length > 0) {
+      const products = await sql`
+        SELECT code, sale_price, sabang_name as "sabangName", purchase as "vendorName"
+        FROM products
+        WHERE code = ANY(${productCodes})
+      `;
+
+      products.forEach((p: any) => {
+        if (p.code) {
+          if (p.sale_price !== null && p.sale_price !== undefined) {
+            productSalePriceMap[p.code] = p.sale_price;
+          }
+          if (p.sabangName !== undefined) {
+            productSabangNameMap[p.code] = p.sabangName;
+          }
+          if (p.vendorName !== undefined) {
+            productVendorNameMap[p.code] = p.vendorName;
+          }
+        }
+      });
+    }
+
+    // 데이터에 공급가와 사방넷명 주입
+    dataRows.forEach((row: any) => {
+      if (row.매핑코드) {
+        if (productSalePriceMap[row.매핑코드] !== undefined) {
+          const salePrice = productSalePriceMap[row.매핑코드];
+          if (salePrice !== null) {
+            row["공급가"] = salePrice;
+          }
+        }
+        if (productSabangNameMap[row.매핑코드] !== undefined) {
+          const sabangName = productSabangNameMap[row.매핑코드];
+          if (
+            sabangName !== null &&
+            sabangName !== undefined &&
+            String(sabangName).trim() !== ""
+          ) {
+            row["사방넷명"] = sabangName;
+          }
+        }
+      }
+    });
+
     // 데이터를 2차원 배열로 변환 (mapDataToTemplate 함수 사용)
     let excelData = dataRows.map((row: any) => {
       // 각 헤더에 대해 mapDataToTemplate을 사용하여 데이터 매핑

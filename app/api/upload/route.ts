@@ -377,13 +377,17 @@ export async function POST(request: NextRequest) {
         // 데이터를 2차원 배열로 변환
         let excelData = vendorRows.map((row: any) => {
           return headers.map((header: any) => {
-            let value = mapDataToTemplate(row, header, {
+            // header를 문자열로 변환
+            const headerStr =
+              typeof header === "string" ? header : String(header || "");
+
+            let value = mapDataToTemplate(row, headerStr, {
               templateName: templateData.name,
             });
 
             let stringValue = value != null ? String(value) : "";
 
-            if (header.includes("전화") || header.includes("연락")) {
+            if (headerStr.includes("전화") || headerStr.includes("연락")) {
               const numOnly = stringValue.replace(/\D/g, "");
               if (
                 (numOnly.length === 10 || numOnly.length === 11) &&
@@ -395,7 +399,7 @@ export async function POST(request: NextRequest) {
               }
             }
 
-            if (header.includes("우편")) {
+            if (headerStr.includes("우편")) {
               const numOnly = stringValue.replace(/\D/g, "");
               if (numOnly.length >= 4 && numOnly.length <= 5) {
                 stringValue = numOnly.padStart(5, "0");
@@ -415,8 +419,14 @@ export async function POST(request: NextRequest) {
 
           appendRow.eachCell((cell: any, colNum: any) => {
             const headerName = headers[colNum - 1];
-            const normalizedHeader =
-              headerName?.replace(/\s+/g, "").toLowerCase() || "";
+            // headerName을 문자열로 변환
+            const headerStr =
+              typeof headerName === "string"
+                ? headerName
+                : String(headerName || "");
+            const normalizedHeader = headerStr
+              .replace(/\s+/g, "")
+              .toLowerCase();
 
             const isTextColumn =
               normalizedHeader.includes("전화") ||
@@ -451,11 +461,67 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // 일반 발주서: 매핑코드별 가격, 사방넷명 정보 조회
+    const productCodes = [
+      ...new Set(dataRows.map((row: any) => row.매핑코드).filter(Boolean)),
+    ];
+    const productSalePriceMap: {[code: string]: number | null} = {};
+    const productSabangNameMap: {[code: string]: string | null} = {};
+    const productVendorNameMap: {[code: string]: string | null} = {};
+
+    if (productCodes.length > 0) {
+      const products = await sql`
+        SELECT code, sale_price, sabang_name as "sabangName", purchase as "vendorName"
+        FROM products
+        WHERE code = ANY(${productCodes})
+      `;
+
+      products.forEach((p: any) => {
+        if (p.code) {
+          if (p.sale_price !== null && p.sale_price !== undefined) {
+            productSalePriceMap[p.code] = p.sale_price;
+          }
+          if (p.sabangName !== undefined) {
+            productSabangNameMap[p.code] = p.sabangName;
+          }
+          if (p.vendorName !== undefined) {
+            productVendorNameMap[p.code] = p.vendorName;
+          }
+        }
+      });
+    }
+
+    // 데이터에 공급가와 사방넷명 주입
+    dataRows.forEach((row: any) => {
+      if (row.매핑코드) {
+        if (productSalePriceMap[row.매핑코드] !== undefined) {
+          const salePrice = productSalePriceMap[row.매핑코드];
+          if (salePrice !== null) {
+            row["공급가"] = salePrice;
+          }
+        }
+        if (productSabangNameMap[row.매핑코드] !== undefined) {
+          const sabangName = productSabangNameMap[row.매핑코드];
+          if (
+            sabangName !== null &&
+            sabangName !== undefined &&
+            String(sabangName).trim() !== ""
+          ) {
+            row["사방넷명"] = sabangName;
+          }
+        }
+      }
+    });
+
     // 데이터를 2차원 배열로 변환 (mapDataToTemplate 함수 사용)
     let excelData = dataRows.map((row: any) => {
       // 각 헤더에 대해 mapDataToTemplate을 사용하여 데이터 매핑
       return headers.map((header: any) => {
-        let value = mapDataToTemplate(row, header, {
+        // header를 문자열로 변환
+        const headerStr =
+          typeof header === "string" ? header : String(header || "");
+
+        let value = mapDataToTemplate(row, headerStr, {
           templateName: templateData.name,
         });
 
@@ -463,7 +529,7 @@ export async function POST(request: NextRequest) {
         let stringValue = value != null ? String(value) : "";
 
         // 전화번호가 10-11자리 숫자이고 0으로 시작하지 않으면 앞에 0 추가
-        if (header.includes("전화") || header.includes("연락")) {
+        if (headerStr.includes("전화") || headerStr.includes("연락")) {
           const numOnly = stringValue.replace(/\D/g, ""); // 숫자만 추출
           if (
             (numOnly.length === 10 || numOnly.length === 11) &&
@@ -476,7 +542,7 @@ export async function POST(request: NextRequest) {
         }
 
         // 우편번호가 4-5자리 숫자면 5자리로 맞춤 (앞에 0 추가)
-        if (header.includes("우편")) {
+        if (headerStr.includes("우편")) {
           const numOnly = stringValue.replace(/\D/g, "");
           if (numOnly.length >= 4 && numOnly.length <= 5) {
             stringValue = numOnly.padStart(5, "0");
@@ -497,8 +563,12 @@ export async function POST(request: NextRequest) {
       // 전화번호, 우편번호, 코드 관련 필드는 텍스트 형식으로 설정 (앞자리 0 유지)
       appendRow.eachCell((cell: any, colNum: any) => {
         const headerName = headers[colNum - 1];
-        const normalizedHeader =
-          headerName?.replace(/\s+/g, "").toLowerCase() || "";
+        // headerName을 문자열로 변환
+        const headerStr =
+          typeof headerName === "string"
+            ? headerName
+            : String(headerName || "");
+        const normalizedHeader = headerStr.replace(/\s+/g, "").toLowerCase();
 
         const isTextColumn =
           normalizedHeader.includes("전화") ||
