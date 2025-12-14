@@ -261,8 +261,6 @@ export async function POST(request: NextRequest) {
       const workbook = new ExcelJS.Workbook();
       let worksheet: ExcelJS.Worksheet;
 
-      delete (workbook as any)._themes;
-
       if (templateData.originalFile) {
         // 원본 파일 로드
         const originalBuffer = Buffer.from(templateData.originalFile, "base64");
@@ -316,7 +314,12 @@ export async function POST(request: NextRequest) {
         const lastRow = worksheet.rowCount;
         if (lastRow > 1) {
           for (let rowNum = lastRow; rowNum > 1; rowNum--) {
-            worksheet.spliceRows(rowNum, 1);
+            worksheet.eachRow((row, rowNumber) => {
+              if (rowNumber > 1) {
+                row.values = [];
+              }
+            });
+            // worksheet.spliceRows(2, worksheet.rowCount);
           }
         }
 
@@ -368,15 +371,15 @@ export async function POST(request: NextRequest) {
 
             // 1번 열(A열) 배경색 설정
             if (colNumber === 1) {
-              if (!cell.fill || (cell.fill as any).type !== "pattern") {
-                cell.fill = {
-                  type: "pattern",
-                  pattern: "solid",
-                  fgColor: {argb: "FFDAEDF3"},
-                };
-              } else {
-                (cell.fill as any).fgColor = {argb: "FFDAEDF3"};
-              }
+              // if (!cell.fill || (cell.fill as any).type !== "pattern") {
+              cell.fill = {
+                type: "pattern",
+                pattern: "solid",
+                fgColor: {argb: "FFDAEDF3"},
+              };
+              // } else {
+              // (cell.fill as any).fgColor = {argb: "FFDAEDF3"};
+              // }
             }
           });
         });
@@ -412,8 +415,8 @@ export async function POST(request: NextRequest) {
 
       // 엑셀 파일을 버퍼로 생성
       const buffers = await workbook.xlsx.writeBuffer({
-        // useStyles: false,
-        // useSharedStrings: false,
+        useStyles: true,
+        useSharedStrings: true,
       });
       const buffer = new Uint8Array(buffers);
 
