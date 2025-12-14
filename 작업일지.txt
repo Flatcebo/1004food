@@ -86,3 +86,11 @@ CJ : 발송인 / 전번 / 주소 / 수취인 / 전번1 / 전번2 / 우편 / 주�
 ProductsTable.tsx 여기에 되어있는 로딩 처리를 발주서 업로드 페이지의 테이블에도 적용
 
 그리고 가능하면 테이블 컴포넌트가 두갠데 하나의 컴포넌트로 사용 가능하면 재사용 가능하게 처리
+
+- 엑셀 다운로드 시 "내용에 문제가 있습니다" 복구 알림 오류 해결
+  * excelCompatibility.ts에 워크시트/워크북 정리 함수 강화
+    - cleanWorksheetForExcel: 시트 보호, 조건부 서식, 그림, 테이블, 피벗 등 제거
+    - cleanWorkbookForExcel: 테마, Named Range, VBA, 외부 링크, 매크로 등 제거
+    - finalCleanupWorkbook: 쓰기 직전 최종 정리 (스타일, 미디어, 코멘트 등)
+  * initializeWorkbookProperties: 워크북 속성 안전한 값으로 초기화
+  * download-inhouse/outsource: 워크북 로드 직후 즉시 정리 + 쓰기 전 재정리

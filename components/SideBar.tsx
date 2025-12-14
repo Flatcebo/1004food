@@ -6,7 +6,10 @@ import {usePathname} from "next/navigation";
 
 export default function SideBar() {
   const pathname = usePathname();
-  const isUploadActive = pathname === "/upload" || pathname?.startsWith("/upload/view") || pathname?.startsWith("/upload/preview");
+  const isUploadActive =
+    pathname === "/upload" ||
+    pathname?.startsWith("/upload/view") ||
+    pathname?.startsWith("/upload/preview");
   const isTemplatesActive = pathname === "/upload/templates";
   const isProductsActive = pathname === "/products";
 
@@ -62,6 +65,8 @@ export default function SideBar() {
             </Link>
           </div>
         </div>
+
+        <div className="w-full text-center text-sm text-white py-2">v0.0.1</div>
       </div>
     </div>
   );
