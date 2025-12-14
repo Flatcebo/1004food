@@ -394,10 +394,10 @@ export async function POST(request: NextRequest) {
       removeDataValidations: false,
     });
 
-    // 엑셀 파일 생성
+    // 엑셀 파일 생성 (스타일 포함)
     const buffer = await workbook.xlsx.writeBuffer({
-      useStyles: false,
-      useSharedStrings: false,
+      useStyles: true, // 스타일 정보 포함
+      useSharedStrings: true, // 문자열 공유 (파일 크기 최적화)
     });
 
     // 파일명 생성

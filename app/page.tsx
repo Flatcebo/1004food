@@ -55,6 +55,70 @@ const headers = ["주문번호", "메뉴", "가격", "주문날짜"];
 const headerWidths = [40, 16, 16, 24];
 
 function App() {
+  const handleDownload = async (rows: any) => {
+    try {
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          templateId: 8,
+          rowIds: [],
+          filters: {},
+          rows: rows,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "다운로드 실패");
+      }
+
+      // 파일 다운로드
+      const blob = await response.blob();
+      const contentDisposition = response.headers.get("Content-Disposition");
+      let fileName = "download.xlsx";
+
+      if (contentDisposition) {
+        const filenameStarMatch = contentDisposition.match(
+          /filename\*\s*=\s*UTF-8''([^;]+)/i
+        );
+        if (filenameStarMatch?.[1]) {
+          try {
+            fileName = decodeURIComponent(filenameStarMatch[1]);
+          } catch (_) {
+            fileName = filenameStarMatch[1];
+          }
+        } else {
+          const filenameMatch = contentDisposition.match(
+            /filename\s*=\s*\"?([^\";]+)\"?/i
+          );
+          if (filenameMatch?.[1]) {
+            fileName = filenameMatch[1];
+          }
+        }
+      }
+
+      // file-saver 사용 (이미 import되어 있다고 가정)
+      // saveAs(blob, fileName);
+
+      // 또는 직접 다운로드
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+
+      console.log("다운로드 완료:", fileName);
+    } catch (error) {
+      console.error("다운로드 실패:", error);
+    }
+  };
+
   const downloadList = async (rows: any) => {
     try {
       //console.log(rows);
@@ -105,7 +169,7 @@ function App() {
   return (
     <div className="App">
       <button
-        onClick={() => downloadList(list)}
+        onClick={() => handleDownload(list)}
         style={{
           padding: "4px 8px",
           background: "#0f8107",

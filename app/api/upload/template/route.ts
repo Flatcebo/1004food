@@ -25,10 +25,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 엑셀 파일 읽기
+    // 엑셀 파일 읽기 - XLSX 사용 (헤더 추출용)
     const arrayBuffer = await file.arrayBuffer();
     const data = new Uint8Array(arrayBuffer);
     const workbook = XLSX.read(data, {type: "array", cellStyles: true});
+    
+    if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+      return NextResponse.json(
+        {success: false, error: "워크시트가 없습니다."},
+        {status: 400}
+      );
+    }
+
     const firstSheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[firstSheetName];
 
@@ -38,14 +46,21 @@ export async function POST(request: NextRequest) {
       defval: "",
     }) as any[][];
 
-    if (!raw.length) {
+    if (!raw.length || raw[0].length === 0) {
       return NextResponse.json(
-        {success: false, error: "파일이 비어있습니다."},
+        {success: false, error: "파일이 비어있거나 헤더가 없습니다."},
         {status: 400}
       );
     }
 
-    const headers = raw[0] as string[];
+    const headers = raw[0].filter((h: any) => h !== null && h !== undefined && String(h).trim() !== "") as string[];
+
+    if (headers.length === 0) {
+      return NextResponse.json(
+        {success: false, error: "유효한 헤더가 없습니다."},
+        {status: 400}
+      );
+    }
 
     // 셀 너비 정보 추출
     const columnWidths: {[key: string]: number} = {};
@@ -61,7 +76,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 원본 파일을 Base64로 인코딩하여 저장
+    // 원본 파일을 Base64로 인코딩하여 저장 (모든 스타일 정보 보존)
     const fileBase64 = Buffer.from(arrayBuffer).toString("base64");
 
     // 템플릿 정보 저장
@@ -70,7 +85,7 @@ export async function POST(request: NextRequest) {
       headers: headers,
       columnWidths: columnWidths,
       columnOrder: headers,
-      originalFile: fileBase64, // 원본 파일 저장
+      originalFile: fileBase64, // 원본 파일 저장 (색상, 폰트, 테두리 등 모든 스타일 포함)
       worksheetName: firstSheetName,
     };
 

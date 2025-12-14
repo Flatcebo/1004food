@@ -9,66 +9,54 @@ export const EXCEL_STYLE_CONSTANTS = {
   redColor: "FFFF0000",
 } as const;
 
-// 셀 스타일 복사 함수
+// 셀 스타일 복사 함수 - 모든 스타일 속성을 완전히 복사
 export function copyCellStyle(
   sourceCell: ExcelJS.Cell,
   targetCell: ExcelJS.Cell
 ): void {
-  if (!sourceCell.style) return;
+  if (!sourceCell || !targetCell) return;
 
-  const sourceStyle = sourceCell.style as any;
+  const sourceStyle = sourceCell.style;
+  if (!sourceStyle) return;
 
-  // fill (배경색) 복사
-  if (sourceStyle.fill) {
-    try {
-      targetCell.style.fill = JSON.parse(JSON.stringify(sourceStyle.fill));
-    } catch (e) {
-      targetCell.style.fill = sourceStyle.fill;
+  // 스타일을 직접 할당하는 방식으로 변경 (더 안정적)
+  try {
+    // fill (배경색) 복사
+    if (sourceStyle.fill) {
+      targetCell.fill = JSON.parse(JSON.stringify(sourceStyle.fill));
     }
-  }
 
-  // font 복사
-  if (sourceStyle.font) {
-    try {
-      targetCell.style.font = JSON.parse(JSON.stringify(sourceStyle.font));
-    } catch (e) {
-      targetCell.style.font = sourceStyle.font;
+    // font (폰트) 복사 - 크기, 색상, 굵기, 기울임, 밑줄 등
+    if (sourceStyle.font) {
+      targetCell.font = JSON.parse(JSON.stringify(sourceStyle.font));
     }
-  }
 
-  // alignment 복사
-  if (sourceStyle.alignment) {
-    try {
-      targetCell.style.alignment = JSON.parse(
-        JSON.stringify(sourceStyle.alignment)
-      );
-    } catch (e) {
-      targetCell.style.alignment = sourceStyle.alignment;
+    // alignment (정렬) 복사
+    if (sourceStyle.alignment) {
+      targetCell.alignment = JSON.parse(JSON.stringify(sourceStyle.alignment));
     }
-  }
 
-  // border 복사
-  if (sourceStyle.border) {
-    try {
-      targetCell.style.border = JSON.parse(JSON.stringify(sourceStyle.border));
-    } catch (e) {
-      targetCell.style.border = sourceStyle.border;
+    // border (테두리) 복사
+    if (sourceStyle.border) {
+      targetCell.border = JSON.parse(JSON.stringify(sourceStyle.border));
     }
-  }
 
-  // numFmt 복사
-  if (sourceStyle.numFmt !== undefined) {
-    targetCell.style.numFmt = sourceStyle.numFmt;
-  }
+    // numFmt (숫자 형식) 복사
+    if (sourceStyle.numFmt !== undefined && sourceStyle.numFmt !== null) {
+      targetCell.numFmt = sourceStyle.numFmt;
+    }
 
-  // protection 복사
-  if (sourceStyle.protection) {
+    // protection (보호) 복사
+    if (sourceStyle.protection) {
+      targetCell.protection = JSON.parse(JSON.stringify(sourceStyle.protection));
+    }
+  } catch (e) {
+    console.error("스타일 복사 중 오류:", e);
+    // 복사 실패 시 직접 할당 시도
     try {
-      targetCell.style.protection = JSON.parse(
-        JSON.stringify(sourceStyle.protection)
-      );
-    } catch (e) {
-      targetCell.style.protection = sourceStyle.protection;
+      targetCell.style = sourceStyle;
+    } catch (e2) {
+      console.error("스타일 직접 할당 실패:", e2);
     }
   }
 }
