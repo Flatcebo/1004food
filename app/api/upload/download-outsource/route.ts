@@ -266,6 +266,9 @@ export async function POST(request: NextRequest) {
         const originalBuffer = Buffer.from(templateData.originalFile, "base64");
         await workbook.xlsx.load(originalBuffer as any);
 
+        // 모든 명명된 범위 제거
+        (workbook.definedNames as any).model = [];
+
         // 워크북 속성 초기화
         if (!workbook.properties) {
           workbook.properties = {date1904: false};
@@ -314,12 +317,9 @@ export async function POST(request: NextRequest) {
         const lastRow = worksheet.rowCount;
         if (lastRow > 1) {
           for (let rowNum = lastRow; rowNum > 1; rowNum--) {
-            worksheet.eachRow((row, rowNumber) => {
-              if (rowNumber > 1) {
-                row.values = [];
-              }
-            });
-            // worksheet.spliceRows(2, worksheet.rowCount);
+            if (worksheet.rowCount > 1) {
+              worksheet.spliceRows(2, worksheet.rowCount - 1);
+            }
           }
         }
 
@@ -339,6 +339,14 @@ export async function POST(request: NextRequest) {
           }
 
           cell.value = header;
+
+          for (
+            let i = columnOrder.length + 1;
+            i <= worksheet.columnCount;
+            i++
+          ) {
+            worksheet.getRow(1).getCell(i).value = null;
+          }
         });
 
         // 열 너비 복원
@@ -367,7 +375,7 @@ export async function POST(request: NextRequest) {
               copyCellStyle(dataCells[colNumber], cell);
             }
 
-            cell.value = cellValue;
+            cell.value = cellValue ?? null;
 
             // 1번 열(A열) 배경색 설정
             if (colNumber === 1) {
