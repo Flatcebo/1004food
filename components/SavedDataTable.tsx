@@ -1,6 +1,7 @@
 "use client";
 
 import {useState, useEffect, useMemo, useCallback, memo} from "react";
+import {saveAs} from "file-saver";
 import CodeEditWindow from "./CodeEditWindow";
 import RowDetailWindow from "./RowDetailWindow";
 import Pagination from "./Pagination";
@@ -211,11 +212,8 @@ const SavedDataTable = memo(function SavedDataTable({
         throw new Error(error.error || "다운로드 실패");
       }
 
-      // 파일 다운로드
+      // 파일 다운로드 (file-saver 사용)
       const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
       const contentDisposition = response.headers.get("Content-Disposition");
       let fileName = isOutsource ? "outsource.zip" : "download.xlsx";
       if (contentDisposition) {
@@ -238,11 +236,7 @@ const SavedDataTable = memo(function SavedDataTable({
           }
         }
       }
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
+      saveAs(blob, fileName);
     } catch (error: any) {
       console.error("다운로드 실패:", error);
       alert(`다운로드 중 오류가 발생했습니다: ${error.message}`);
