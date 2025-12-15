@@ -22,6 +22,11 @@ export function useFileSave({
 }: UseFileSaveProps) {
   const {startLoading, updateLoadingMessage, stopLoading} = useLoadingStore();
 
+  // console.log("codes", codes);
+  // console.log("uploadedFiles", uploadedFiles);
+  // console.log("confirmedFiles", confirmedFiles);
+  // console.log("fetchSavedData", fetchSavedData);
+
   const handleSaveWithConfirmedFiles = useCallback(async () => {
     startLoading("업로드 중...", "업로드 준비 중...");
 
@@ -117,6 +122,31 @@ export function useFileSave({
 
       updateLoadingMessage(`내부 코드 생성 중... (${totalRows}개)`);
 
+      // 업체명 배열 추출 (각 row의 업체명을 순서대로)
+      const vendorNames: string[] = [];
+      filesToUpload.forEach((file: any) => {
+        if (!file.tableData || !file.headerIndex) return;
+
+        const headerRow = file.tableData[0];
+        const vendorIdx = headerRow.findIndex(
+          (h: any) => h === "업체명" || h === "업체"
+        );
+
+        if (vendorIdx === -1) {
+          // 업체명 컬럼이 없으면 빈 문자열로 처리
+          const rowCount = file.tableData.length - 1; // 헤더 제외
+          for (let i = 0; i < rowCount; i++) {
+            vendorNames.push("");
+          }
+        } else {
+          // 각 row의 업체명 추출 (헤더 제외)
+          file.tableData.slice(1).forEach((row: any[]) => {
+            const vendorName = String(row[vendorIdx] || "").trim();
+            vendorNames.push(vendorName);
+          });
+        }
+      });
+
       // 내부 코드 일괄 생성
       let internalCodes: string[] = [];
       try {
@@ -125,7 +155,7 @@ export function useFileSave({
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({count: totalRows}),
+          body: JSON.stringify({vendorNames}),
         });
         const result = await response.json();
         if (!result.success) {
@@ -173,14 +203,34 @@ export function useFileSave({
             rowData["주문상태"] = "공급중"; // 기본값 설정
             rowData["내부코드"] = internalCodes[codeIndex++]; // 내부 코드 추가
 
-            // 신규 상품 정보 수집 (매핑코드가 있고, codes에 없는 경우)
+            // 신규 상품 정보 수집 (매핑코드가 있고, codes에 이름으로 찾을 수 없는 경우)
             if (name && code && !foundCode) {
+              // 매핑코드로 codes에서 상품 정보 찾기
+              const codeMatchedProduct = codes.find(
+                (c: any) => c.code === code
+              );
+
               const productInfo: any = {
                 name: name,
                 code: code,
               };
 
-              // 각 필드에서 정보 추출
+              // 매핑코드로 찾은 상품이 있으면 그 정보를 우선 사용
+              if (codeMatchedProduct) {
+                // 기존 상품의 모든 정보를 복사 (기존 업로드 데이터 유지)
+                Object.keys(codeMatchedProduct).forEach((key) => {
+                  if (
+                    key !== "id" &&
+                    key !== "createdAt" &&
+                    key !== "updatedAt" &&
+                    key !== "name" // name은 현재 row의 name 사용
+                  ) {
+                    productInfo[key] = codeMatchedProduct[key];
+                  }
+                });
+              }
+
+              // row에 있는 데이터로 업데이트 (비어있지 않은 경우에만)
               if (typeIdx >= 0 && row[typeIdx]) {
                 productInfo.type = row[typeIdx];
               }
@@ -235,8 +285,12 @@ export function useFileSave({
           updateLoadingMessage(
             `신규 상품 저장 중... (${newProducts.length}개)`
           );
+
+          // console.log("newProducts", newProducts);
           const {batchCreateProducts} = await import("@/utils/api");
           const productResult = await batchCreateProducts(newProducts);
+
+          // console.log("productResult", productResult);
           if (!productResult.success) {
             console.warn("신규 상품 저장 실패:", productResult.error);
             // 상품 저장 실패해도 업로드는 계속 진행

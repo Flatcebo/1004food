@@ -55,14 +55,15 @@ export default function UploadedFilesList({
                 <tr
                   key={file.id}
                   className={`${
+                    // "bg-red-50 hover:bg-red-100 cursor-pointer"
                     isValid
                       ? "hover:bg-gray-50"
                       : "bg-red-50 hover:bg-red-100 cursor-pointer"
                   }`}
                   onClick={() => {
                     // 유효하지 않은 파일(연한 빨강 배경)만 클릭 가능
+                    onFileClick(file.id);
                     if (!isValid) {
-                      onFileClick(file.id);
                     }
                   }}
                 >
@@ -82,18 +83,18 @@ export default function UploadedFilesList({
                     <div className="flex items-center justify-center gap-2">
                       <button
                         className={`px-3 py-1 text-white text-xs font-semibold rounded transition-colors ${
-                          isValid
-                            ? "bg-gray-400 cursor-not-allowed"
-                            : "bg-blue-500 hover:bg-blue-600"
+                          "bg-blue-500 hover:bg-blue-600"
+                          // isValid
+                          //   ? "bg-gray-400 cursor-not-allowed"
+                          //   : "bg-blue-500 hover:bg-blue-600"
                         }`}
                         onClick={(e) => {
                           e.stopPropagation();
                           // 유효하지 않은 파일(연한 빨강 배경)만 클릭 가능
-                          if (!isValid) {
-                            onFileClick(file.id);
-                          }
+                          onFileClick(file.id);
+                          // if (!isValid) {}
                         }}
-                        disabled={isValid}
+                        // disabled={isValid}
                       >
                         보기
                       </button>

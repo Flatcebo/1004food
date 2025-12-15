@@ -43,7 +43,7 @@ export function useProducts() {
   const [appliedSearchValue, setAppliedSearchValue] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 20;
+  const [itemsPerPage, setItemsPerPage] = useState(20);
 
   // 상품 목록 조회
   const loadProducts = useCallback(async () => {
@@ -157,6 +157,7 @@ export function useProducts() {
     setSearchValue("");
     setAppliedSearchField("");
     setAppliedSearchValue("");
+    setItemsPerPage(20);
     setCurrentPage(1);
   }, []);
 
@@ -183,6 +184,8 @@ export function useProducts() {
     totalPages,
     paginatedProducts,
     filteredProducts,
+    itemsPerPage,
+    setItemsPerPage,
     fetchProducts: loadProducts,
   };
 }

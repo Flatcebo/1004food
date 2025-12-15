@@ -13,11 +13,13 @@ interface ProductFiltersProps {
   selectedCategory: string;
   searchField: string;
   searchValue: string;
+  itemsPerPage: number;
   onTypeChange: (type: string) => void;
   onPostTypeChange: (postType: string) => void;
   onCategoryChange: (category: string) => void;
   onSearchFieldChange: (field: string) => void;
   onSearchValueChange: (value: string) => void;
+  onItemsPerPageChange: (value: number) => void;
   onApplySearchFilter: () => void;
   onResetFilters: () => void;
 }
@@ -27,6 +29,7 @@ export default function ProductFilters(props: ProductFiltersProps) {
     <BaseFilter
       {...props}
       showCategory={true}
+      showItemsPerPage={true}
       searchFieldOptions={[
         {label: "상품명", value: "상품명"},
         {label: "매핑코드", value: "매핑코드"},

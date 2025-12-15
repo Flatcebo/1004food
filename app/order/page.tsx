@@ -19,7 +19,7 @@ import {useFileSave} from "@/hooks/useFileSave";
 import {useDragAndDrop} from "@/hooks/useDragAndDrop";
 import {fieldNameMap} from "@/constants/fieldMappings";
 
-export default function UploadPage() {
+export default function Page() {
   const {
     tableData,
     setTableData,

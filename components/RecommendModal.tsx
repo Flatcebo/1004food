@@ -1,13 +1,16 @@
 "use client";
 
-import {fieldNameMap, fixedRecommendTableHeaders} from "@/constants/fieldMappings";
+import {
+  fieldNameMap,
+  fixedRecommendTableHeaders,
+} from "@/constants/fieldMappings";
 
 interface RecommendModalProps {
   open: boolean;
   recommendList: Array<{name: string; code: string; [key: string]: any}>;
   name: string;
   rowIdx: number;
-  onSelect: (name: string, code: string, item?: any) => void;
+  onSelect: (name: string, code: string, item?: any, id?: number) => void;
   onClose: () => void;
   onDirectInput: (name: string, rowIdx: number) => void;
 }
@@ -31,71 +34,84 @@ export default function RecommendModal({
         </div>
         <div className="overflow-x-auto">
           <table className="text-xs border border-gray-300 w-full min-w-[1200px]">
-          <thead>
-            <tr>
-              {fixedRecommendTableHeaders
-                .filter((key) => {
-                  return recommendList.some((item: any) =>
-                    item.hasOwnProperty(key)
-                  );
-                })
-                .map((key) => (
-                  <th
-                    key={key}
-                    className="border border-gray-200 font-normal bg-gray-50 px-2 py-1 text-center"
+            <thead>
+              <tr>
+                {fixedRecommendTableHeaders
+                  .filter((key) => {
+                    return recommendList.some((item: any) =>
+                      item.hasOwnProperty(key)
+                    );
+                  })
+                  .map((key) => (
+                    <th
+                      key={key}
+                      className="border border-gray-200 font-normal bg-gray-50 px-2 py-1 text-center"
+                    >
+                      {fieldNameMap[key] || key}
+                    </th>
+                  ))}
+              </tr>
+            </thead>
+            <tbody>
+              {recommendList.map((item, ridx) => {
+                return (
+                  <tr
+                    key={ridx}
+                    className="hover:bg-blue-100 cursor-pointer"
+                    onClick={() => onSelect(name, item.code, item, item.id)}
                   >
-                    {fieldNameMap[key] || key}
-                  </th>
-                ))}
-            </tr>
-          </thead>
-          <tbody>
-            {recommendList.map((item, ridx) => {
-              return (
-                <tr
-                  key={ridx}
-                  className="hover:bg-blue-100 cursor-pointer"
-                  onClick={() => onSelect(name, item.code, item)}
-                >
-                  {fixedRecommendTableHeaders
-                    .filter((key) => {
-                      return recommendList.some((item: any) =>
-                        item.hasOwnProperty(key)
-                      );
-                    })
-                    .map((key) => {
-                      const value = (item as any)[key];
-                      let displayValue = "";
-                      
-                      // 숫자 필드 포맷팅
-                      if (key === "price" || key === "salePrice" || key === "postFee") {
-                        if (value !== null && value !== undefined) {
-                          displayValue = Number(value).toLocaleString();
+                    {fixedRecommendTableHeaders
+                      .filter((key) => {
+                        return recommendList.some((item: any) =>
+                          item.hasOwnProperty(key)
+                        );
+                      })
+                      .map((key) => {
+                        const value = (item as any)[key];
+                        let displayValue = "";
+
+                        // 숫자 필드 포맷팅
+                        if (
+                          key === "price" ||
+                          key === "salePrice" ||
+                          key === "postFee"
+                        ) {
+                          if (value !== null && value !== undefined) {
+                            displayValue = Number(value).toLocaleString();
+                          } else {
+                            displayValue = "-";
+                          }
                         } else {
-                          displayValue = "-";
+                          displayValue =
+                            value !== null && value !== undefined
+                              ? String(value)
+                              : "-";
                         }
-                      } else {
-                        displayValue = value !== null && value !== undefined ? String(value) : "-";
-                      }
-                      
-                      return (
-                        <td
-                          key={key}
-                          className={`border border-gray-200 px-2 py-1 break-all text-black whitespace-pre-line min-w-[85px] ${
-                            key === "code" || key === "pkg" ? "text-center" : ""
-                          } ${
-                            key === "price" || key === "salePrice" || key === "postFee" ? "text-right" : ""
-                          }`}
-                        >
-                          {displayValue}
-                        </td>
-                      );
-                    })}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+
+                        return (
+                          <td
+                            key={key}
+                            className={`border border-gray-200 px-2 py-1 break-all text-black whitespace-pre-line min-w-[85px] ${
+                              key === "code" || key === "pkg"
+                                ? "text-center"
+                                : ""
+                            } ${
+                              key === "price" ||
+                              key === "salePrice" ||
+                              key === "postFee"
+                                ? "text-right"
+                                : ""
+                            }`}
+                          >
+                            {displayValue}
+                          </td>
+                        );
+                      })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
         <div className="flex justify-between items-center mt-4 text-xs">
           <button
@@ -119,4 +135,3 @@ export default function RecommendModal({
     </div>
   );
 }
-

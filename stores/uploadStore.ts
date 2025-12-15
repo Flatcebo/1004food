@@ -195,7 +195,7 @@ export interface UploadStoreState {
     inputValue: string
   ) => Promise<Array<{name: string; code: string; [key: string]: any}>>;
   handleRecommendClick: (rowIdx: number, value: string) => void;
-  handleSelectSuggest: (name: string, code: string) => void;
+  handleSelectSuggest: (name: string, code: string, id?: number) => void;
   handleFile: (file: File) => void;
   handleFiles: (files: File[]) => void;
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;

@@ -44,6 +44,7 @@ function FileViewContent() {
   const [fileName, setFileName] = useState("");
   const [vendorName, setVendorName] = useState("");
   const codesOriginRef = useRef<any[]>([]);
+
   // 원본 배송메시지 저장 (rowIdx -> 원본 메시지, 파일 로드 시점의 메시지)
   const originalMessagesRef = useRef<{[rowIdx: number]: string}>({});
   // 순수 원본 배송메시지 저장 (rowIdx -> 순수 원본 메시지, 업체명 제거된 메시지)
@@ -194,7 +195,8 @@ function FileViewContent() {
   };
 
   // 일괄 적용 함수
-  const handleBulkApply = () => {
+  const handleBulkApply = (e: React.MouseEvent<HTMLButtonElement>) => {
+    // e.stopPropagation();
     if (selectedRows.size === 0) {
       alert("적용할 행을 선택해주세요.");
       return;
@@ -292,7 +294,7 @@ function FileViewContent() {
     // 초기화
     setBulkProductName("");
     setBulkQuantity("");
-    setSelectedRows(new Set());
+    // setSelectedRows(new Set());
     alert(`${selectedRows.size}개 행에 일괄 적용되었습니다.`);
   };
 
@@ -580,6 +582,8 @@ function FileViewContent() {
       const typeIdx = headerRow.findIndex((h: any) => h === "내외주");
       const postTypeIdx = headerRow.findIndex((h: any) => h === "택배사");
 
+      console.log("tableData", tableData);
+
       const finalTableData = tableData.map((row, idx) => {
         if (idx === 0) return row;
         const rowName = row[headerIndex?.nameIdx || 0];
@@ -730,12 +734,18 @@ function FileViewContent() {
             setVendorName(String(parsedFile.tableData[1][vendorIdx]).trim());
           }
         }
+
+        // console.log(parsedFile);
+        // console.log(file);
+        console.log(sessionStorage.getItem(`uploadedFile_${fileId}`));
       } catch (error) {
         console.error("파일 데이터 파싱 실패:", error);
       }
     } else {
       // store에서 찾기
       const foundFile = uploadedFiles.find((f) => f.id === fileId);
+      // console.log(foundFile);
+      // console.log(uploadedFiles);
       if (foundFile) {
         setFile(foundFile);
         setTableData(foundFile.tableData);
@@ -900,14 +910,26 @@ function FileViewContent() {
                       />
                     </th>
                   )}
-                  {tableData[0].map((header, hidx) => (
-                    <th
-                      key={hidx}
-                      className="border bg-gray-100 px-2 py-1 text-xs"
-                    >
-                      {header}
-                    </th>
-                  ))}
+                  {tableData[0].map((header, hidx) => {
+                    return header === "상품명" ? (
+                      <th
+                        key={hidx}
+                        className="border bg-gray-100 px-2 py-1 text-xs"
+                      >
+                        <div className="flex flex-col">
+                          <span>상품명</span>
+                          <span>확정상품명</span>
+                        </div>
+                      </th>
+                    ) : (
+                      <th
+                        key={hidx}
+                        className="border bg-gray-100 px-2 py-1 text-xs"
+                      >
+                        {header}
+                      </th>
+                    );
+                  })}
                   <th className="border bg-gray-100 px-2 py-1 text-xs text-center">
                     매핑코드
                   </th>
@@ -1099,28 +1121,128 @@ function FileViewContent() {
                           return (
                             <td key={j} className={tdClass} style={{minWidth}}>
                               {isEditMode && isEditableColumn ? (
-                                <input
-                                  type="text"
-                                  value={
-                                    cellValue !== undefined &&
-                                    cellValue !== null
-                                      ? cellValue
-                                      : ""
-                                  }
-                                  onChange={(e) => {
-                                    const actualRowIndex =
-                                      tableData.indexOf(row);
-                                    handleCellChange(
-                                      actualRowIndex,
-                                      j,
-                                      e.target.value
-                                    );
-                                  }}
-                                  className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs"
-                                />
+                                // 편집 모드에서 상품명 컬럼인 경우 input과 사방넷명 함께 표시
+                                j === productNameIdx ? (
+                                  <div className="flex flex-col gap-1">
+                                    <input
+                                      type="text"
+                                      value={
+                                        cellValue !== undefined &&
+                                        cellValue !== null
+                                          ? cellValue
+                                          : ""
+                                      }
+                                      onChange={(e) => {
+                                        const actualRowIndex =
+                                          tableData.indexOf(row);
+                                        handleCellChange(
+                                          actualRowIndex,
+                                          j,
+                                          e.target.value
+                                        );
+                                      }}
+                                      className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs"
+                                    />
+                                    {(() => {
+                                      // name과 매핑코드로 정확한 상품 찾기
+                                      const productName =
+                                        String(cellValue).trim();
+                                      const mappingCode =
+                                        productCodeMap[String(cellValue)];
+
+                                      let product = null;
+                                      if (mappingCode) {
+                                        // name과 code 둘 다로 정확하게 찾기
+                                        product = codes.find(
+                                          (c: any) =>
+                                            c.name === productName &&
+                                            c.code === mappingCode
+                                        );
+                                      } else {
+                                        // 매핑코드가 없으면 name으로만 찾기
+                                        product = codes.find(
+                                          (c: any) => c.name === productName
+                                        );
+                                      }
+
+                                      if (
+                                        product?.sabangName &&
+                                        String(product.sabangName).trim() !== ""
+                                      ) {
+                                        return (
+                                          <div className="text-blue-600 text-xs px-1">
+                                            {product.sabangName}
+                                          </div>
+                                        );
+                                      }
+                                      return null;
+                                    })()}
+                                  </div>
+                                ) : (
+                                  <input
+                                    type="text"
+                                    value={
+                                      cellValue !== undefined &&
+                                      cellValue !== null
+                                        ? cellValue
+                                        : ""
+                                    }
+                                    onChange={(e) => {
+                                      const actualRowIndex =
+                                        tableData.indexOf(row);
+                                      handleCellChange(
+                                        actualRowIndex,
+                                        j,
+                                        e.target.value
+                                      );
+                                    }}
+                                    className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs"
+                                  />
+                                )
                               ) : cellValue !== undefined &&
                                 cellValue !== null ? (
-                                cellValue
+                                // 상품명 컬럼인 경우 원본 상품명과 사방넷명을 줄바꿈하여 표시
+                                j === productNameIdx ? (
+                                  <div className="flex flex-col gap-1">
+                                    <div>{cellValue}</div>
+                                    {(() => {
+                                      // name과 매핑코드로 정확한 상품 찾기
+                                      const productName =
+                                        String(cellValue).trim();
+                                      const mappingCode =
+                                        productCodeMap[String(cellValue)];
+
+                                      let product = null;
+                                      if (mappingCode) {
+                                        // name과 code 둘 다로 정확하게 찾기
+                                        product = codes.find(
+                                          (c: any) =>
+                                            c.name === productName &&
+                                            c.code === mappingCode
+                                        );
+                                      } else {
+                                        // 매핑코드가 없으면 name으로만 찾기
+                                        product = codes.find(
+                                          (c: any) => c.name === productName
+                                        );
+                                      }
+
+                                      if (
+                                        product?.sabangName &&
+                                        String(product.sabangName).trim() !== ""
+                                      ) {
+                                        return (
+                                          <div className="text-blue-600">
+                                            {product.sabangName}
+                                          </div>
+                                        );
+                                      }
+                                      return null;
+                                    })()}
+                                  </div>
+                                ) : (
+                                  cellValue
+                                )
                               ) : (
                                 ""
                               )}
@@ -1181,8 +1303,10 @@ function FileViewContent() {
                                   onSelect={(
                                     selectedName,
                                     selectedCode,
-                                    selectedItem
+                                    selectedItem,
+                                    selectedId
                                   ) => {
+                                    console.log(selectedId);
                                     // 먼저 productCodeMap 업데이트
                                     const updatedProductCodeMap = {
                                       ...productCodeMap,
@@ -1206,6 +1330,7 @@ function FileViewContent() {
                                         [selectedName]: itemData.type,
                                       }));
                                     }
+
                                     if (itemData?.postType) {
                                       setProductPostTypeMap((prev) => ({
                                         ...prev,
@@ -1291,7 +1416,8 @@ function FileViewContent() {
                                     // 모달 닫기
                                     handleSelectSuggest(
                                       selectedName,
-                                      selectedCode
+                                      selectedCode,
+                                      selectedId
                                     );
                                   }}
                                   onClose={() => setRecommendIdx(null)}
@@ -1440,13 +1566,6 @@ function FileViewContent() {
                 const postTypeIdx = headerRow.findIndex(
                   (h: any) => h === "택배사"
                 );
-
-                console.log("헤더 인덱스:", {
-                  mappingIdx,
-                  typeIdx,
-                  postTypeIdx,
-                  headerRow,
-                });
 
                 if (mappingIdx !== -1 || typeIdx !== -1 || postTypeIdx !== -1) {
                   // codeItem에서 직접 type과 postType 가져오기 (우선순위: codeItem > selectedItem)

@@ -27,6 +27,8 @@ export default function ProductsPage() {
     setCurrentPage,
     totalPages,
     paginatedProducts,
+    itemsPerPage,
+    setItemsPerPage,
     fetchProducts,
   } = useProducts();
 
@@ -107,11 +109,13 @@ export default function ProductsPage() {
             selectedCategory={selectedCategory}
             searchField={searchField}
             searchValue={searchValue}
+            itemsPerPage={itemsPerPage}
             onTypeChange={setSelectedType}
             onPostTypeChange={setSelectedPostType}
             onCategoryChange={setSelectedCategory}
             onSearchFieldChange={setSearchField}
             onSearchValueChange={setSearchValue}
+            onItemsPerPageChange={setItemsPerPage}
             onApplySearchFilter={applySearchFilter}
             onResetFilters={resetFilters}
           />

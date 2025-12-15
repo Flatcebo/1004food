@@ -265,6 +265,11 @@ export async function POST(request: NextRequest) {
 
       // 매핑코드를 통해 매입처로 업체명 업데이트
       dataRows.forEach((row: any) => {
+        // 내주는 제외 (외주만 처리)
+        if (row.내외주 !== "외주") {
+          return;
+        }
+
         if (row.매핑코드 && productVendorNameMap[row.매핑코드]) {
           row.업체명 = productVendorNameMap[row.매핑코드];
         } else {
@@ -292,9 +297,14 @@ export async function POST(request: NextRequest) {
         }
       });
 
-      // 매입처별로 그룹화
+      // 매입처별로 그룹화 (내주 제외)
       const vendorGroups: {[vendor: string]: any[]} = {};
       dataRows.forEach((row) => {
+        // 내주는 제외
+        if (row.내외주 !== "외주") {
+          return;
+        }
+
         const vendor = row.업체명;
         if (!vendorGroups[vendor]) {
           vendorGroups[vendor] = [];
@@ -376,7 +386,29 @@ export async function POST(request: NextRequest) {
 
         // 데이터를 2차원 배열로 변환
         let excelData = vendorRows.map((row: any) => {
-          return headers.map((header: any) => {
+          // 전화번호1 값을 미리 계산
+          let phone1Value = "";
+          headers.forEach((header: any) => {
+            const headerStr =
+              typeof header === "string" ? header : String(header || "");
+            if (headerStr.includes("전화번호1") || headerStr === "전화번호1") {
+              let value = mapDataToTemplate(row, headerStr, {
+                templateName: templateData.name,
+              });
+              let stringValue = value != null ? String(value) : "";
+              const numOnly = stringValue.replace(/\D/g, "");
+              if (
+                (numOnly.length === 10 || numOnly.length === 11) &&
+                !numOnly.startsWith("0")
+              ) {
+                phone1Value = "0" + numOnly;
+              } else if (numOnly.length > 0) {
+                phone1Value = numOnly;
+              }
+            }
+          });
+
+          return headers.map((header: any, headerIdx: number) => {
             // header를 문자열로 변환
             const headerStr =
               typeof header === "string" ? header : String(header || "");
@@ -387,6 +419,25 @@ export async function POST(request: NextRequest) {
 
             let stringValue = value != null ? String(value) : "";
 
+            // 수취인명인 경우 앞에 ★ 붙이기
+            if (
+              headerStr === "수취인명" ||
+              headerStr === "수취인" ||
+              headerStr === "받는사람"
+            ) {
+              stringValue = "★" + stringValue;
+            }
+
+            // 주문번호인 경우 내부코드 사용
+            if (headerStr === "주문번호" || headerStr.includes("주문번호")) {
+              stringValue = row["내부코드"] || stringValue;
+            }
+
+            // F열 (6번째 컬럼)이고 헤더가 비어있으면 수량 입력
+            if (headerIdx === 5 && (!headerStr || headerStr.trim() === "")) {
+              stringValue = row["수량"] || "";
+            }
+
             if (headerStr.includes("전화") || headerStr.includes("연락")) {
               const numOnly = stringValue.replace(/\D/g, "");
               if (
@@ -396,6 +447,15 @@ export async function POST(request: NextRequest) {
                 stringValue = "0" + numOnly;
               } else if (numOnly.length > 0) {
                 stringValue = numOnly;
+              }
+
+              // 전화번호2가 비어있으면 전화번호1 값 사용
+              if (
+                (headerStr.includes("전화번호2") ||
+                  headerStr === "전화번호2") &&
+                !stringValue
+              ) {
+                stringValue = phone1Value;
               }
             }
 
