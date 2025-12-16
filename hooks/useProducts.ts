@@ -87,7 +87,7 @@ export function useProducts() {
 
   // 필터링된 상품 목록 (메모이제이션)
   const filteredProducts = useMemo(() => {
-    return products.filter((product) => {
+    const filtered = products.filter((product) => {
       // 내외주 필터
       if (selectedType && product.type !== selectedType) {
         return false;
@@ -127,6 +127,16 @@ export function useProducts() {
         }
       }
       return true;
+    });
+
+    // createdAt 최근순으로 정렬 (필터링 후에도 정렬 유지)
+    return filtered.sort((a, b) => {
+      const dateA = new Date(a.createdAt).getTime();
+      const dateB = new Date(b.createdAt).getTime();
+      if (dateB !== dateA) {
+        return dateB - dateA; // 최근순 (내림차순)
+      }
+      return b.id - a.id; // createdAt이 같으면 id 역순
     });
   }, [products, selectedType, selectedPostType, selectedCategory, appliedSearchField, appliedSearchValue]);
 

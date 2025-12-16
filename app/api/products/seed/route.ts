@@ -7,22 +7,10 @@ import path from "path";
 const codesDataPath = path.join(process.cwd(), "public", "data", "mapping", "codes.json");
 const codesData = JSON.parse(fs.readFileSync(codesDataPath, "utf-8"));
 
-// 한국 시간(KST, UTC+9)을 반환하는 함수
-function getKoreaTime(): Date {
-  const now = new Date();
-  // UTC 시간에 9시간을 더해서 한국 시간으로 변환
-  const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
-  const koreaTime = new Date(utcTime + (9 * 3600000));
-  return koreaTime;
-}
-
 export async function POST() {
   try {
     // 기존 데이터 삭제 (선택사항 - 필요시 주석 처리)
     await sql`TRUNCATE TABLE products RESTART IDENTITY CASCADE`;
-
-    // 한국 시간 생성
-    const koreaTime = getKoreaTime();
 
     // codes.json 데이터를 DB에 삽입
     const insertPromises = codesData.map((item: any) => {
@@ -59,7 +47,7 @@ export async function POST() {
           product_type = EXCLUDED.product_type,
           sabang_name = EXCLUDED.sabang_name,
           etc = EXCLUDED.etc,
-          updated_at = ${koreaTime.toISOString()}::timestamp
+          updated_at = (NOW() + INTERVAL '9 hours')
       `;
     });
 

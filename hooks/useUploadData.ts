@@ -135,10 +135,18 @@ export function useUploadData() {
   // 백엔드에서 이미 페이지네이션된 데이터를 받아오므로 그대로 사용
   const tableRows = useMemo(() => {
     return savedData.map((row: any) => {
+      // 등록일 포맷팅: YYYY-MM-DD HH:mm:ss (DB에서 문자열로 받은 한국 시간을 그대로 표시)
+      let formattedDate = "";
+      if (row.upload_time) {
+        // DB에서 받아온 시간 문자열 (이미 "YYYY-MM-DD HH24:MI:SS" 형식)
+        formattedDate = row.upload_time;
+      }
+
       const flatRow = {
         id: row.id,
         file_name: row.file_name,
         upload_time: row.upload_time,
+        등록일: formattedDate,
         ...(row.row_data || {}),
       };
 
@@ -159,6 +167,7 @@ export function useUploadData() {
       "file_name",
       "upload_time",
       "내부코드",
+      "등록일",
       "업체명",
       "내외주",
       "택배사",

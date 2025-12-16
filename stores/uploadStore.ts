@@ -13,10 +13,14 @@ const INTERNAL_COLUMNS: ColumnDef[] = [
   {
     key: "vendor",
     label: "업체명",
-    aliases: ["업체명", "업체", "거래처명", "고객주문처명"],
+    aliases: ["업체명", "업체", "거래처명", "고객주문처명", "쇼핑몰명(1)"],
   },
   {key: "inout", label: "내외주", aliases: ["내외주"]},
-  {key: "carrier", label: "택배사", aliases: ["택배사", "택배사명", "택배"]},
+  {
+    key: "carrier",
+    label: "택배사",
+    aliases: ["택배사", "택배사명", "택배", "배송사"],
+  },
 
   {
     key: "receiverName",
@@ -36,12 +40,19 @@ const INTERNAL_COLUMNS: ColumnDef[] = [
       "수령인전화번호",
       "수령인 전화번호",
       "수령인 전화번호1",
+      "수취인 전화번호1",
     ],
   },
   {
     key: "zip",
     label: "우편",
-    aliases: ["우편", "우편번호", "우편번호(수취인)", "우편번호(배송지)"],
+    aliases: [
+      "우편",
+      "우편번호",
+      "우편번호(수취인)",
+      "우편번호(배송지)",
+      "수취인우편번호(1)",
+    ],
   },
   {
     key: "address",
@@ -56,13 +67,22 @@ const INTERNAL_COLUMNS: ColumnDef[] = [
       "받는분 주소",
       "통합배송지",
       "통합 배송지",
+      "수취인주소(4)",
     ],
   },
   {key: "qty", label: "수량", aliases: ["수량", "주문수량", "총수량"]},
   {
     key: "productName",
     label: "상품명",
-    aliases: ["상품명", "아이템명", "품목명", "상품", "품목명", "주문상품명"],
+    aliases: [
+      "상품명",
+      "아이템명",
+      "품목명",
+      "상품",
+      "품목명",
+      "주문상품명",
+      "상품명(확정)",
+    ],
   },
 
   {
@@ -73,7 +93,12 @@ const INTERNAL_COLUMNS: ColumnDef[] = [
   {
     key: "ordererPhone",
     label: "주문자 전화번호",
-    aliases: ["주문자 연락처", "주문자 전화번화", "주문자전화번호"],
+    aliases: [
+      "주문자 연락처",
+      "주문자 전화번화",
+      "주문자전화번호",
+      "주문자전화번호1",
+    ],
   },
   {
     key: "message",
@@ -133,6 +158,8 @@ export interface UploadStoreState {
   fileName: string;
   setFileName: (v: string) => void;
 
+  sessionId: string;
+  setSessionId: (id: string) => void;
   uploadedFiles: UploadedFile[];
   setUploadedFiles: (files: UploadedFile[]) => void;
   addUploadedFile: (file: UploadedFile) => void;
@@ -140,6 +167,8 @@ export interface UploadStoreState {
   confirmedFiles: Set<string>;
   confirmFile: (fileId: string) => void;
   unconfirmFile: (fileId: string) => void;
+  saveFilesToServer: () => Promise<boolean>;
+  loadFilesFromServer: () => Promise<void>;
 
   codes: Array<{name: string; code: string; [key: string]: any} | any>;
   setCodes: (
@@ -214,6 +243,24 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
   setFileInputRef: (ref) => set({fileInputRef: ref}),
   fileName: "",
   setFileName: (v) => set({fileName: v}),
+  sessionId: (() => {
+    // 브라우저 환경에서만 실행
+    if (typeof window !== "undefined") {
+      let id = sessionStorage.getItem("uploadSessionId");
+      if (!id) {
+        id = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        sessionStorage.setItem("uploadSessionId", id);
+      }
+      return id;
+    }
+    return "";
+  })(),
+  setSessionId: (id) => {
+    set({sessionId: id});
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("uploadSessionId", id);
+    }
+  },
   uploadedFiles: [],
   setUploadedFiles: (files) => set({uploadedFiles: files}),
   addUploadedFile: (file) =>
@@ -237,6 +284,62 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       newSet.delete(fileId);
       return {confirmedFiles: newSet};
     }),
+  saveFilesToServer: async () => {
+    const {sessionId, uploadedFiles} = get();
+    if (!sessionId || uploadedFiles.length === 0) {
+      return false;
+    }
+
+    try {
+      const response = await fetch("/api/upload/temp/save", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sessionId,
+          files: uploadedFiles,
+        }),
+      });
+
+      const result = await response.json();
+      return result.success;
+    } catch (error) {
+      console.error("서버 저장 실패:", error);
+      return false;
+    }
+  },
+  loadFilesFromServer: async () => {
+    const {sessionId, setUploadedFiles} = get();
+    if (!sessionId) {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `/api/upload/temp/list?sessionId=${sessionId}`
+      );
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        setUploadedFiles(result.data);
+
+        // sessionStorage에도 저장
+        result.data.forEach((file: UploadedFile) => {
+          try {
+            sessionStorage.setItem(
+              `uploadedFile_${file.id}`,
+              JSON.stringify(file)
+            );
+          } catch (error) {
+            console.error("sessionStorage 저장 실패:", error);
+          }
+        });
+      }
+    } catch (error) {
+      console.error("서버에서 파일 불러오기 실패:", error);
+    }
+  },
   codes: [],
   setCodes: (codes) => set({codes}),
   productCodeMap: {},
@@ -551,18 +654,19 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       reader.readAsArrayBuffer(file);
     });
   },
-  handleFile: (file) => {
-    get()
-      .processFile(file)
-      .then((uploadedFile) => {
-        get().addUploadedFile(uploadedFile);
-        get().setFileName(file.name);
-        get().setTableData(uploadedFile.tableData);
-      })
-      .catch((error: any) => {
-        console.error("파일 처리 실패:", error);
-        alert(`파일 처리 실패: ${error.message}`);
-      });
+  handleFile: async (file) => {
+    try {
+      const uploadedFile = await get().processFile(file);
+      get().addUploadedFile(uploadedFile);
+      get().setFileName(file.name);
+      get().setTableData(uploadedFile.tableData);
+
+      // 서버에 저장
+      await get().saveFilesToServer();
+    } catch (error: any) {
+      console.error("파일 처리 실패:", error);
+      alert(`파일 처리 실패: ${error.message}`);
+    }
   },
   handleFiles: async (files: File[]) => {
     const {addUploadedFile} = get();
@@ -570,6 +674,9 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     try {
       const uploadedFiles = await Promise.all(promises);
       uploadedFiles.forEach((file) => addUploadedFile(file));
+
+      // 서버에 저장
+      await get().saveFilesToServer();
     } catch (error: any) {
       console.error("파일 처리 실패:", error);
       alert(`일부 파일 처리 실패: ${error}`);

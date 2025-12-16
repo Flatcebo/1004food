@@ -354,67 +354,6 @@ const SavedDataTable = memo(function SavedDataTable({
     }
   };
 
-  if (loading) {
-    return (
-      <>
-        <div className="h-full mb-2 text-sm text-gray-600">
-          <div className="h-4 w-32 bg-gray-200 rounded animate-pulse"></div>
-        </div>
-        <div className="mt-2 w-full h-[600px] overflow-x-auto text-black overflow-y-auto">
-          <table
-            className="border border-collapse border-gray-400 w-full min-w-[800px]"
-            style={{tableLayout: "fixed"}}
-          >
-            <thead>
-              <tr>
-                <th
-                  className="border border-[#cacaca] bg-gray-100 px-2 py-2 text-xs text-center"
-                  style={{width: "40px"}}
-                >
-                  <div className="h-4 w-4 bg-gray-300 rounded animate-pulse mx-auto"></div>
-                </th>
-                {filteredHeaders.map((header, idx) => (
-                  <th
-                    key={idx}
-                    className="border border-[#cacaca] bg-gray-100 px-2 py-2 text-xs text-center"
-                    style={{width: getColumnWidth(header)}}
-                  >
-                    {header === "id"
-                      ? "ID"
-                      : header === "우편"
-                      ? "우편번호"
-                      : header}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {Array.from({length: 8}).map((_, rowIdx) => (
-                <tr key={rowIdx} style={{height: "56px"}}>
-                  <td
-                    className="border px-2 border-gray-300 text-xs text-center align-middle"
-                    style={{width: "40px", height: "56px"}}
-                  >
-                    <div className="h-4 w-4 bg-gray-200 rounded animate-pulse mx-auto"></div>
-                  </td>
-                  {filteredHeaders.map((header, colIdx) => (
-                    <td
-                      key={colIdx}
-                      className="border px-2 border-gray-300 text-xs align-middle text-left"
-                      style={{width: getColumnWidth(header), height: "56px"}}
-                    >
-                      <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </>
-    );
-  }
-
   const isAllSelected =
     paginatedRows.length > 0 &&
     paginatedRows.every((row: any) => selectedRows.has(row.id));

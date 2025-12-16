@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
       sql`SELECT COUNT(*) as total FROM upload_rows ur INNER JOIN uploads u ON ur.upload_id = u.id`
     );
 
-    // 데이터 조회 쿼리 (페이지네이션 적용)
+    // 데이터 조회 쿼리 (페이지네이션 적용, 한국 시간을 문자열로 반환하여 UTC 해석 방지)
     const dataQuery = buildQuery(
       sql`
         SELECT 
@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
           ur.upload_id,
           ur.row_data,
           u.file_name,
-          u.created_at as upload_time
+          TO_CHAR(u.created_at, 'YYYY-MM-DD HH24:MI:SS') as upload_time
         FROM upload_rows ur
         INNER JOIN uploads u ON ur.upload_id = u.id
       `,

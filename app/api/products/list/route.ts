@@ -23,7 +23,7 @@ export async function GET() {
         created_at as "createdAt",
         updated_at as "updatedAt"
       FROM products
-      ORDER BY name ASC
+      ORDER BY created_at DESC, id DESC
     `;
 
     return NextResponse.json({

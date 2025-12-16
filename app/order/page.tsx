@@ -31,6 +31,7 @@ export default function Page() {
     setFileInputRef,
     fileName,
     setFileName,
+    sessionId,
     codes,
     setCodes,
     productCodeMap,
@@ -57,6 +58,7 @@ export default function Page() {
     unconfirmFile,
     removeUploadedFile,
     handleFileChange,
+    loadFilesFromServer,
   } = useUploadStore();
 
   // 로딩 상태
@@ -209,6 +211,7 @@ export default function Page() {
     setUploadedFiles,
     confirmFile,
     updateValidationStatus,
+    loadFilesFromServer,
   });
 
   // 자동 매핑 훅
@@ -336,7 +339,7 @@ export default function Page() {
     };
   }, [uploadedFiles, codes, productCodeMap, setUploadedFiles]);
 
-  // 모달이 열릴 때 일부 데이터만 리셋 (파일 목록은 유지)
+  // 모달이 열릴 때 서버에서 임시 파일 불러오기
   useEffect(() => {
     if (isModalOpen) {
       setTableData([]);
@@ -346,6 +349,9 @@ export default function Page() {
       setRecommendIdx(null);
       setRecommendList([]);
       codesOriginRef.current = [];
+
+      // 서버에서 임시 저장된 파일 불러오기
+      loadFilesFromServer();
     }
   }, [
     isModalOpen,
@@ -355,6 +361,7 @@ export default function Page() {
     setHeaderIndex,
     setRecommendIdx,
     setRecommendList,
+    loadFilesFromServer,
   ]);
 
   // 상품 목록 fetch (DB에서)
@@ -416,11 +423,21 @@ export default function Page() {
     fetchSavedData,
     resetData,
     unconfirmFile,
+    sessionId,
   });
 
-  const handleFileDelete = (fileId: string) => {
+  const handleFileDelete = async (fileId: string) => {
     removeUploadedFile(fileId);
     sessionStorage.removeItem(`uploadedFile_${fileId}`);
+
+    // 서버에서도 삭제
+    try {
+      await fetch(`/api/upload/temp/delete?fileId=${fileId}`, {
+        method: "DELETE",
+      });
+    } catch (error) {
+      console.error("서버에서 파일 삭제 실패:", error);
+    }
   };
 
   const handleResetData = () => {
@@ -456,7 +473,7 @@ export default function Page() {
                 className="px-5 py-2 bg-blue-600 text-white text-sm font-bold rounded hover:bg-blue-800"
                 onClick={() => setIsModalOpen(true)}
               >
-                납품업체 엑셀 업로드
+                엑셀 업로드
               </button>
 
               <button

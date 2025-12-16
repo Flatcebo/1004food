@@ -10,6 +10,7 @@ interface UseFileSaveProps {
   fetchSavedData: () => Promise<void>;
   resetData: () => void;
   unconfirmFile: (fileId: string) => void;
+  sessionId: string;
 }
 
 export function useFileSave({
@@ -19,6 +20,7 @@ export function useFileSave({
   fetchSavedData,
   resetData,
   unconfirmFile,
+  sessionId,
 }: UseFileSaveProps) {
   const {startLoading, updateLoadingMessage, stopLoading} = useLoadingStore();
 
@@ -297,31 +299,22 @@ export function useFileSave({
           }
         }
 
-        // 업로드 데이터 저장
-        for (let i = 0; i < uploadData.length; i++) {
-          const fileData = uploadData[i];
-          if (!fileData) continue;
+        // 임시 저장된 데이터를 정식으로 저장하고 임시 데이터 삭제
+        updateLoadingMessage("임시 저장 데이터를 정식 저장 중...");
 
-          updateLoadingMessage(
-            `파일 저장 중... (${i + 1}/${uploadData.length})`
-          );
+        const response = await fetch("/api/upload/temp/confirm", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            sessionId: sessionId,
+          }),
+        });
 
-          const response = await fetch("/api/upload/save", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              fileName: fileData.fileName,
-              rowCount: fileData.rowCount,
-              data: fileData.data,
-            }),
-          });
-
-          const result = await response.json();
-          if (!result.success) {
-            throw new Error(result.error || "데이터 저장 실패");
-          }
+        const result = await response.json();
+        if (!result.success) {
+          throw new Error(result.error || "데이터 저장 실패");
         }
 
         updateLoadingMessage("저장 완료! 데이터 새로고침 중...");
@@ -334,6 +327,8 @@ export function useFileSave({
         resetData();
         Array.from(confirmedFiles).forEach((fileId) => {
           unconfirmFile(fileId);
+          // sessionStorage에서도 제거
+          sessionStorage.removeItem(`uploadedFile_${fileId}`);
         });
 
         stopLoading();
@@ -357,6 +352,7 @@ export function useFileSave({
     fetchSavedData,
     resetData,
     unconfirmFile,
+    sessionId,
     startLoading,
     updateLoadingMessage,
     stopLoading,

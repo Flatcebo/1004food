@@ -7,6 +7,7 @@ interface UseFileMessageHandlerProps {
   setUploadedFiles: (files: UploadedFile[]) => void;
   confirmFile: (fileId: string) => void;
   updateValidationStatus: (fileId: string, isValid: boolean) => void;
+  loadFilesFromServer?: () => Promise<void>;
 }
 
 export function useFileMessageHandler({
@@ -14,9 +15,10 @@ export function useFileMessageHandler({
   setUploadedFiles,
   confirmFile,
   updateValidationStatus,
+  loadFilesFromServer,
 }: UseFileMessageHandlerProps) {
   useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
+    const handleMessage = async (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
 
       if (event.data.type === "FILE_CONFIRMED") {
@@ -27,27 +29,38 @@ export function useFileMessageHandler({
           fileData,
         });
 
-        // sessionStorage 먼저 업데이트
-        try {
-          sessionStorage.setItem(
-            `uploadedFile_${fileId}`,
-            JSON.stringify(fileData)
-          );
-        } catch (error) {
-          console.error("sessionStorage 업데이트 실패:", error);
-        }
-
-        // 업로드된 파일 목록 업데이트 (해당 파일만 업데이트)
-        const fileExists = uploadedFiles.some((f) => f.id === fileId);
-
-        if (fileExists) {
-          const updatedFiles = uploadedFiles.map((f) =>
-            f.id === fileId ? fileData : f
-          );
-          setUploadedFiles(updatedFiles);
+        // 서버에서 최신 데이터 불러오기
+        if (loadFilesFromServer) {
+          try {
+            await loadFilesFromServer();
+            console.log("서버에서 최신 데이터를 불러왔습니다.");
+          } catch (error) {
+            console.error("서버에서 데이터 불러오기 실패:", error);
+          }
         } else {
-          console.warn(`파일 ${fileId}가 목록에 없습니다. 추가합니다.`);
-          setUploadedFiles([...uploadedFiles, fileData]);
+          // loadFilesFromServer가 없으면 기존 방식 사용
+          // sessionStorage 먼저 업데이트
+          try {
+            sessionStorage.setItem(
+              `uploadedFile_${fileId}`,
+              JSON.stringify(fileData)
+            );
+          } catch (error) {
+            console.error("sessionStorage 업데이트 실패:", error);
+          }
+
+          // 업로드된 파일 목록 업데이트 (해당 파일만 업데이트)
+          const fileExists = uploadedFiles.some((f) => f.id === fileId);
+
+          if (fileExists) {
+            const updatedFiles = uploadedFiles.map((f) =>
+              f.id === fileId ? fileData : f
+            );
+            setUploadedFiles(updatedFiles);
+          } else {
+            console.warn(`파일 ${fileId}가 목록에 없습니다. 추가합니다.`);
+            setUploadedFiles([...uploadedFiles, fileData]);
+          }
         }
 
         // 파일이 확인되었음을 표시
@@ -65,6 +78,6 @@ export function useFileMessageHandler({
     return () => {
       window.removeEventListener("message", handleMessage);
     };
-  }, [uploadedFiles, setUploadedFiles, confirmFile, updateValidationStatus]);
+  }, [uploadedFiles, setUploadedFiles, confirmFile, updateValidationStatus, loadFilesFromServer]);
 }
 

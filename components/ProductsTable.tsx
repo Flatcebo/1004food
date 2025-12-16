@@ -240,8 +240,8 @@ const ProductsTable = memo(function ProductsTable({
     "매핑코드",
     "사방넷명",
     "합포수량",
-    "가격",
-    "판매가",
+    "원가",
+    "공급단가",
     "택배비",
     "매입처",
     "세금구분",
@@ -249,6 +249,8 @@ const ProductsTable = memo(function ProductsTable({
     "상품구분",
     "기타",
   ];
+
+  console.log(products);
 
   if (loading) {
     return (

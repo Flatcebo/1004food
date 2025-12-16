@@ -12,7 +12,7 @@ export const PRODUCT_COLUMN_MAPPINGS: {
   postFee: ["택배비", "배송비", "post_fee", "postFee"],
   purchase: ["구매처", "매입처", "매입처명", "업체", "거래처", "purchase"],
   billType: ["계산서", "세금구분", "세금계산서", "bill_type", "billType"],
-  category: ["카테고리", "분류", "category"],
+  category: ["카테고리", "분류", "물류처명", "category"],
   productType: [
     "상품타입",
     "제품타입",
