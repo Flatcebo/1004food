@@ -9,10 +9,10 @@ const menuNames: {path: string; name: string}[] = [
   //   path: "/",
   //   name: "홈",
   // },
-  {
-    path: "/upload",
-    name: "발주서 업로드",
-  },
+  //{
+  // path: "/upload",
+  //name: "발주서 업로드",
+  // },
   {
     path: "/order",
     name: "주문 리스트",

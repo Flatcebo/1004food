@@ -264,7 +264,10 @@ const ProductsTable = memo(function ProductsTable({
   return (
     <>
       <div className="w-full overflow-x-auto">
-        <div className="mb-4 flex justify-end gap-2 items-center">
+        <div className="mb-4 flex justify-between gap-2 items-end">
+          <div className="text-sm text-gray-500">
+            총 {products.length}개 {currentPage} / {totalPages}
+          </div>
           {selectedRows.size > 0 && (
             <button
               onClick={handleDelete}

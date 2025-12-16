@@ -456,7 +456,7 @@ export default function Page() {
                 className="px-5 py-2 bg-blue-600 text-white text-sm font-bold rounded hover:bg-blue-800"
                 onClick={() => setIsModalOpen(true)}
               >
-                엑셀 업로드
+                납품업체 엑셀 업로드
               </button>
 
               <button

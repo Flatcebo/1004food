@@ -126,6 +126,16 @@ export async function POST(request: NextRequest) {
         }
       });
 
+      // 매입처명에 따라 내외주 자동 설정
+      if (product.purchase) {
+        const purchaseValue = String(product.purchase).trim();
+        if (purchaseValue === "천사-제조" || purchaseValue === "천사-사입") {
+          product.type = "내주";
+        } else {
+          product.type = "외주";
+        }
+      }
+
       products.push(product);
     }
 
