@@ -88,6 +88,7 @@ export async function GET(request: NextRequest) {
           ur.id,
           ur.upload_id,
           ur.row_data,
+          ur.shop_name,
           u.file_name,
           TO_CHAR(u.created_at, 'YYYY-MM-DD HH24:MI:SS') as upload_time
         FROM upload_rows ur

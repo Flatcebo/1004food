@@ -26,7 +26,9 @@ export function useFileMessageHandler({
 
         console.log("파일 확인 메시지 수신:", {
           fileId,
-          fileData,
+          fileName: fileData?.fileName,
+          rowCount: fileData?.rowCount,
+          productCodeMapSize: Object.keys(fileData?.productCodeMap || {}).length,
         });
 
         // 서버에서 최신 데이터 불러오기
@@ -39,12 +41,20 @@ export function useFileMessageHandler({
           }
         } else {
           // loadFilesFromServer가 없으면 기존 방식 사용
-          // sessionStorage 먼저 업데이트
+          // sessionStorage 먼저 업데이트 (깊은 복사로 저장)
           try {
+            const fileDataToStore = {
+              ...fileData,
+              tableData: [...(fileData.tableData || [])],
+              headerIndex: {...(fileData.headerIndex || {})},
+              productCodeMap: {...(fileData.productCodeMap || {})},
+            };
+            
             sessionStorage.setItem(
               `uploadedFile_${fileId}`,
-              JSON.stringify(fileData)
+              JSON.stringify(fileDataToStore)
             );
+            console.log("sessionStorage 업데이트 성공:", fileData.fileName);
           } catch (error) {
             console.error("sessionStorage 업데이트 실패:", error);
           }
@@ -54,12 +64,13 @@ export function useFileMessageHandler({
 
           if (fileExists) {
             const updatedFiles = uploadedFiles.map((f) =>
-              f.id === fileId ? fileData : f
+              f.id === fileId ? {...fileData} : f
             );
             setUploadedFiles(updatedFiles);
+            console.log("uploadedFiles 업데이트 성공:", fileData.fileName);
           } else {
             console.warn(`파일 ${fileId}가 목록에 없습니다. 추가합니다.`);
-            setUploadedFiles([...uploadedFiles, fileData]);
+            setUploadedFiles([...uploadedFiles, {...fileData}]);
           }
         }
 

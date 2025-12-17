@@ -81,13 +81,25 @@ export function useFileSave({
           continue;
         }
 
-        const storedFile = sessionStorage.getItem(`uploadedFile_${file.id}`);
+        // 최신 파일 데이터 가져오기 (우선순위: sessionStorage > uploadedFiles)
         let fileToCheck = file;
+        const storedFile = sessionStorage.getItem(`uploadedFile_${file.id}`);
+
         if (storedFile) {
           try {
-            fileToCheck = JSON.parse(storedFile);
+            const parsedStoredFile = JSON.parse(storedFile);
+            // sessionStorage의 데이터가 더 최신이면 사용
+            fileToCheck = parsedStoredFile;
+            // console.log(`파일 ${file.fileName}: sessionStorage에서 최신 데이터 사용`);
           } catch (error) {
             console.error("파일 데이터 파싱 실패:", error);
+          }
+        } else {
+          // sessionStorage에 없으면 uploadedFiles에서 최신 데이터 찾기
+          const latestFile = uploadedFiles.find((f) => f.id === file.id);
+          if (latestFile) {
+            fileToCheck = latestFile;
+            // console.log(`파일 ${file.fileName}: uploadedFiles에서 최신 데이터 사용`);
           }
         }
 

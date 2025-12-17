@@ -1,6 +1,7 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
 import {generateUniqueCodesForVendors} from "@/utils/internalCode";
+import {generateAutoDeliveryMessage} from "@/utils/vendorMessageUtils";
 
 export async function POST(request: NextRequest) {
   try {
@@ -89,8 +90,15 @@ export async function POST(request: NextRequest) {
       // 상품명 인덱스 찾기
       const nameIdx = headerRow.findIndex((h: any) => h && typeof h === "string" && h.includes("상품명"));
 
+      // 배송메시지 자동 생성을 위해 원본 메시지 저장
+      const originalMessagesRef: {[rowIdx: number]: string} = {};
+      
+      // 배송메시지 자동 생성 적용
+      const updatedTableData = generateAutoDeliveryMessage(tableData, originalMessagesRef);
+      const updatedDataRows = updatedTableData.slice(1);
+
       // 배열을 객체로 변환 (헤더를 키로 사용)
-      const rowObjects = dataRows.map((row: any[], rowIndex: number) => {
+      const rowObjects = updatedDataRows.map((row: any[], rowIndex: number) => {
         const rowObj: any = {};
         headerRow.forEach((header: string, index: number) => {
           rowObj[header] = row[index] !== undefined && row[index] !== null ? row[index] : "";
@@ -142,17 +150,21 @@ export async function POST(request: NextRequest) {
       const createdAt = uploadResult[0].created_at;
 
       // 각 행을 upload_rows에 저장 (객체 형태로)
-      const insertPromises = rowObjects.map((rowObj: any) =>
-        sql`
-          INSERT INTO upload_rows (upload_id, row_data, created_at)
+      const insertPromises = rowObjects.map((rowObj: any) => {
+        // 쇼핑몰명 추출 (여러 가능한 키에서 찾기)
+        const shopName = rowObj["쇼핑몰명"] || rowObj["쇼핑몰명(1)"] || rowObj["쇼핑몰"] || "";
+        
+        return sql`
+          INSERT INTO upload_rows (upload_id, row_data, shop_name, created_at)
           VALUES (
             ${uploadId},
             ${JSON.stringify(rowObj)},
+            ${shopName},
             ${koreaTime.toISOString()}::timestamp
           )
           RETURNING id
-        `
-      );
+        `;
+      });
 
       const rowResults = await Promise.all(insertPromises);
 

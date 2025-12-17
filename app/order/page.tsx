@@ -18,6 +18,7 @@ import {useAutoMapping} from "@/hooks/useAutoMapping";
 import {useFileSave} from "@/hooks/useFileSave";
 import {useDragAndDrop} from "@/hooks/useDragAndDrop";
 import {fieldNameMap} from "@/constants/fieldMappings";
+import {generateAutoDeliveryMessage} from "@/utils/vendorMessageUtils";
 
 export default function Page() {
   const {
@@ -61,7 +62,8 @@ export default function Page() {
   } = useUploadStore();
 
   // 로딩 상태
-  const {isLoading, title, message, subMessage} = useLoadingStore();
+  const {isLoading, title, message, subMessage, startLoading} =
+    useLoadingStore();
 
   // 저장된 데이터 관련 훅
   const {
@@ -306,9 +308,17 @@ export default function Page() {
 
         if (fileChanged) {
           hasChanges = true;
+
+          // 배송메시지 자동 생성 적용
+          const originalMessagesRef: {[rowIdx: number]: string} = {};
+          const autoMessageTableData = generateAutoDeliveryMessage(
+            updatedTableData,
+            originalMessagesRef
+          );
+
           const updatedFile = {
             ...file,
-            tableData: updatedTableData,
+            tableData: autoMessageTableData,
             productCodeMap: fileProductCodeMap,
           };
 
@@ -469,7 +479,9 @@ export default function Page() {
             <div className="flex gap-2 items-center mb-0">
               <button
                 className="px-5 py-2 bg-blue-600 text-white text-sm font-bold rounded hover:bg-blue-800"
-                onClick={() => setIsModalOpen(true)}
+                onClick={() => {
+                  setIsModalOpen(true);
+                }}
               >
                 엑셀 업로드
               </button>

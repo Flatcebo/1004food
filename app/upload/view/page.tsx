@@ -8,6 +8,7 @@ import DirectInputModal from "@/components/DirectInputModal";
 import CodeEditWindow from "@/components/CodeEditWindow";
 import {fieldNameMap} from "@/constants/fieldMappings";
 import {useAutoMapping} from "@/hooks/useAutoMapping";
+import {generateAutoDeliveryMessage} from "@/utils/vendorMessageUtils";
 
 function FileViewContent() {
   const searchParams = useSearchParams();
@@ -620,19 +621,30 @@ function FileViewContent() {
         id: file.id,
         fileName: file.fileName,
         rowCount: tableData.length - 1, // 현재 테이블의 실제 행 수
-        tableData: tableData, // 현재 테이블 데이터 그대로 사용
-        headerIndex: headerIndex,
+        tableData: [...tableData], // 현재 테이블 데이터의 깊은 복사
+        headerIndex: {...headerIndex},
         productCodeMap: {...productCodeMap},
       };
 
-      // sessionStorage 업데이트
+      console.log("업데이트할 파일 데이터:", {
+        fileName: updatedFile.fileName,
+        rowCount: updatedFile.rowCount,
+        productCodeMapSize: Object.keys(updatedFile.productCodeMap).length,
+        hasTableData: !!updatedFile.tableData,
+        tableDataLength: updatedFile.tableData.length,
+      });
+
+      // sessionStorage 업데이트 (먼저 수행)
       try {
         sessionStorage.setItem(
           `uploadedFile_${fileId}`,
           JSON.stringify(updatedFile)
         );
+        console.log("sessionStorage 업데이트 성공");
       } catch (error) {
         console.error("sessionStorage 업데이트 실패:", error);
+        alert("로컬 저장에 실패했습니다. 다시 시도해주세요.");
+        return;
       }
 
       // store의 uploadedFiles도 업데이트
@@ -640,16 +652,23 @@ function FileViewContent() {
         f.id === fileId ? updatedFile : f
       );
       setUploadedFiles(updatedFiles);
+      console.log("store 업데이트 성공");
 
       // 서버에 업데이트 (한 번에)
       try {
         const requestData = {
           fileId: fileId,
-          tableData: tableData, // 현재 테이블 데이터 그대로 전송
-          headerIndex: headerIndex,
+          tableData: [...tableData], // 현재 테이블 데이터의 깊은 복사
+          headerIndex: {...headerIndex},
           productCodeMap: {...productCodeMap},
           isConfirmed: true,
         };
+
+        console.log("서버 업데이트 요청 데이터:", {
+          fileId: requestData.fileId,
+          rowCount: requestData.tableData.length - 1,
+          productCodeMapSize: Object.keys(requestData.productCodeMap).length,
+        });
 
         const response = await fetch("/api/upload/temp/update", {
           method: "PUT",
@@ -665,6 +684,7 @@ function FileViewContent() {
           alert("서버 저장에 실패했습니다. 다시 시도해주세요.");
           return;
         }
+        console.log("서버 업데이트 성공");
       } catch (error) {
         console.error("❌ 서버 업데이트 실패:", error);
         alert("서버 저장에 실패했습니다. 다시 시도해주세요.");
@@ -675,6 +695,7 @@ function FileViewContent() {
 
       // 부모 창에 메시지 전송 (약간의 지연을 두어 메시지가 전송되도록 보장)
       if (window.opener) {
+        console.log("부모 창에 메시지 전송:", updatedFile.fileName);
         // 메시지 전송
         window.opener.postMessage(
           {
@@ -777,12 +798,11 @@ function FileViewContent() {
       // 파일 데이터 설정
       if (parsedFile) {
         setFile(parsedFile);
-        setTableData(parsedFile.tableData);
         setFileName(parsedFile.fileName);
         setHeaderIndex(parsedFile.headerIndex);
         setProductCodeMap(parsedFile.productCodeMap || {});
 
-        // 원본 배송메시지 저장 (파일 로드 시점의 메시지를 그대로 저장)
+        // 원본 배송메시지 저장 및 자동 배송메시지 생성
         if (parsedFile.tableData && parsedFile.tableData.length > 1) {
           const headerRow = parsedFile.tableData[0];
           const messageIdx = headerRow.findIndex(
@@ -804,7 +824,6 @@ function FileViewContent() {
                 if (message !== null && message !== undefined) {
                   const messageStr = String(message).trim();
                   // 파일 로드 시점의 메시지를 그대로 원본으로 저장
-                  // 업체명 제거는 나중에 업체명을 적용할 때 한 번만 수행
                   originalMessagesRef.current[idx] = messageStr;
                 } else {
                   originalMessagesRef.current[idx] = "";
@@ -813,17 +832,26 @@ function FileViewContent() {
             });
           }
 
+          // 배송메시지 자동 생성 적용
+          const updatedTableData = generateAutoDeliveryMessage(
+            parsedFile.tableData,
+            originalMessagesRef.current
+          );
+          setTableData(updatedTableData);
+
           // 업체명 초기값 설정
           const vendorIdx = headerRow.findIndex(
             (h: any) => h && typeof h === "string" && h === "업체명"
           );
           if (
             vendorIdx !== -1 &&
-            parsedFile.tableData[1] &&
-            parsedFile.tableData[1][vendorIdx]
+            updatedTableData[1] &&
+            updatedTableData[1][vendorIdx]
           ) {
-            setVendorName(String(parsedFile.tableData[1][vendorIdx]).trim());
+            setVendorName(String(updatedTableData[1][vendorIdx]).trim());
           }
+        } else {
+          setTableData(parsedFile.tableData);
         }
 
         console.log(
@@ -897,7 +925,7 @@ function FileViewContent() {
             </div>
           </div>
           {isEditMode && (
-            <div className="mt-2 mb-2 p-4 bg-blue-50 border border-blue-200 rounded">
+            <div className="sticky -top-4 z-10 mt-2 mb-2 p-4 bg-blue-50 border border-blue-200 rounded">
               <div className="flex items-center gap-4">
                 <input
                   type="text"

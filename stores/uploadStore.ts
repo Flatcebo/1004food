@@ -13,7 +13,12 @@ const INTERNAL_COLUMNS: ColumnDef[] = [
   {
     key: "vendor",
     label: "업체명",
-    aliases: ["업체명", "업체", "거래처명", "고객주문처명", "쇼핑몰명(1)"],
+    aliases: ["업체명", "업체", "거래처명", "고객주문처명", "매입처명"],
+  },
+  {
+    key: "shopName",
+    label: "쇼핑몰명",
+    aliases: ["쇼핑몰명(1)", "쇼핑몰명", "쇼핑몰", "몰명"],
   },
   {key: "inout", label: "내외주", aliases: ["내외주"]},
   {
@@ -109,6 +114,18 @@ const INTERNAL_COLUMNS: ColumnDef[] = [
       "배송요청",
       "요청사항",
       "배송요청사항",
+    ],
+  },
+  {
+    key: "orderCode",
+    label: "주문번호",
+    aliases: [
+      "주문번호",
+      "주문번호(사방넷)",
+      "주문번호(쇼핑몰)",
+      "주문 번호",
+      "order_code",
+      "orderCode",
     ],
   },
   // {
@@ -228,6 +245,7 @@ export interface UploadStoreState {
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   openFileInNewWindow: (fileId: string) => void;
   processFile: (file: File) => Promise<UploadedFile>;
+  checkForDuplicateFileName: (fileName: string) => Promise<boolean>;
 }
 
 export const useUploadStore = create<UploadStoreState>((set, get) => ({
@@ -282,6 +300,19 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       });
 
       const result = await response.json();
+
+      // 중복 파일명으로 인한 저장 실패 처리
+      if (!result.success && result.error === "DUPLICATE_FILENAMES") {
+        const duplicateList = result.duplicateFiles
+          .map((name: string) => `• ${name}`)
+          .join("\n");
+
+        // alert(
+        //   `❌ 다음 파일들이 중복된 파일명으로 인해 저장되지 않았습니다:\n\n${duplicateList}`
+        // );
+        return false;
+      }
+
       return result.success;
     } catch (error) {
       console.error("서버 저장 실패:", error);
@@ -633,8 +664,33 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       reader.readAsArrayBuffer(file);
     });
   },
+  checkForDuplicateFileName: async (fileName: string): Promise<boolean> => {
+    try {
+      const response = await fetch("/api/upload/temp/list");
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        return result.data.some((file: any) => file.fileName === fileName);
+      }
+      return false;
+    } catch (error) {
+      console.error("중복 파일명 체크 실패:", error);
+      return false;
+    }
+  },
+
   handleFile: async (file) => {
     try {
+      // 중복 파일명 체크
+      const isDuplicate = await get().checkForDuplicateFileName(file.name);
+
+      if (isDuplicate) {
+        // alert(
+        //   `❌ 동일한 파일명 "${file.name}"이 이미 존재합니다.\n업로드가 취소되었습니다.`
+        // );
+        return; // 중복 파일명인 경우 업로드 차단
+      }
+
       const uploadedFile = await get().processFile(file);
       get().addUploadedFile(uploadedFile);
       get().setFileName(file.name);
@@ -644,18 +700,53 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       await get().saveFilesToServer();
     } catch (error: any) {
       console.error("파일 처리 실패:", error);
-      alert(`파일 처리 실패: ${error.message}`);
+      // alert(`파일 처리 실패: ${error.message}`);
     }
   },
   handleFiles: async (files: File[]) => {
-    const {addUploadedFile} = get();
-    const promises = Array.from(files).map((file) => get().processFile(file));
-    try {
-      const uploadedFiles = await Promise.all(promises);
-      uploadedFiles.forEach((file) => addUploadedFile(file));
+    const {addUploadedFile, checkForDuplicateFileName} = get();
 
-      // 서버에 저장
-      await get().saveFilesToServer();
+    try {
+      // 중복 파일명 체크
+      const duplicateFiles: string[] = [];
+      const validFiles: File[] = [];
+
+      for (const file of files) {
+        const isDuplicate = await checkForDuplicateFileName(file.name);
+        if (isDuplicate) {
+          duplicateFiles.push(file.name);
+        } else {
+          validFiles.push(file);
+        }
+      }
+
+      if (duplicateFiles.length > 0) {
+        const duplicateList = duplicateFiles
+          .map((name) => `• ${name}`)
+          .join("\n");
+
+        if (validFiles.length === 0) {
+          // 모든 파일이 중복인 경우
+          alert(
+            `❌ 다음 파일명들이 이미 존재합니다:\n\n${duplicateList}\n\n모든 파일의 업로드가 취소되었습니다.`
+          );
+          return;
+        } else {
+          // 일부 파일만 중복인 경우
+          alert(
+            `❌ 다음 파일명들이 이미 존재하여 제외되었습니다:\n\n${duplicateList}\n\n나머지 ${validFiles.length}개 파일만 업로드됩니다.`
+          );
+        }
+      }
+
+      if (validFiles.length > 0) {
+        const promises = validFiles.map((file) => get().processFile(file));
+        const uploadedFiles = await Promise.all(promises);
+        uploadedFiles.forEach((file) => addUploadedFile(file));
+
+        // 서버에 저장
+        await get().saveFilesToServer();
+      }
     } catch (error: any) {
       console.error("파일 처리 실패:", error);
       alert(`일부 파일 처리 실패: ${error}`);

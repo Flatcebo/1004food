@@ -51,7 +51,7 @@ const SavedDataTable = memo(function SavedDataTable({
   uploadTimeTo = "",
   onRemoveFilter,
 }: SavedDataTableProps) {
-  // 숨길 헤더 목록
+  // 숨길 헤더 목록 (기본 숨김 헤더 + 주문자 관련 단독 컬럼)
   const hiddenHeaders = [
     "id",
     "file_name",
@@ -60,12 +60,128 @@ const SavedDataTable = memo(function SavedDataTable({
     "택배비",
     "합포수량",
     "upload_time",
+    "주문자명", // 수취인명에 합쳐져서 표시되므로 단독 컬럼은 숨김
+    "주문자 전화번호", // 수취인 전화번호에 합쳐져서 표시되므로 단독 컬럼은 숨김
+    "주문번호", // 내부코드에 합쳐져서 표시되므로 단독 컬럼은 숨김
+    "쇼핑몰명", // 업체명에 합쳐져서 표시되므로 단독 컬럼은 숨김
   ];
 
   // 헤더 순서는 useUploadData에서 이미 정렬되어 전달되므로 그대로 사용 (메모이제이션)
   const filteredHeaders = useMemo(() => {
     return headers.filter((header) => !hiddenHeaders.includes(header));
   }, [headers]);
+
+  // 헤더 표시명 변경 함수
+  const getHeaderDisplayName = (header: string) => {
+    switch (header) {
+      case "수취인명":
+        return "수취인명\n주문자명";
+      case "수취인 전화번호":
+        return "수취인 전화번호\n주문자 전화번호";
+      case "내부코드":
+        return "내부코드\n주문번호";
+      case "업체명":
+        return "업체명\n쇼핑몰명";
+      case "우편":
+        return "우편번호";
+      case "id":
+        return "ID";
+      default:
+        return header;
+    }
+  };
+
+  // 날짜 포맷 함수 (년월일 / 시분초로 분리)
+  const formatDateTime = (dateString: string) => {
+    if (!dateString) return "";
+    try {
+      const date = new Date(dateString);
+      const dateOnly = date.toLocaleDateString("ko-KR", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      });
+      const timeOnly = date.toLocaleTimeString("ko-KR", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      });
+      return `${dateOnly}\n${timeOnly}`;
+    } catch (error) {
+      return dateString;
+    }
+  };
+
+  // 합쳐진 셀 값 생성 함수
+  const getCombinedCellValue = (row: any, header: string) => {
+    switch (header) {
+      case "수취인명":
+        const receiverName = row["수취인명"] || "";
+        const ordererName = row["주문자명"] || "";
+        if (receiverName && ordererName && receiverName !== ordererName) {
+          return `${receiverName}\n${ordererName}`;
+        }
+        return receiverName || ordererName;
+
+      case "수취인 전화번호":
+        const receiverPhone = row["수취인 전화번호"] || "";
+        const ordererPhone = row["주문자 전화번호"] || "";
+        if (receiverPhone && ordererPhone && receiverPhone !== ordererPhone) {
+          return `${receiverPhone}\n${ordererPhone}`;
+        }
+        return receiverPhone || ordererPhone;
+
+      case "내부코드":
+        const internalCode = row["내부코드"] || "";
+        const orderCode = row["주문번호"] || "";
+        if (internalCode && orderCode) {
+          return `${internalCode}\n${orderCode}`;
+        }
+        return internalCode || orderCode;
+
+      case "업체명":
+        const vendorName = row["업체명"] || "";
+        const shopName = row["쇼핑몰명"] || "";
+        if (vendorName && shopName && vendorName !== shopName) {
+          return `${vendorName}\n${shopName}`;
+        }
+        return vendorName || shopName;
+
+      case "주문자명":
+        // 수취인명 컬럼에서 이미 처리되므로 이 컬럼은 숨겨짐
+        return row["주문자명"] !== undefined && row["주문자명"] !== null
+          ? String(row["주문자명"])
+          : "";
+
+      case "주문자 전화번호":
+        // 수취인 전화번호 컬럼에서 이미 처리되므로 이 컬럼은 숨겨짐
+        return row["주문자 전화번호"] !== undefined &&
+          row["주문자 전화번호"] !== null
+          ? String(row["주문자 전화번호"])
+          : "";
+
+      case "주문번호":
+        // 내부코드 컬럼에서 이미 처리되므로 이 컬럼은 숨겨짐
+        return row["주문번호"] !== undefined && row["주문번호"] !== null
+          ? String(row["주문번호"])
+          : "";
+
+      case "쇼핑몰명":
+        // 업체명 컬럼에서 이미 처리되므로 이 컬럼은 숨겨짐
+        return row["쇼핑몰명"] !== undefined && row["쇼핑몰명"] !== null
+          ? String(row["쇼핑몰명"])
+          : "";
+
+      case "등록일":
+        return formatDateTime(row["등록일"]);
+
+      default:
+        return row[header] !== undefined && row[header] !== null
+          ? String(row[header])
+          : "";
+    }
+  };
 
   const [editingRow, setEditingRow] = useState<{
     id: number;
@@ -535,19 +651,45 @@ const SavedDataTable = memo(function SavedDataTable({
                   className="cursor-pointer"
                 />
               </th>
-              {filteredHeaders.map((header, idx) => (
-                <th
-                  key={idx}
-                  className="border border-[#cacaca] bg-gray-100 px-2 py-2 text-xs text-center"
-                  style={{width: getColumnWidth(header)}}
-                >
-                  {header === "id"
-                    ? "ID"
-                    : header === "우편"
-                    ? "우편번호"
-                    : header}
-                </th>
-              ))}
+              {filteredHeaders.map((header, idx) => {
+                const displayName = getHeaderDisplayName(header);
+                const isMultiLineHeader = displayName.includes("\n");
+
+                return (
+                  <th
+                    key={idx}
+                    className="border border-[#cacaca] bg-gray-100 px-2 py-2 text-xs text-center"
+                    style={{
+                      width: getColumnWidth(header),
+                      whiteSpace: isMultiLineHeader ? "pre-line" : "nowrap",
+                      lineHeight: "1.2",
+                    }}
+                  >
+                    {isMultiLineHeader ? (
+                      <span>
+                        {displayName
+                          .split("\n")
+                          .map((line: string, lineIdx: number) => (
+                            <span key={lineIdx}>
+                              {lineIdx === 0 ? (
+                                line
+                              ) : (
+                                <span className="text-gray-500 font-medium">
+                                  {line}
+                                </span>
+                              )}
+                              {lineIdx < displayName.split("\n").length - 1 && (
+                                <br />
+                              )}
+                            </span>
+                          ))}
+                      </span>
+                    ) : (
+                      displayName
+                    )}
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -586,15 +728,50 @@ const SavedDataTable = memo(function SavedDataTable({
                   {filteredHeaders.map((header, colIdx) => {
                     const isMappingCode = header === "매핑코드";
                     const isId = header === "id";
-                    const cellValue =
-                      row[header] !== undefined && row[header] !== null
-                        ? String(row[header])
-                        : "";
+                    const isRegistrationDate = header === "등록일";
+                    const cellValue = getCombinedCellValue(row, header);
+                    const isMultiLine = cellValue.includes("\n");
+
+                    // 합쳐진 셀인지 확인
+                    const isCombinedCell = (() => {
+                      switch (header) {
+                        case "수취인명":
+                          const receiverName = row["수취인명"] || "";
+                          const ordererName = row["주문자명"] || "";
+                          return (
+                            receiverName &&
+                            ordererName &&
+                            receiverName !== ordererName
+                          );
+                        case "수취인 전화번호":
+                          const receiverPhone = row["수취인 전화번호"] || "";
+                          const ordererPhone = row["주문자 전화번호"] || "";
+                          return (
+                            receiverPhone &&
+                            ordererPhone &&
+                            receiverPhone !== ordererPhone
+                          );
+                        case "내부코드":
+                          const internalCode = row["내부코드"] || "";
+                          const orderCode = row["주문번호"] || "";
+                          return internalCode && orderCode;
+                        case "업체명":
+                          const vendorName = row["업체명"] || "";
+                          const shopName = row["쇼핑몰명"] || "";
+                          return (
+                            vendorName && shopName && vendorName !== shopName
+                          );
+                        default:
+                          return false;
+                      }
+                    })();
 
                     return (
                       <td
                         key={colIdx}
-                        className={`border px-2 border-gray-300 text-xs align-middle text-left ${
+                        className={`border px-2 border-gray-300 text-xs align-middle ${
+                          isRegistrationDate ? "text-center" : "text-left"
+                        } ${
                           (isMappingCode && currentCode) || isId
                             ? "cursor-pointer hover:bg-blue-50"
                             : ""
@@ -606,6 +783,7 @@ const SavedDataTable = memo(function SavedDataTable({
                           wordBreak: "break-word",
                           overflow: "hidden",
                           textOverflow: "ellipsis",
+                          whiteSpace: isMultiLine ? "pre-line" : "nowrap",
                         }}
                         onClick={() => {
                           if (isMappingCode && currentCode) {
@@ -617,11 +795,29 @@ const SavedDataTable = memo(function SavedDataTable({
                             setDetailRow(row);
                           }
                         }}
-                        title={cellValue}
+                        title={cellValue.replace(/\n/g, " / ")}
                       >
                         {(isMappingCode && currentCode) || isId ? (
                           <span className="text-blue-600 underline">
                             {cellValue}
+                          </span>
+                        ) : isCombinedCell && isMultiLine ? (
+                          <span>
+                            {cellValue
+                              .split("\n")
+                              .map((line: string, lineIdx: number) => (
+                                <span key={lineIdx}>
+                                  {lineIdx === 0 ? (
+                                    line
+                                  ) : (
+                                    <span className="text-gray-500 font-medium">
+                                      {line}
+                                    </span>
+                                  )}
+                                  {lineIdx <
+                                    cellValue.split("\n").length - 1 && <br />}
+                                </span>
+                              ))}
                           </span>
                         ) : (
                           cellValue
