@@ -651,14 +651,6 @@ function FileViewContent() {
           isConfirmed: true,
         };
 
-        console.log("🚀 서버로 전송하는 데이터:", {
-          fileId: requestData.fileId,
-          tableDataLength: requestData.tableData.length,
-          rowCount: requestData.tableData.length - 1,
-          isConfirmed: requestData.isConfirmed,
-          sampleData: requestData.tableData.slice(0, 3), // 처음 3행만 샘플로
-        });
-
         const response = await fetch("/api/upload/temp/update", {
           method: "PUT",
           headers: {
@@ -673,12 +665,6 @@ function FileViewContent() {
           alert("서버 저장에 실패했습니다. 다시 시도해주세요.");
           return;
         }
-
-        console.log("✅ 서버 저장 성공:", {
-          rowCount: result.data?.row_count,
-          isConfirmed: result.data?.is_confirmed,
-          message: result.message,
-        });
       } catch (error) {
         console.error("❌ 서버 업데이트 실패:", error);
         alert("서버 저장에 실패했습니다. 다시 시도해주세요.");

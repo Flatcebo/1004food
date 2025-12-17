@@ -1,5 +1,6 @@
 "use client";
 
+import {useLoadingStore} from "@/stores/loadingStore";
 import {UploadedFile} from "@/stores/uploadStore";
 
 interface UploadedFilesListProps {
@@ -17,7 +18,10 @@ export default function UploadedFilesList({
   onFileDelete,
   onResetData,
 }: UploadedFilesListProps) {
+  const {isLoading} = useLoadingStore();
   // if (uploadedFiles.length === 0) return null;
+
+  if (isLoading) return <div>Loading...</div>;
 
   return (
     <div className="w-full h-auto mt-4">

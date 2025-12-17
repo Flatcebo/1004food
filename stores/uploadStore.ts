@@ -160,6 +160,7 @@ export interface UploadStoreState {
 
   sessionId: string;
   setSessionId: (id: string) => void;
+  switchToSession: (newSessionId: string) => Promise<void>;
   uploadedFiles: UploadedFile[];
   setUploadedFiles: (files: UploadedFile[]) => void;
   addUploadedFile: (file: UploadedFile) => void;
@@ -261,6 +262,64 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       sessionStorage.setItem("uploadSessionId", id);
     }
   },
+  switchToSession: async (newSessionId: string) => {
+    const {
+      setSessionId,
+      setUploadedFiles,
+      setTableData,
+      setFileName,
+      setProductCodeMap,
+      setHeaderIndex,
+      setRecommendIdx,
+      setRecommendList,
+    } = get();
+
+    // 세션 ID 변경
+    setSessionId(newSessionId);
+
+    // 기존 데이터 초기화
+    setTableData([]);
+    setFileName("");
+    setProductCodeMap({});
+    setHeaderIndex(null);
+    setRecommendIdx(null);
+    setRecommendList([]);
+
+    // 확인된 파일 상태 초기화
+    set({confirmedFiles: new Set<string>()});
+
+    // 새 세션의 파일 목록 로드
+    try {
+      const response = await fetch(
+        `/api/upload/temp/list?sessionId=${newSessionId}`
+      );
+      const result = await response.json();
+
+      if (result.success && result.data) {
+        setUploadedFiles(result.data);
+
+        // 확인된 파일들 상태 복원
+        const {confirmFile} = get();
+        result.data.forEach((file: any) => {
+          if (file.isConfirmed) {
+            confirmFile(file.id);
+          }
+
+          // sessionStorage에도 저장
+          try {
+            sessionStorage.setItem(
+              `uploadedFile_${file.id}`,
+              JSON.stringify(file)
+            );
+          } catch (error) {
+            console.error("sessionStorage 저장 실패:", error);
+          }
+        });
+      }
+    } catch (error) {
+      console.error("새 세션 파일 로드 실패:", error);
+    }
+  },
   uploadedFiles: [],
   setUploadedFiles: (files) => set({uploadedFiles: files}),
   addUploadedFile: (file) =>
@@ -310,7 +369,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     }
   },
   loadFilesFromServer: async () => {
-    const {sessionId, setUploadedFiles} = get();
+    const {sessionId, setUploadedFiles, confirmFile} = get();
     if (!sessionId) {
       return;
     }
@@ -324,8 +383,13 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       if (result.success && result.data) {
         setUploadedFiles(result.data);
 
-        // sessionStorage에도 저장
-        result.data.forEach((file: UploadedFile) => {
+        // 확인된 파일들 상태 복원
+        result.data.forEach((file: any) => {
+          if (file.isConfirmed) {
+            confirmFile(file.id);
+          }
+
+          // sessionStorage에도 저장
           try {
             sessionStorage.setItem(
               `uploadedFile_${file.id}`,
