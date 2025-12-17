@@ -6,7 +6,7 @@ async function checkDuplicateFileName(fileName: string): Promise<boolean> {
   const existingFiles = await sql`
     SELECT file_name FROM temp_files WHERE file_name = ${fileName}
   `;
-  
+
   return existingFiles.length > 0;
 }
 
@@ -27,7 +27,8 @@ export async function POST(request: NextRequest) {
 
     // 각 파일을 temp_files 테이블에 직접 저장
     const savePromises = files.map(async (file: any) => {
-      const {id, fileName, rowCount, tableData, headerIndex, productCodeMap} = file;
+      const {id, fileName, rowCount, tableData, headerIndex, productCodeMap} =
+        file;
 
       if (!id || !fileName || !tableData) {
         console.warn("파일 데이터가 불완전합니다:", file);
@@ -37,13 +38,13 @@ export async function POST(request: NextRequest) {
       try {
         // 중복 파일명 체크
         const isDuplicate = await checkDuplicateFileName(fileName);
-        
+
         if (isDuplicate) {
           console.log(`❌ 중복 파일명 감지로 저장 거부: "${fileName}"`);
           return {
-            error: 'DUPLICATE_FILENAME',
+            error: "DUPLICATE_FILENAME",
             fileName: fileName,
-            message: `파일명 "${fileName}"이 이미 존재합니다.`
+            message: `파일명 "${fileName}"이 이미 존재합니다.`,
           };
         }
 
@@ -75,7 +76,7 @@ export async function POST(request: NextRequest) {
         return {
           ...result[0],
           fileName: fileName,
-          success: true
+          success: true,
         };
       } catch (error: any) {
         console.error(`파일 ${fileName} 저장 실패:`, error);
@@ -85,23 +86,28 @@ export async function POST(request: NextRequest) {
 
     const results = await Promise.all(savePromises);
     const validResults = results.filter((r) => r !== null);
-    const successResults = validResults.filter(r => r.success);
-    const duplicateResults = validResults.filter(r => r.error === 'DUPLICATE_FILENAME');
-    
+    const successResults = validResults.filter((r: any) => r.success);
+    const duplicateResults = validResults.filter(
+      (r) => r.error === "DUPLICATE_FILENAME"
+    );
+
     const successCount = successResults.length;
     const duplicateCount = duplicateResults.length;
 
     if (duplicateCount > 0) {
-      const duplicateFiles = duplicateResults.map(r => r.fileName);
-      
-      return NextResponse.json({
-        success: false,
-        error: 'DUPLICATE_FILENAMES',
-        message: `${duplicateCount}개 파일이 중복된 파일명으로 인해 저장되지 않았습니다.`,
-        duplicateFiles,
-        savedCount: successCount,
-        totalCount: files.length,
-      }, { status: 409 }); // 409 Conflict
+      const duplicateFiles = duplicateResults.map((r) => r.fileName);
+
+      return NextResponse.json(
+        {
+          success: false,
+          error: "DUPLICATE_FILENAMES",
+          message: `${duplicateCount}개 파일이 중복된 파일명으로 인해 저장되지 않았습니다.`,
+          duplicateFiles,
+          savedCount: successCount,
+          totalCount: files.length,
+        },
+        {status: 409}
+      ); // 409 Conflict
     }
 
     return NextResponse.json({
@@ -118,4 +124,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
