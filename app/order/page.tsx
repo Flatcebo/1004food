@@ -11,7 +11,6 @@ import DataFilters from "@/components/DataFilters";
 import DirectInputModal from "@/components/DirectInputModal";
 import DataTable from "@/components/DataTable";
 import LoadingOverlay from "@/components/LoadingOverlay";
-import SessionSelector from "@/components/SessionSelector";
 import {useUploadData} from "@/hooks/useUploadData";
 import {useFileValidation} from "@/hooks/useFileValidation";
 import {useFileMessageHandler} from "@/hooks/useFileMessageHandler";
@@ -21,8 +20,6 @@ import {useDragAndDrop} from "@/hooks/useDragAndDrop";
 import {fieldNameMap} from "@/constants/fieldMappings";
 
 export default function Page() {
-  const [isSessionSelectorOpen, setIsSessionSelectorOpen] = useState(false);
-
   const {
     tableData,
     setTableData,
@@ -34,8 +31,6 @@ export default function Page() {
     setFileInputRef,
     fileName,
     setFileName,
-    sessionId,
-    switchToSession,
     codes,
     setCodes,
     productCodeMap,
@@ -427,7 +422,6 @@ export default function Page() {
     fetchSavedData,
     resetData,
     unconfirmFile,
-    sessionId,
   });
 
   const handleFileDelete = async (fileId: string) => {
@@ -441,17 +435,6 @@ export default function Page() {
       });
     } catch (error) {
       console.error("서버에서 파일 삭제 실패:", error);
-    }
-  };
-
-  // 세션 선택 핸들러
-  const handleSessionSelect = async (newSessionId: string) => {
-    try {
-      await switchToSession(newSessionId);
-      // 파일 검증 상태는 새로운 파일들이 로드되면 자동으로 재검증됩니다
-    } catch (error) {
-      console.error("세션 전환 실패:", error);
-      alert("세션 전환에 실패했습니다.");
     }
   };
 
@@ -559,18 +542,6 @@ export default function Page() {
         }}
         disabled={hasInvalidFiles}
       >
-        <div className="mb-4 flex justify-between items-center">
-          <div className="text-sm text-gray-600">
-            현재 세션: <span className="font-medium">{sessionId}</span>
-          </div>
-          <button
-            onClick={() => setIsSessionSelectorOpen(true)}
-            className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
-          >
-            다른 세션 선택
-          </button>
-        </div>
-
         <FileUploadArea
           dragActive={dragActive}
           fileInputRef={fileInputRef}
@@ -673,12 +644,6 @@ export default function Page() {
           />
         )}
       </ModalTable>
-
-      <SessionSelector
-        isOpen={isSessionSelectorOpen}
-        onClose={() => setIsSessionSelectorOpen(false)}
-        onSessionSelect={handleSessionSelect}
-      />
     </div>
   );
 }

@@ -32,7 +32,7 @@ export async function PUT(request: NextRequest) {
 
     // postgres.js 템플릿 리터럴 사용 (더 안전함)
     const result = await sql`
-      UPDATE temp_upload_files
+      UPDATE temp_files
       SET 
         table_data = ${JSON.stringify(tableData)},
         row_count = ${rowCount},

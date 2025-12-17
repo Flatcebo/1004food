@@ -4,32 +4,7 @@ import {generateUniqueCodesForVendors} from "@/utils/internalCode";
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const {sessionId} = body;
-
-    if (!sessionId) {
-      return NextResponse.json(
-        {success: false, error: "sessionId가 필요합니다."},
-        {status: 400}
-      );
-    }
-
-    // 세션 ID로 temp_uploads 조회
-    const tempUploadResult = await sql`
-      SELECT id FROM temp_uploads
-      WHERE session_id = ${sessionId}
-    `;
-
-    if (tempUploadResult.length === 0) {
-      return NextResponse.json(
-        {success: false, error: "세션을 찾을 수 없습니다."},
-        {status: 404}
-      );
-    }
-
-    const tempUploadId = tempUploadResult[0].id;
-
-    // 확인된 파일들만 조회
+    // 확인된 모든 임시 파일들을 조회 (세션 구분 없음)
     const confirmedFiles = await sql`
       SELECT 
         file_id,
@@ -38,8 +13,8 @@ export async function POST(request: NextRequest) {
         table_data,
         header_index,
         product_code_map
-      FROM temp_upload_files
-      WHERE temp_upload_id = ${tempUploadId} AND is_confirmed = true
+      FROM temp_files
+      WHERE is_confirmed = true
       ORDER BY created_at ASC
     `;
 
@@ -189,11 +164,14 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 임시 저장 데이터 삭제
-    await sql`
-      DELETE FROM temp_uploads
-      WHERE session_id = ${sessionId}
-    `;
+    // 확인된 임시 저장 데이터 삭제
+    const confirmedFileIds = confirmedFiles.map(f => f.file_id);
+    if (confirmedFileIds.length > 0) {
+      await sql`
+        DELETE FROM temp_files
+        WHERE file_id = ANY(${confirmedFileIds})
+      `;
+    }
 
     return NextResponse.json({
       success: true,

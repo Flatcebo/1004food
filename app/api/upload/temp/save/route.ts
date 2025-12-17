@@ -4,9 +4,9 @@ import sql from "@/lib/db";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const {sessionId, files} = body;
+    const {files} = body;
 
-    if (!sessionId || !files || !Array.isArray(files)) {
+    if (!files || !Array.isArray(files)) {
       return NextResponse.json(
         {success: false, error: "필수 데이터가 누락되었습니다."},
         {status: 400}
@@ -16,18 +16,7 @@ export async function POST(request: NextRequest) {
     // 한국 시간(KST) 생성
     const koreaTime = new Date(Date.now() + 9 * 60 * 60 * 1000);
 
-    // temp_uploads에 세션 생성 또는 업데이트
-    const tempUploadResult = await sql`
-      INSERT INTO temp_uploads (session_id, created_at, updated_at)
-      VALUES (${sessionId}, ${koreaTime.toISOString()}::timestamp, ${koreaTime.toISOString()}::timestamp)
-      ON CONFLICT (session_id) DO UPDATE SET
-        updated_at = ${koreaTime.toISOString()}::timestamp
-      RETURNING id
-    `;
-
-    const tempUploadId = tempUploadResult[0].id;
-
-    // 각 파일을 temp_upload_files에 저장
+    // 각 파일을 temp_files 테이블에 직접 저장
     const savePromises = files.map(async (file: any) => {
       const {id, fileName, rowCount, tableData, headerIndex, productCodeMap} = file;
 
@@ -38,13 +27,12 @@ export async function POST(request: NextRequest) {
 
       try {
         const result = await sql`
-          INSERT INTO temp_upload_files (
-            temp_upload_id, file_id, file_name, row_count,
+          INSERT INTO temp_files (
+            file_id, file_name, row_count,
             table_data, header_index, product_code_map,
             created_at, updated_at
           )
           VALUES (
-            ${tempUploadId},
             ${id},
             ${fileName},
             ${rowCount},
@@ -75,7 +63,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      tempUploadId,
       savedCount: successCount,
       totalCount: files.length,
       message: `${successCount}/${files.length}개 파일이 임시 저장되었습니다.`,

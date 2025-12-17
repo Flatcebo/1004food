@@ -158,9 +158,6 @@ export interface UploadStoreState {
   fileName: string;
   setFileName: (v: string) => void;
 
-  sessionId: string;
-  setSessionId: (id: string) => void;
-  switchToSession: (newSessionId: string) => Promise<void>;
   uploadedFiles: UploadedFile[];
   setUploadedFiles: (files: UploadedFile[]) => void;
   addUploadedFile: (file: UploadedFile) => void;
@@ -244,82 +241,6 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
   setFileInputRef: (ref) => set({fileInputRef: ref}),
   fileName: "",
   setFileName: (v) => set({fileName: v}),
-  sessionId: (() => {
-    // 브라우저 환경에서만 실행
-    if (typeof window !== "undefined") {
-      let id = sessionStorage.getItem("uploadSessionId");
-      if (!id) {
-        id = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        sessionStorage.setItem("uploadSessionId", id);
-      }
-      return id;
-    }
-    return "";
-  })(),
-  setSessionId: (id) => {
-    set({sessionId: id});
-    if (typeof window !== "undefined") {
-      sessionStorage.setItem("uploadSessionId", id);
-    }
-  },
-  switchToSession: async (newSessionId: string) => {
-    const {
-      setSessionId,
-      setUploadedFiles,
-      setTableData,
-      setFileName,
-      setProductCodeMap,
-      setHeaderIndex,
-      setRecommendIdx,
-      setRecommendList,
-    } = get();
-
-    // 세션 ID 변경
-    setSessionId(newSessionId);
-
-    // 기존 데이터 초기화
-    setTableData([]);
-    setFileName("");
-    setProductCodeMap({});
-    setHeaderIndex(null);
-    setRecommendIdx(null);
-    setRecommendList([]);
-
-    // 확인된 파일 상태 초기화
-    set({confirmedFiles: new Set<string>()});
-
-    // 새 세션의 파일 목록 로드
-    try {
-      const response = await fetch(
-        `/api/upload/temp/list?sessionId=${newSessionId}`
-      );
-      const result = await response.json();
-
-      if (result.success && result.data) {
-        setUploadedFiles(result.data);
-
-        // 확인된 파일들 상태 복원
-        const {confirmFile} = get();
-        result.data.forEach((file: any) => {
-          if (file.isConfirmed) {
-            confirmFile(file.id);
-          }
-
-          // sessionStorage에도 저장
-          try {
-            sessionStorage.setItem(
-              `uploadedFile_${file.id}`,
-              JSON.stringify(file)
-            );
-          } catch (error) {
-            console.error("sessionStorage 저장 실패:", error);
-          }
-        });
-      }
-    } catch (error) {
-      console.error("새 세션 파일 로드 실패:", error);
-    }
-  },
   uploadedFiles: [],
   setUploadedFiles: (files) => set({uploadedFiles: files}),
   addUploadedFile: (file) =>
@@ -344,8 +265,8 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       return {confirmedFiles: newSet};
     }),
   saveFilesToServer: async () => {
-    const {sessionId, uploadedFiles} = get();
-    if (!sessionId || uploadedFiles.length === 0) {
+    const {uploadedFiles} = get();
+    if (uploadedFiles.length === 0) {
       return false;
     }
 
@@ -356,7 +277,6 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          sessionId,
           files: uploadedFiles,
         }),
       });
@@ -369,15 +289,10 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     }
   },
   loadFilesFromServer: async () => {
-    const {sessionId, setUploadedFiles, confirmFile} = get();
-    if (!sessionId) {
-      return;
-    }
+    const {setUploadedFiles, confirmFile} = get();
 
     try {
-      const response = await fetch(
-        `/api/upload/temp/list?sessionId=${sessionId}`
-      );
+      const response = await fetch("/api/upload/temp/list");
       const result = await response.json();
 
       if (result.success && result.data) {

@@ -3,21 +3,10 @@ import sql from "@/lib/db";
 
 export async function POST() {
   try {
-    // 임시 업로드 세션 테이블 생성
+    // 단순한 임시 파일 테이블 생성 (세션 개념 제거)
     await sql`
-      CREATE TABLE IF NOT EXISTS temp_uploads (
+      CREATE TABLE IF NOT EXISTS temp_files (
         id SERIAL PRIMARY KEY,
-        session_id VARCHAR(255) UNIQUE NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `;
-
-    // 임시 업로드 파일 테이블 생성
-    await sql`
-      CREATE TABLE IF NOT EXISTS temp_upload_files (
-        id SERIAL PRIMARY KEY,
-        temp_upload_id INTEGER REFERENCES temp_uploads(id) ON DELETE CASCADE,
         file_id VARCHAR(255) UNIQUE NOT NULL,
         file_name VARCHAR(255) NOT NULL,
         row_count INTEGER NOT NULL,
@@ -32,15 +21,11 @@ export async function POST() {
 
     // 인덱스 생성
     await sql`
-      CREATE INDEX IF NOT EXISTS idx_temp_uploads_session_id ON temp_uploads(session_id)
+      CREATE INDEX IF NOT EXISTS idx_temp_files_file_id ON temp_files(file_id)
     `;
     
     await sql`
-      CREATE INDEX IF NOT EXISTS idx_temp_upload_files_file_id ON temp_upload_files(file_id)
-    `;
-    
-    await sql`
-      CREATE INDEX IF NOT EXISTS idx_temp_upload_files_temp_upload_id ON temp_upload_files(temp_upload_id)
+      CREATE INDEX IF NOT EXISTS idx_temp_files_created_at ON temp_files(created_at)
     `;
 
     return NextResponse.json({

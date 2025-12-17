@@ -10,7 +10,6 @@ interface UseFileSaveProps {
   fetchSavedData: () => Promise<void>;
   resetData: () => void;
   unconfirmFile: (fileId: string) => void;
-  sessionId: string;
 }
 
 export function useFileSave({
@@ -20,7 +19,6 @@ export function useFileSave({
   fetchSavedData,
   resetData,
   unconfirmFile,
-  sessionId,
 }: UseFileSaveProps) {
   const {startLoading, updateLoadingMessage, stopLoading} = useLoadingStore();
 
@@ -307,9 +305,7 @@ export function useFileSave({
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({
-            sessionId: sessionId,
-          }),
+          body: JSON.stringify({}),
         });
 
         const result = await response.json();
@@ -352,7 +348,6 @@ export function useFileSave({
     fetchSavedData,
     resetData,
     unconfirmFile,
-    sessionId,
     startLoading,
     updateLoadingMessage,
     stopLoading,
