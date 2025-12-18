@@ -408,7 +408,34 @@ function FileViewContent() {
     value: string
   ) => {
     const newTableData = [...tableData];
-    newTableData[rowIndex][colIndex] = value;
+
+    // 배송메시지 컬럼 인덱스 찾기
+    const headerRow = newTableData[0];
+    const messageIdx = headerRow.findIndex(
+      (h: any) =>
+        h &&
+        typeof h === "string" &&
+        (h === "배송메시지" ||
+          h === "배송메세지" ||
+          h === "배송요청" ||
+          h === "요청사항" ||
+          h === "배송요청사항")
+    );
+
+    // 배송메시지 컬럼은 변경하지 않음 (자동 생성된 메시지 보호)
+    // 주문자명 컬럼 변경 시에도 배송메시지를 업데이트하지 않도록 보호
+    if (colIndex !== messageIdx) {
+      newTableData[rowIndex][colIndex] = value;
+
+      // 주문자명 컬럼이 변경된 경우, 배송메시지를 재생성하지 않도록 보호
+      if (messageIdx !== -1 && newTableData[rowIndex][messageIdx]) {
+        const currentMessage = String(newTableData[rowIndex][messageIdx]);
+        // 이미 #로 시작하는 메시지는 유지 (재생성 방지)
+        if (currentMessage.startsWith("#")) {
+          // 메시지를 그대로 유지
+        }
+      }
+    }
 
     // 상품명 컬럼이 변경된 경우 매핑코드, 내외주, 택배사도 자동 업데이트
     if (headerIndex && colIndex === headerIndex.nameIdx) {
@@ -521,11 +548,28 @@ function FileViewContent() {
 
     if (vendorIdx === -1) return;
 
+    // 배송메시지 컬럼 인덱스 확인 (업체명과 배송메시지가 겹치지 않도록)
+    const messageIdx = headerRow.findIndex(
+      (h: any) =>
+        h &&
+        typeof h === "string" &&
+        (h === "배송메시지" ||
+          h === "배송메세지" ||
+          h === "배송요청" ||
+          h === "요청사항" ||
+          h === "배송요청사항")
+    );
+
     const vendorStr = newVendorName.trim();
     const updatedTable = tableData.map((row, idx) => {
       if (idx === 0) return row;
       const newRow = [...row];
+      // 업체명 컬럼 업데이트
       newRow[vendorIdx] = vendorStr;
+      // 배송메시지 컬럼이 있는 경우, 현재 배송메시지를 유지 (변경되지 않도록 보호)
+      if (messageIdx !== -1 && row[messageIdx] !== undefined) {
+        newRow[messageIdx] = row[messageIdx];
+      }
       return newRow;
     });
 
@@ -608,13 +652,13 @@ function FileViewContent() {
   const handleConfirm = async () => {
     if (fileId && isAllMappingCodesFilled) {
       // 현재 tableData를 그대로 사용 (모든 수정사항이 이미 반영되어 있음)
-      console.log("확인 버튼 클릭 - 저장할 데이터:", {
-        fileId,
-        rowCount: tableData.length - 1,
-        tableData: tableData,
-        headerIndex,
-        productCodeMap,
-      });
+      // console.log("확인 버튼 클릭 - 저장할 데이터:", {
+      //   fileId,
+      //   rowCount: tableData.length - 1,
+      //   tableData: tableData,
+      //   headerIndex,
+      //   productCodeMap,
+      // });
 
       // 파일 데이터 준비 (모든 필수 필드 포함)
       const updatedFile = {
@@ -626,13 +670,13 @@ function FileViewContent() {
         productCodeMap: {...productCodeMap},
       };
 
-      console.log("업데이트할 파일 데이터:", {
-        fileName: updatedFile.fileName,
-        rowCount: updatedFile.rowCount,
-        productCodeMapSize: Object.keys(updatedFile.productCodeMap).length,
-        hasTableData: !!updatedFile.tableData,
-        tableDataLength: updatedFile.tableData.length,
-      });
+      // console.log("업데이트할 파일 데이터:", {
+      //   fileName: updatedFile.fileName,
+      //   rowCount: updatedFile.rowCount,
+      //   productCodeMapSize: Object.keys(updatedFile.productCodeMap).length,
+      //   hasTableData: !!updatedFile.tableData,
+      //   tableDataLength: updatedFile.tableData.length,
+      // });
 
       // sessionStorage 업데이트 (먼저 수행)
       try {
@@ -646,7 +690,6 @@ function FileViewContent() {
         alert("로컬 저장에 실패했습니다. 다시 시도해주세요.");
         return;
       }
-
       // store의 uploadedFiles도 업데이트
       const updatedFiles = uploadedFiles.map((f) =>
         f.id === fileId ? updatedFile : f
@@ -664,11 +707,11 @@ function FileViewContent() {
           isConfirmed: true,
         };
 
-        console.log("서버 업데이트 요청 데이터:", {
-          fileId: requestData.fileId,
-          rowCount: requestData.tableData.length - 1,
-          productCodeMapSize: Object.keys(requestData.productCodeMap).length,
-        });
+        // console.log("서버 업데이트 요청 데이터:", {
+        //   fileId: requestData.fileId,
+        //   rowCount: requestData.tableData.length - 1,
+        //   productCodeMapSize: Object.keys(requestData.productCodeMap).length,
+        // });
 
         const response = await fetch("/api/upload/temp/update", {
           method: "PUT",
@@ -1061,6 +1104,14 @@ function FileViewContent() {
                       typeof h === "string" &&
                       (h.includes("수취인명") || h === "이름")
                   );
+                  const ordererNameIdx = headerRow.findIndex(
+                    (h: any) =>
+                      h &&
+                      typeof h === "string" &&
+                      (h === "주문자명" ||
+                        h === "주문자" ||
+                        h === "주문자 이름")
+                  );
                   const addressIdx = headerRow.findIndex(
                     (h: any) => h && typeof h === "string" && h.includes("주소")
                   );
@@ -1162,11 +1213,12 @@ function FileViewContent() {
                             }
                           }
 
-                          // 편집 모드이고 상품명, 수량, 수취인명 컬럼인 경우 input으로 표시
+                          // 편집 모드이고 상품명, 수량, 수취인명, 주문자명 컬럼인 경우 input으로 표시
                           const isEditableColumn =
                             j === productNameIdx ||
                             j === qtyIdx ||
-                            j === receiverNameIdx;
+                            j === receiverNameIdx ||
+                            j === ordererNameIdx;
                           const isDuplicateCell =
                             (isReceiverDup && j === receiverNameIdx) ||
                             (isAddressDup && j === addressIdx);

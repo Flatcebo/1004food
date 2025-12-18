@@ -1,7 +1,8 @@
 "use client";
 
 import {useLoadingStore} from "@/stores/loadingStore";
-import {UploadedFile} from "@/stores/uploadStore";
+import {UploadedFile, useUploadStore} from "@/stores/uploadStore";
+import {useCallback} from "react";
 
 interface UploadedFilesListProps {
   uploadedFiles: UploadedFile[];
@@ -20,6 +21,16 @@ export default function UploadedFilesList({
 }: UploadedFilesListProps) {
   const {isLoading} = useLoadingStore();
   // if (uploadedFiles.length === 0) return null;
+  // 1218
+  const refreshUploadedFiles = useCallback(() => {
+    const {setUploadedFiles} = useUploadStore();
+    const storedFiles = sessionStorage.getItem("uploadedFiles");
+    if (storedFiles) {
+      setUploadedFiles(JSON.parse(storedFiles) as UploadedFile[]);
+    }
+  }, [uploadedFiles]);
+  refreshUploadedFiles();
+  //
 
   if (isLoading) return <div>Loading...</div>;
 

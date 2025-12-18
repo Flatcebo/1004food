@@ -152,8 +152,8 @@ export function generateAutoDeliveryMessage(
       ? String(currentMessage).trim()
       : "";
     
-    // 이미 자동 생성된 메시지 형식인지 확인 (#로 시작하고 ★이 포함되어 있으면 스킵)
-    if (currentMessageStr.startsWith('#') && currentMessageStr.includes('★')) {
+    // 이미 자동 생성된 메시지 형식인지 확인 (#로 시작하면 스킵 - 주문번호 유무와 관계없이)
+    if (currentMessageStr.startsWith('#')) {
       return newRow; // 이미 처리된 메시지는 그대로 유지
     }
     
