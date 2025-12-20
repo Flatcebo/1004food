@@ -51,7 +51,7 @@ export default function BaseFilter({
   selectedPostType,
   selectedCategory = "",
   selectedVendor = "",
-  selectedOrderStatus = "공급중",
+  selectedOrderStatus = "",
   searchField,
   searchValue,
   searchFieldOptions = [
@@ -104,7 +104,7 @@ export default function BaseFilter({
             onChange={(e) => onPostTypeChange(e.target.value)}
           >
             <option value="">전체</option>
-            <option value="CJ대한통운">CJ대한통운</option>
+            <option value="CJ택배">CJ택배</option>
             <option value="우체국택배">우체국택배</option>
             <option value="로젠택배">로젠택배</option>
             <option value="롯데택배">롯데택배</option>
@@ -154,7 +154,11 @@ export default function BaseFilter({
               value={selectedOrderStatus}
               onChange={(e) => onOrderStatusChange(e.target.value)}
             >
+              <option value="">전체</option>
               <option value="공급중">공급중</option>
+              <option value="발주서 다운">발주서 다운</option>
+              <option value="사방넷 다운">사방넷 다운</option>
+              <option value="운송장 완료">운송장 완료</option>
               <option value="취소">취소</option>
             </select>
           </label>

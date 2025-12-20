@@ -21,6 +21,8 @@ import {fieldNameMap} from "@/constants/fieldMappings";
 import {generateAutoDeliveryMessage} from "@/utils/vendorMessageUtils";
 
 export default function Page() {
+  const [isDeliveryInputMode, setIsDeliveryInputMode] = useState(false);
+
   const {
     tableData,
     setTableData,
@@ -487,6 +489,17 @@ export default function Page() {
               </button>
 
               <button
+                className={`px-5 py-2 text-white text-sm font-bold rounded hover:bg-opacity-80 ${
+                  isDeliveryInputMode ? 'bg-green-600' : 'bg-orange-600'
+                }`}
+                onClick={() => {
+                  setIsDeliveryInputMode(!isDeliveryInputMode);
+                }}
+              >
+                {isDeliveryInputMode ? '운송장 입력 취소' : '운송장 입력'}
+              </button>
+
+              <button
                 className="px-5 py-2 bg-gray-500 text-white text-sm rounded hover:bg-gray-600"
                 onClick={fetchSavedData}
                 disabled={loading}
@@ -539,6 +552,7 @@ export default function Page() {
             uploadTimeFrom={appliedUploadTimeFrom}
             uploadTimeTo={appliedUploadTimeTo}
             onRemoveFilter={handleRemoveFilter}
+            isDeliveryInputMode={isDeliveryInputMode}
           />
         </div>
       </div>

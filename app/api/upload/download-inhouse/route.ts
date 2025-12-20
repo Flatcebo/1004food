@@ -346,6 +346,36 @@ export async function POST(request: NextRequest) {
     const contentDisposition = `attachment; filename="${safeFileName}"; filename*=UTF-8''${encodedFileName}`;
 
     const responseHeaders = new Headers();
+    // 발주서 다운로드가 성공하면 주문상태 업데이트
+    if (rowIds && rowIds.length > 0) {
+      try {
+        for (const rowId of rowIds) {
+          // 현재 row_data 가져오기
+          const currentRow = await sql`
+            SELECT row_data FROM upload_rows WHERE id = ${rowId}
+          `;
+
+          if (currentRow.length > 0) {
+            const currentData = currentRow[0].row_data;
+            // 주문상태를 "발주서 다운"으로 업데이트
+            const updatedData = {
+              ...currentData,
+              주문상태: "발주서 다운"
+            };
+
+            await sql`
+              UPDATE upload_rows
+              SET row_data = ${JSON.stringify(updatedData)}
+              WHERE id = ${rowId}
+            `;
+          }
+        }
+      } catch (updateError) {
+        console.error("주문상태 업데이트 실패:", updateError);
+        // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리
+      }
+    }
+
     responseHeaders.set(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

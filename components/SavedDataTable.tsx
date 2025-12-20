@@ -29,6 +29,8 @@ interface SavedDataTableProps {
   uploadTimeTo?: string;
   // 필터 제거 함수
   onRemoveFilter?: (filterType: string) => void;
+  // 운송장 입력 모드
+  isDeliveryInputMode?: boolean;
 }
 
 const SavedDataTable = memo(function SavedDataTable({
@@ -50,26 +52,51 @@ const SavedDataTable = memo(function SavedDataTable({
   uploadTimeFrom = "",
   uploadTimeTo = "",
   onRemoveFilter,
+  isDeliveryInputMode = false,
 }: SavedDataTableProps) {
   // 숨길 헤더 목록 (기본 숨김 헤더 + 주문자 관련 단독 컬럼)
-  const hiddenHeaders = [
-    "id",
-    "file_name",
-    "가격",
-    "기타",
-    "택배비",
-    "합포수량",
-    "upload_time",
-    "주문자명", // 수취인명에 합쳐져서 표시되므로 단독 컬럼은 숨김
-    "주문자 전화번호", // 수취인 전화번호에 합쳐져서 표시되므로 단독 컬럼은 숨김
-    "주문번호", // 내부코드에 합쳐져서 표시되므로 단독 컬럼은 숨김
-    "쇼핑몰명", // 업체명에 합쳐져서 표시되므로 단독 컬럼은 숨김
-  ];
+  const hiddenHeaders = useMemo(() => {
+    const baseHiddenHeaders = [
+      "id",
+      "file_name",
+      "가격",
+      "기타",
+      "택배비",
+      "합포수량",
+      "upload_time",
+      "주문자명", // 수취인명에 합쳐져서 표시되므로 단독 컬럼은 숨김
+      "주문자 전화번호", // 수취인 전화번호에 합쳐져서 표시되므로 단독 컬럼은 숨김
+      "주문번호", // 내부코드에 합쳐져서 표시되므로 단독 컬럼은 숨김
+      "쇼핑몰명", // 업체명에 합쳐져서 표시되므로 단독 컬럼은 숨김
+    ];
+
+    // 운송장 입력 모드일 때는 매핑코드와 운송장번호만 숨김 (배송메시지는 운송장입력으로 변경됨)
+    if (isDeliveryInputMode) {
+      baseHiddenHeaders.push("매핑코드", "운송장번호");
+    }
+
+    return baseHiddenHeaders;
+  }, [isDeliveryInputMode]);
 
   // 헤더 순서는 useUploadData에서 이미 정렬되어 전달되므로 그대로 사용 (메모이제이션)
   const filteredHeaders = useMemo(() => {
-    return headers.filter((header) => !hiddenHeaders.includes(header));
-  }, [headers]);
+    let filtered = headers.filter((header) => !hiddenHeaders.includes(header));
+
+    // 운송장 입력 모드일 때는 배송메시지를 운송장입력으로 변경하거나, 없으면 추가
+    if (isDeliveryInputMode) {
+      const hasDeliveryMessage = filtered.includes("배송메시지");
+      if (hasDeliveryMessage) {
+        filtered = filtered.map((header) =>
+          header === "배송메시지" ? "운송장입력" : header
+        );
+      } else {
+        // 배송메시지가 없으면 마지막에 운송장입력 추가
+        filtered = [...filtered, "운송장입력"];
+      }
+    }
+
+    return filtered;
+  }, [headers, hiddenHeaders, isDeliveryInputMode]);
 
   // 헤더 표시명 변경 함수
   const getHeaderDisplayName = (header: string) => {
@@ -176,6 +203,10 @@ const SavedDataTable = memo(function SavedDataTable({
       case "등록일":
         return formatDateTime(row["등록일"]);
 
+      case "운송장입력":
+        // 운송장 입력 칼럼은 특별한 UI로 렌더링되므로 빈 문자열 반환
+        return "";
+
       default:
         return row[header] !== undefined && row[header] !== null
           ? String(row[header])
@@ -194,6 +225,28 @@ const SavedDataTable = memo(function SavedDataTable({
   const [templates, setTemplates] = useState<any[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<number | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [deliveryData, setDeliveryData] = useState<{
+    [key: number]: {carrier: string; trackingNumber: string};
+  }>({});
+  const [isConfirmingDelivery, setIsConfirmingDelivery] = useState(false);
+
+  // 테이블 데이터 로드 시 deliveryData 초기화
+  useEffect(() => {
+    if (tableRows.length > 0) {
+      const initialDeliveryData: {
+        [key: number]: {carrier: string; trackingNumber: string};
+      } = {};
+      tableRows.forEach((row: any) => {
+        if (row["택배사"] || row["운송장번호"]) {
+          initialDeliveryData[row.id] = {
+            carrier: row["택배사"] || "",
+            trackingNumber: row["운송장번호"] || "",
+          };
+        }
+      });
+      setDeliveryData(initialDeliveryData);
+    }
+  }, [tableRows]);
 
   // 템플릿 목록 가져오기
   useEffect(() => {
@@ -202,7 +255,10 @@ const SavedDataTable = memo(function SavedDataTable({
         const response = await fetch("/api/upload/template");
         const result = await response.json();
         if (result.success && result.templates.length > 0) {
-          setTemplates(result.templates);
+          const sortedTemplates = result.templates.sort((a: any, b: any) => {
+            return a.id - b.id;
+          });
+          setTemplates(sortedTemplates);
           setSelectedTemplate(result.templates[0].id);
         }
       } catch (error) {
@@ -251,6 +307,8 @@ const SavedDataTable = memo(function SavedDataTable({
       const isOutsource = templateName.includes("외주") && !isCJOutsource;
       // 내주 발주서인지 확인
       const isInhouse = templateName.includes("내주");
+      // 사방넷 등록 양식인지 확인
+      const isSabangnet = templateName.includes("사방넷");
 
       // 내주 발주서인 경우: 내외주가 "내주"인 것만 필터링
       if (isInhouse) {
@@ -304,11 +362,13 @@ const SavedDataTable = memo(function SavedDataTable({
         }
       }
 
-      // 외주/내주/일반 발주서에 따라 API 선택
+      // 템플릿 종류에 따라 API 선택
       const apiUrl = isOutsource
         ? "/api/upload/download-outsource"
         : isInhouse
         ? "/api/upload/download-inhouse"
+        : isSabangnet
+        ? "/api/upload/download-sabangnet"
         : "/api/upload/download";
 
       const response = await fetch(apiUrl, {
@@ -358,6 +418,60 @@ const SavedDataTable = memo(function SavedDataTable({
       alert(`다운로드 중 오류가 발생했습니다: ${error.message}`);
     } finally {
       setIsDownloading(false);
+    }
+  };
+
+  // 운송장 입력 확정
+  const handleConfirmDelivery = async () => {
+    const selectedIds = Array.from(selectedRows);
+    const targetIds =
+      selectedIds.length > 0
+        ? selectedIds
+        : tableRows.map((row: any) => row.id);
+
+    if (targetIds.length === 0) {
+      alert("확정할 데이터가 없습니다.");
+      return;
+    }
+
+    setIsConfirmingDelivery(true);
+    try {
+      // API 호출로 운송장 정보 저장
+      const response = await fetch("/api/upload/update-delivery", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          deliveryData: targetIds.map((id) => ({
+            id,
+            carrier: deliveryData[id]?.carrier || "",
+            trackingNumber: deliveryData[id]?.trackingNumber || "",
+            orderStatus:
+              deliveryData[id]?.carrier &&
+              deliveryData[id]?.trackingNumber?.trim()
+                ? "운송장 완료"
+                : "공급중", // 입력되지 않은 항목은 공급중 상태 유지
+          })),
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        alert(`${targetIds.length}건의 운송장 정보가 저장되었습니다.`);
+        // 데이터 새로고침
+        onDataUpdate?.();
+        // 선택 초기화
+        setSelectedRows(new Set());
+        setDeliveryData({});
+      } else {
+        throw new Error(result.error || "저장 실패");
+      }
+    } catch (error: any) {
+      console.error("운송장 정보 저장 실패:", error);
+      alert(`저장 중 오류가 발생했습니다: ${error.message}`);
+    } finally {
+      setIsConfirmingDelivery(false);
     }
   };
 
@@ -505,7 +619,7 @@ const SavedDataTable = memo(function SavedDataTable({
       value: selectedVendor,
     });
   }
-  if (selectedOrderStatus && selectedOrderStatus !== "공급중") {
+  if (selectedOrderStatus) {
     activeFilters.push({
       type: "orderStatus",
       label: "주문상태",
@@ -606,31 +720,48 @@ const SavedDataTable = memo(function SavedDataTable({
             </>
           )}
 
-          {templates.length > 0 && (
-            <select
-              value={selectedTemplate || ""}
-              onChange={(e) => setSelectedTemplate(Number(e.target.value))}
-              className="px-3 py-1.5 border border-gray-300 rounded text-sm "
+          {isDeliveryInputMode ? (
+            <button
+              onClick={handleConfirmDelivery}
+              disabled={isConfirmingDelivery}
+              className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm
+              font-bold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {templates.map((template) => (
-                <option key={template.id} value={template.id}>
-                  {template.name.replace(/\.(xlsx|xls)$/i, "")}
-                </option>
-              ))}
-            </select>
+              {isConfirmingDelivery
+                ? "저장 중..."
+                : selectedRows.size > 0
+                ? `${selectedRows.size}건 확정`
+                : "전체 확정"}
+            </button>
+          ) : (
+            <>
+              {templates.length > 0 && (
+                <select
+                  value={selectedTemplate || ""}
+                  onChange={(e) => setSelectedTemplate(Number(e.target.value))}
+                  className="px-3 py-1.5 border border-gray-300 rounded text-sm "
+                >
+                  {templates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name.replace(/\.(xlsx|xls)$/i, "")}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <button
+                onClick={handleDownload}
+                disabled={isDownloading || !selectedTemplate}
+                className="px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm
+                font-bold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isDownloading
+                  ? "다운로드 중..."
+                  : selectedRows.size > 0
+                  ? `${selectedRows.size}건 다운로드`
+                  : "전체 다운로드"}
+              </button>
+            </>
           )}
-          <button
-            onClick={handleDownload}
-            disabled={isDownloading || !selectedTemplate}
-            className="px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm
-            font-bold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isDownloading
-              ? "다운로드 중..."
-              : selectedRows.size > 0
-              ? `${selectedRows.size}건 다운로드`
-              : "전체 다운로드"}
-          </button>
         </div>
       </div>
       <div className="mt-2 w-full h-[600px] overflow-x-auto text-black overflow-y-auto">
@@ -660,7 +791,10 @@ const SavedDataTable = memo(function SavedDataTable({
                     key={idx}
                     className="border border-[#cacaca] bg-gray-100 px-2 py-2 text-xs text-center"
                     style={{
-                      width: getColumnWidth(header),
+                      width:
+                        header === "운송장입력" && isDeliveryInputMode
+                          ? "200px"
+                          : getColumnWidth(header),
                       whiteSpace: isMultiLineHeader ? "pre-line" : "nowrap",
                       lineHeight: "1.2",
                     }}
@@ -729,6 +863,7 @@ const SavedDataTable = memo(function SavedDataTable({
                     const isMappingCode = header === "매핑코드";
                     const isId = header === "id";
                     const isRegistrationDate = header === "등록일";
+                    const isDeliveryInput = header === "운송장입력";
                     const cellValue = getCombinedCellValue(row, header);
                     const isMultiLine = cellValue.includes("\n");
 
@@ -772,12 +907,17 @@ const SavedDataTable = memo(function SavedDataTable({
                         className={`border px-2 border-gray-300 text-xs align-middle ${
                           isRegistrationDate ? "text-center" : "text-left"
                         } ${
-                          (isMappingCode && currentCode) || isId
+                          (isMappingCode && currentCode) ||
+                          isId ||
+                          isDeliveryInput
                             ? "cursor-pointer hover:bg-blue-50"
                             : ""
                         }`}
                         style={{
-                          width: getColumnWidth(header),
+                          width:
+                            header === "운송장입력" && isDeliveryInputMode
+                              ? "200px"
+                              : getColumnWidth(header),
                           height: "56px",
                           lineHeight: "1.4",
                           wordBreak: "break-word",
@@ -795,9 +935,60 @@ const SavedDataTable = memo(function SavedDataTable({
                             setDetailRow(row);
                           }
                         }}
-                        title={cellValue.replace(/\n/g, " / ")}
+                        title={
+                          !isDeliveryInput
+                            ? cellValue.replace(/\n/g, " / ")
+                            : ""
+                        }
                       >
-                        {(isMappingCode && currentCode) || isId ? (
+                        {isDeliveryInput ? (
+                          <div className="flex flex-col gap-1">
+                            <select
+                              className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded"
+                              value={
+                                deliveryData[row.id]?.carrier ||
+                                row["택배사"] ||
+                                ""
+                              }
+                              onChange={(e) => {
+                                setDeliveryData((prev) => ({
+                                  ...prev,
+                                  [row.id]: {
+                                    carrier: e.target.value,
+                                    trackingNumber:
+                                      prev[row.id]?.trackingNumber || "",
+                                  },
+                                }));
+                              }}
+                            >
+                              <option value="">택배사 선택</option>
+                              <option value="CJ택배">CJ택배</option>
+                              <option value="우체국택배">우체국택배</option>
+                              <option value="로젠택배">로젠택배</option>
+                              <option value="롯데택배">롯데택배</option>
+                              <option value="한진택배">한진택배</option>
+                              <option value="천일택배">천일택배</option>
+                            </select>
+                            <input
+                              type="text"
+                              placeholder="운송장번호"
+                              className="w-full px-2 py-0.5 text-xs border border-gray-300 rounded"
+                              value={deliveryData[row.id]?.trackingNumber || ""}
+                              onChange={(e) => {
+                                setDeliveryData((prev) => ({
+                                  ...prev,
+                                  [row.id]: {
+                                    carrier:
+                                      prev[row.id]?.carrier ||
+                                      row["택배사"] ||
+                                      "",
+                                    trackingNumber: e.target.value,
+                                  },
+                                }));
+                              }}
+                            />
+                          </div>
+                        ) : (isMappingCode && currentCode) || isId ? (
                           <span className="text-blue-600 underline">
                             {cellValue}
                           </span>

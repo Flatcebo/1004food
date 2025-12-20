@@ -36,7 +36,7 @@ export const TYPE_OPTIONS = [
  */
 export const POST_TYPE_OPTIONS = [
   {value: "", label: "선택하세요"},
-  {value: "CJ대한통운", label: "CJ대한통운"},
+  {value: "CJ택배", label: "CJ택배"},
   {value: "우체국택배", label: "우체국택배"},
   {value: "로젠택배", label: "로젠택배"},
   {value: "롯데택배", label: "롯데택배"},

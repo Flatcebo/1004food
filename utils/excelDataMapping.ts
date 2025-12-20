@@ -46,19 +46,21 @@ export function mapDataToTemplate(
   ) {
     return "05"; // 문자열로 유지
   }
-
   // 헤더명 매핑 규칙 (템플릿 헤더 → 내부 데이터 필드명)
   const headerMap: {[key: string]: string} = {
     수취인주소: "주소",
     "수취인 주소": "주소",
     고객주문처명: "업체명",
     상품코드: "매핑코드",
+    '상품코드\r\n=IFERROR(IF(VLOOKUP(G2,등록상품,3,0)="공급중",VLOOKUP(G2,등록상품,2,0),"품절상품"),"신규or세트")':
+      "매핑코드",
     공급가: "가격",
     배메: "배송메시지",
     "배송 메시지": "배송메시지",
     배송메세지: "배송메시지",
     배송메시지: "배송메시지",
     받는사람: "수취인명",
+    "받는사람\r\n(띄어쓰기제거)": "수취인명",
     주문하신분: "주문자명",
   };
 
@@ -164,16 +166,11 @@ export function mapDataToTemplate(
     if (sabangValue !== null && sabangValue !== undefined) {
       const sabangStr = normalizeStringValue(sabangValue);
       if (sabangStr) {
-        // 맨 앞의 'ㄱ'만 제거
-        const cleaned =
-          sabangStr.startsWith("ㄱ") && sabangStr.length > 1
-            ? sabangStr.slice(1)
-            : sabangStr;
         if (!row._logged2) {
-          console.log(`✓ 사방넷명 사용: ${cleaned}`);
+          console.log(`✓ 사방넷명 사용: ${sabangStr}`);
           row._logged2 = true;
         }
-        return prepareExcelCellValue(cleaned, false);
+        return prepareExcelCellValue(sabangStr, false);
       }
     }
 

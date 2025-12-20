@@ -1,15 +1,15 @@
-import { NextRequest, NextResponse } from "next/server";
+import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
 
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { rowId, codeData } = body;
+    const {rowId, codeData} = body;
 
     if (!rowId || !codeData) {
       return NextResponse.json(
-        { success: false, error: "rowId와 codeData가 필요합니다." },
-        { status: 400 }
+        {success: false, error: "rowId와 codeData가 필요합니다."},
+        {status: 400}
       );
     }
 
@@ -22,8 +22,8 @@ export async function PUT(request: NextRequest) {
 
     if (existingRow.length === 0) {
       return NextResponse.json(
-        { success: false, error: "해당 행을 찾을 수 없습니다." },
-        { status: 404 }
+        {success: false, error: "해당 행을 찾을 수 없습니다."},
+        {status: 404}
       );
     }
 
@@ -54,8 +54,8 @@ export async function PUT(request: NextRequest) {
 
     if (result.length === 0) {
       return NextResponse.json(
-        { success: false, error: "업데이트 실패" },
-        { status: 500 }
+        {success: false, error: "업데이트 실패"},
+        {status: 500}
       );
     }
 
@@ -66,9 +66,8 @@ export async function PUT(request: NextRequest) {
   } catch (error: any) {
     console.error("매핑코드 업데이트 실패:", error);
     return NextResponse.json(
-      { success: false, error: error.message },
-      { status: 500 }
+      {success: false, error: error.message},
+      {status: 500}
     );
   }
 }
-
