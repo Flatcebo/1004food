@@ -8,7 +8,7 @@ import {UploadedFile} from "@/stores/uploadStore";
 export function checkFileValidation(file: UploadedFile | any): { isValid: boolean; errors: string[] } {
   if (!file || !file.tableData || !file.tableData.length) {
     console.log("파일 데이터가 없습니다:", file);
-    return false; // 파일이 없거나 데이터가 없으면 무효
+    return { isValid: false, errors: ["파일 데이터가 없습니다"] }; // 파일이 없거나 데이터가 없으면 무효
   }
 
   const headerRow = file.tableData[0];
