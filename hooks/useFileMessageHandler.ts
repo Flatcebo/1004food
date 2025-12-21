@@ -79,8 +79,8 @@ export function useFileMessageHandler({
 
         // validation 상태 업데이트 (약간의 지연을 두어 setUploadedFiles 완료 후 실행)
         setTimeout(() => {
-          const isValid = checkFileValidation(fileData);
-          updateValidationStatus(fileId, isValid);
+          const validationResult = checkFileValidation(fileData);
+          updateValidationStatus(fileId, validationResult.isValid);
         }, 100);
       }
     };
