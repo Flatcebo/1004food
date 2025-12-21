@@ -3,12 +3,28 @@ import sql from "@/lib/db";
 
 export async function DELETE(request: NextRequest) {
   try {
-    const body = await request.json();
-    const {ids} = body;
+    const url = new URL(request.url);
+    const id = url.searchParams.get('id');
+    const ids = url.searchParams.get('ids')?.split(',').map(Number);
 
-    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    let targetIds: number[];
+
+    if (id) {
+      // 단일 ID 삭제
+      targetIds = [parseInt(id)];
+    } else if (ids && ids.length > 0) {
+      // 여러 ID 삭제
+      targetIds = ids;
+    } else {
       return NextResponse.json(
         {success: false, error: "삭제할 상품 ID가 필요합니다."},
+        {status: 400}
+      );
+    }
+
+    if (targetIds.some(id => isNaN(id))) {
+      return NextResponse.json(
+        {success: false, error: "유효하지 않은 상품 ID입니다."},
         {status: 400}
       );
     }
@@ -16,7 +32,7 @@ export async function DELETE(request: NextRequest) {
     // 여러 ID를 한 번에 삭제
     const result = await sql`
       DELETE FROM products
-      WHERE id = ANY(${ids}::int[])
+      WHERE id = ANY(${targetIds}::int[])
       RETURNING id
     `;
 

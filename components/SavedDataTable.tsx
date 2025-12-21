@@ -1,6 +1,7 @@
 "use client";
 
-import {useState, useEffect, useMemo, useCallback, memo} from "react";
+import {useState, useEffect, useMemo, useCallback, memo, useRef} from "react";
+import {useVirtualizer} from "@tanstack/react-virtual";
 import {saveAs} from "file-saver";
 import CodeEditWindow from "./CodeEditWindow";
 import RowDetailWindow from "./RowDetailWindow";
@@ -54,7 +55,7 @@ const SavedDataTable = memo(function SavedDataTable({
   onRemoveFilter,
   isDeliveryInputMode = false,
 }: SavedDataTableProps) {
-  // 숨길 헤더 목록 (기본 숨김 헤더 + 주문자 관련 단독 컬럼)
+  // 숨길 헤더 목록 (기본 숨김 헤더)
   const hiddenHeaders = useMemo(() => {
     const baseHiddenHeaders = [
       "id",
@@ -64,8 +65,9 @@ const SavedDataTable = memo(function SavedDataTable({
       "택배비",
       "합포수량",
       "upload_time",
-      "주문자명", // 수취인명에 합쳐져서 표시되므로 단독 컬럼은 숨김
-      "주문자 전화번호", // 수취인 전화번호에 합쳐져서 표시되므로 단독 컬럼은 숨김
+      // 주문자 관련 정보도 표시하도록 숨김 해제
+      "주문자명",
+      "주문자 전화번호",
       "주문번호", // 내부코드에 합쳐져서 표시되므로 단독 컬럼은 숨김
       "쇼핑몰명", // 업체명에 합쳐져서 표시되므로 단독 컬럼은 숨김
     ];
@@ -77,6 +79,19 @@ const SavedDataTable = memo(function SavedDataTable({
 
     return baseHiddenHeaders;
   }, [isDeliveryInputMode]);
+
+  // 가상화 설정
+  const parentRef = useRef<HTMLDivElement>(null);
+
+  // 행 높이 추정 (픽셀 단위)
+  const estimateSize = useCallback(() => 60, []); // 각 행의 대략적인 높이
+
+  const virtualizer = useVirtualizer({
+    count: paginatedRows.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize,
+    overscan: 10, // 화면 밖에 미리 렌더링할 행 수
+  });
 
   // 헤더 순서는 useUploadData에서 이미 정렬되어 전달되므로 그대로 사용 (메모이제이션)
   const filteredHeaders = useMemo(() => {
@@ -99,7 +114,7 @@ const SavedDataTable = memo(function SavedDataTable({
   }, [headers, hiddenHeaders, isDeliveryInputMode]);
 
   // 헤더 표시명 변경 함수
-  const getHeaderDisplayName = (header: string) => {
+  const getHeaderDisplayName = useCallback((header: string) => {
     switch (header) {
       case "수취인명":
         return "수취인명\n주문자명";
@@ -116,10 +131,10 @@ const SavedDataTable = memo(function SavedDataTable({
       default:
         return header;
     }
-  };
+  }, []);
 
   // 날짜 포맷 함수 (년월일 / 시분초로 분리)
-  const formatDateTime = (dateString: string) => {
+  const formatDateTime = useCallback((dateString: string) => {
     if (!dateString) return "";
     try {
       const date = new Date(dateString);
@@ -138,15 +153,15 @@ const SavedDataTable = memo(function SavedDataTable({
     } catch (error) {
       return dateString;
     }
-  };
+  }, []);
 
   // 합쳐진 셀 값 생성 함수
-  const getCombinedCellValue = (row: any, header: string) => {
+  const getCombinedCellValue = useCallback((row: any, header: string) => {
     switch (header) {
       case "수취인명":
         const receiverName = row["수취인명"] || "";
         const ordererName = row["주문자명"] || "";
-        if (receiverName && ordererName && receiverName !== ordererName) {
+        if (receiverName && ordererName) {
           return `${receiverName}\n${ordererName}`;
         }
         return receiverName || ordererName;
@@ -154,7 +169,7 @@ const SavedDataTable = memo(function SavedDataTable({
       case "수취인 전화번호":
         const receiverPhone = row["수취인 전화번호"] || "";
         const ordererPhone = row["주문자 전화번호"] || "";
-        if (receiverPhone && ordererPhone && receiverPhone !== ordererPhone) {
+        if (receiverPhone && ordererPhone) {
           return `${receiverPhone}\n${ordererPhone}`;
         }
         return receiverPhone || ordererPhone;
@@ -212,7 +227,7 @@ const SavedDataTable = memo(function SavedDataTable({
           ? String(row[header])
           : "";
     }
-  };
+  }, []);
 
   const [editingRow, setEditingRow] = useState<{
     id: number;
@@ -229,6 +244,12 @@ const SavedDataTable = memo(function SavedDataTable({
     [key: number]: {carrier: string; trackingNumber: string};
   }>({});
   const [isConfirmingDelivery, setIsConfirmingDelivery] = useState(false);
+  const [tooltip, setTooltip] = useState<{
+    visible: boolean;
+    content: string;
+    x: number;
+    y: number;
+  } | null>(null);
 
   // 테이블 데이터 로드 시 deliveryData 초기화
   useEffect(() => {
@@ -268,8 +289,8 @@ const SavedDataTable = memo(function SavedDataTable({
     fetchTemplates();
   }, []);
 
-  // 엑셀 다운로드 (외주 발주서 포함)
-  const handleDownload = async () => {
+  // 메모이제이션된 핸들러 함수들
+  const handleDownload = useCallback(async () => {
     if (!selectedTemplate) {
       alert("템플릿을 선택해주세요.");
       return;
@@ -413,16 +434,35 @@ const SavedDataTable = memo(function SavedDataTable({
         }
       }
       saveAs(blob, fileName);
+
+      // 다운로드 완료 후 테이블 데이터 새로고침
+      if (onDataUpdate) {
+        onDataUpdate();
+      }
     } catch (error: any) {
       console.error("다운로드 실패:", error);
       alert(`다운로드 중 오류가 발생했습니다: ${error.message}`);
     } finally {
       setIsDownloading(false);
     }
-  };
+  }, [
+    selectedTemplate,
+    selectedRows,
+    selectedType,
+    selectedPostType,
+    selectedVendor,
+    selectedOrderStatus,
+    appliedSearchField,
+    appliedSearchValue,
+    uploadTimeFrom,
+    uploadTimeTo,
+    templates,
+    tableRows,
+    onDataUpdate,
+  ]);
 
   // 운송장 입력 확정
-  const handleConfirmDelivery = async () => {
+  const handleConfirmDelivery = useCallback(async () => {
     const selectedIds = Array.from(selectedRows);
     const targetIds =
       selectedIds.length > 0
@@ -473,31 +513,77 @@ const SavedDataTable = memo(function SavedDataTable({
     } finally {
       setIsConfirmingDelivery(false);
     }
-  };
+  }, [selectedRows, tableRows, deliveryData, onDataUpdate]);
 
   // 전체 선택/해제
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      const allIds = new Set(paginatedRows.map((row: any) => row.id));
-      setSelectedRows(allIds);
-    } else {
-      setSelectedRows(new Set());
-    }
-  };
+  const handleSelectAll = useCallback(
+    (checked: boolean) => {
+      if (checked) {
+        const allIds = new Set(paginatedRows.map((row: any) => row.id));
+        setSelectedRows(allIds);
+      } else {
+        setSelectedRows(new Set());
+      }
+    },
+    [paginatedRows]
+  );
 
-  // 개별 선택/해제
-  const handleSelectRow = (rowId: number, checked: boolean) => {
-    const newSelected = new Set(selectedRows);
-    if (checked) {
-      newSelected.add(rowId);
-    } else {
-      newSelected.delete(rowId);
-    }
-    setSelectedRows(newSelected);
-  };
+  // 개별 선택/해제 - 메모이제이션 강화
+  const handleSelectRow = useCallback((rowId: number, checked: boolean) => {
+    setSelectedRows((prev) => {
+      const newSelected = new Set(prev);
+      if (checked) {
+        newSelected.add(rowId);
+      } else {
+        newSelected.delete(rowId);
+      }
+      return newSelected;
+    });
+  }, []);
+
+  // 상세 보기 핸들러 메모이제이션
+  const handleDetailClick = useCallback((row: any) => {
+    setDetailRow(row);
+  }, []);
+
+  // 편집 핸들러 메모이제이션
+  const handleEditClick = useCallback((rowId: number, rowData: any) => {
+    setEditingRow({id: rowId, rowData});
+  }, []);
+
+  // 운송장 데이터 변경 핸들러 메모이제이션
+  const handleDeliveryDataChange = useCallback(
+    (rowId: number, field: string, value: string) => {
+      setDeliveryData((prev: any) => ({
+        ...prev,
+        [rowId]: {
+          ...prev[rowId],
+          [field]: value,
+        },
+      }));
+    },
+    []
+  );
+
+  // 툴팁 핸들러 메모이제이션
+  const handleTooltipShow = useCallback(
+    (content: string, x: number, y: number) => {
+      setTooltip({
+        visible: true,
+        content,
+        x,
+        y,
+      });
+    },
+    []
+  );
+
+  const handleTooltipHide = useCallback(() => {
+    setTooltip(null);
+  }, []);
 
   // 선택된 항목 취소 처리
-  const handleCancelSelected = async () => {
+  const handleCancelSelected = useCallback(async () => {
     if (selectedRows.size === 0) {
       alert("취소할 항목을 선택해주세요.");
       return;
@@ -536,10 +622,10 @@ const SavedDataTable = memo(function SavedDataTable({
     } finally {
       setIsCanceling(false);
     }
-  };
+  }, [selectedRows, onDataUpdate]);
 
   // 선택된 항목 삭제 처리
-  const handleDeleteSelected = async () => {
+  const handleDeleteSelected = useCallback(async () => {
     if (selectedRows.size === 0) {
       alert("삭제할 항목을 선택해주세요.");
       return;
@@ -582,57 +668,449 @@ const SavedDataTable = memo(function SavedDataTable({
     } finally {
       setIsDeleting(false);
     }
-  };
+  }, [selectedRows, onDataUpdate]);
 
-  const isAllSelected =
-    paginatedRows.length > 0 &&
-    paginatedRows.every((row: any) => selectedRows.has(row.id));
-  const orderStatusIdx = headers.findIndex((h) => h === "주문상태");
+  const isAllSelected = useMemo(
+    () =>
+      paginatedRows.length > 0 &&
+      paginatedRows.every((row: any) => selectedRows.has(row.id)),
+    [paginatedRows, selectedRows]
+  );
+
+  // 행 컴포넌트 메모이제이션
+  const TableRow = memo(
+    ({
+      row,
+      rowIdx,
+      headers,
+      orderStatusIdx,
+      filteredHeaders,
+      selectedRows,
+      handleSelectRow,
+      handleDetailClick,
+      handleEditClick,
+      getCombinedCellValue,
+      formatDateTime,
+      deliveryData,
+      handleDeliveryDataChange,
+      isDeliveryInputMode,
+      handleTooltipShow,
+      handleTooltipHide,
+    }: {
+      row: any;
+      rowIdx: number;
+      headers: string[];
+      orderStatusIdx: number;
+      filteredHeaders: string[];
+      selectedRows: Set<number>;
+      handleSelectRow: (rowId: number, checked: boolean) => void;
+      handleDetailClick: (row: any) => void;
+      handleEditClick: (rowId: number, rowData: any) => void;
+      getCombinedCellValue: (row: any, header: string) => string;
+      formatDateTime: (dateString: string) => string;
+      deliveryData: any;
+      handleDeliveryDataChange: (
+        rowId: number,
+        field: string,
+        value: string
+      ) => void;
+      isDeliveryInputMode: boolean;
+      handleTooltipShow: (content: string, x: number, y: number) => void;
+      handleTooltipHide: () => void;
+    }) => {
+      const mappingCodeIdx = headers.findIndex((h) => h === "매핑코드");
+      const currentCode =
+        mappingCodeIdx !== -1 ? row[headers[mappingCodeIdx]] : "";
+      const orderStatus =
+        orderStatusIdx !== -1 ? row[headers[orderStatusIdx]] : "";
+      const isCancelled = orderStatus === "취소";
+      const isSelected = selectedRows.has(row.id);
+
+      return (
+        <tr
+          className={`${
+            isCancelled ? "bg-red-50" : isSelected ? "bg-gray-50" : ""
+          }`}
+          style={{height: "56px"}}
+        >
+          <TableCheckbox
+            rowId={row.id}
+            isSelected={isSelected}
+            handleSelectRow={handleSelectRow}
+          />
+          {filteredHeaders.map((header, colIdx) => {
+            const isMappingCode = header === "매핑코드";
+            const isId = header === "id";
+            const isInternalCode = header === "내부코드";
+            const isRegistrationDate = header === "등록일";
+            const isDeliveryInput = header === "운송장입력";
+            const isDeliveryMessage = header === "배송메시지";
+            const isOrdererName = header === "주문자명";
+            const isOrdererPhone = header === "주문자 전화번호";
+            const cellValue = getCombinedCellValue(row, header);
+            const isMultiLine = cellValue.includes("\n");
+
+            // 합쳐진 셀인지 확인
+            const isCombinedCell = (() => {
+              switch (header) {
+                case "수취인명":
+                  const receiverName = row["수취인명"] || "";
+                  const ordererName = row["주문자명"] || "";
+                  return receiverName && ordererName;
+                case "수취인 전화번호":
+                  const receiverPhone = row["수취인 전화번호"] || "";
+                  const ordererPhone = row["주문자 전화번호"] || "";
+                  return receiverPhone && ordererPhone;
+                case "내부코드":
+                  const internalCode = row["내부코드"] || "";
+                  const orderCode = row["주문번호"] || "";
+                  return internalCode && orderCode;
+                case "업체명":
+                  const vendorName = row["업체명"] || "";
+                  const shopName = row["쇼핑몰명"] || "";
+                  return vendorName && shopName && vendorName !== shopName;
+                default:
+                  return false;
+              }
+            })();
+
+            return (
+              <td
+                key={colIdx}
+                className={`border px-2 border-gray-300 text-xs align-middle ${
+                  isRegistrationDate ? "text-center" : "text-left"
+                } ${
+                  (isMappingCode && currentCode) ||
+                  isId ||
+                  isDeliveryInput ||
+                  isInternalCode
+                    ? "cursor-pointer hover:bg-blue-50"
+                    : isDeliveryMessage
+                    ? "cursor-default"
+                    : ""
+                } ${isOrdererName || isOrdererPhone ? "text-blue-600" : ""}`}
+                style={{
+                  width:
+                    header === "운송장입력" && isDeliveryInputMode
+                      ? "200px"
+                      : getColumnWidth(header),
+                  height: "60px",
+                  lineHeight: "1.4",
+                  wordBreak: "break-word",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: isMultiLine ? "pre-line" : "nowrap",
+                }}
+                onClick={() => {
+                  if (isMappingCode && currentCode) {
+                    handleEditClick(row.id, row);
+                  } else if (isId) {
+                    handleDetailClick(row);
+                  } else if (isInternalCode) {
+                    handleDetailClick(row);
+                  }
+                }}
+                title={
+                  !isDeliveryInput && !isDeliveryMessage
+                    ? cellValue.replace(/\n/g, " / ")
+                    : isDeliveryMessage
+                    ? cellValue || "배송메시지 없음"
+                    : ""
+                }
+              >
+                {isDeliveryInput ? (
+                  <TableDeliveryInputCell
+                    rowId={row.id}
+                    deliveryData={deliveryData}
+                    handleDeliveryDataChange={handleDeliveryDataChange}
+                  />
+                ) : isDeliveryMessage ? (
+                  <TableDeliveryMessageCell
+                    cellValue={cellValue}
+                    handleTooltipShow={handleTooltipShow}
+                    handleTooltipHide={handleTooltipHide}
+                  />
+                ) : isMappingCode && currentCode ? (
+                  <TableMappingCodeCell
+                    currentCode={currentCode}
+                    cellValue={cellValue}
+                    handleEditClick={handleEditClick}
+                    row={row}
+                  />
+                ) : isCombinedCell && isMultiLine ? (
+                  <span>
+                    {cellValue
+                      .split("\n")
+                      .map((line: string, lineIdx: number) => (
+                        <span key={lineIdx}>
+                          {lineIdx === 0 ? (
+                            line
+                          ) : (
+                            <span className="text-blue-600 font-medium">
+                              {line}
+                            </span>
+                          )}
+                          {lineIdx < cellValue.split("\n").length - 1 && <br />}
+                        </span>
+                      ))}
+                  </span>
+                ) : isId || isInternalCode ? (
+                  <TableInternalCodeCell
+                    cellValue={cellValue}
+                    handleDetailClick={handleDetailClick}
+                    row={row}
+                  />
+                ) : (
+                  cellValue
+                )}
+              </td>
+            );
+          })}
+        </tr>
+      );
+    }
+  );
+
+  // 체크박스 컴포넌트 메모이제이션
+  const TableCheckbox = memo(
+    ({
+      rowId,
+      isSelected,
+      handleSelectRow,
+    }: {
+      rowId: number;
+      isSelected: boolean;
+      handleSelectRow: (rowId: number, checked: boolean) => void;
+    }) => (
+      <td
+        className="border px-2 border-gray-300 text-xs text-center align-middle cursor-pointer hover:bg-gray-50"
+        style={{width: "40px", height: "56px"}}
+        onClick={() => handleSelectRow(rowId, !isSelected)}
+      >
+        <input
+          type="checkbox"
+          checked={isSelected}
+          onChange={(e) => handleSelectRow(rowId, e.target.checked)}
+          onClick={(e) => e.stopPropagation()}
+          className="cursor-pointer"
+        />
+      </td>
+    )
+  );
+
+  // 매핑코드 셀 컴포넌트 메모이제이션
+  const TableMappingCodeCell = memo(
+    ({
+      currentCode,
+      cellValue,
+      handleEditClick,
+      row,
+    }: {
+      currentCode: string;
+      cellValue: string;
+      handleEditClick: (rowId: number, rowData: any) => void;
+      row: any;
+    }) => (
+      <span
+        className="text-blue-600 underline"
+        style={{cursor: "pointer"}}
+        onClick={() => handleEditClick(row.id, row)}
+      >
+        {cellValue}
+      </span>
+    )
+  );
+
+  // 내부코드 셀 컴포넌트 메모이제이션
+  const TableInternalCodeCell = memo(
+    ({
+      cellValue,
+      handleDetailClick,
+      row,
+    }: {
+      cellValue: string;
+      handleDetailClick: (row: any) => void;
+      row: any;
+    }) => (
+      <span
+        className="text-blue-600 underline"
+        style={{cursor: "pointer"}}
+        onClick={() => handleDetailClick(row)}
+      >
+        {cellValue}
+      </span>
+    )
+  );
+
+  // 배송메시지 버튼 컴포넌트 메모이제이션
+  const TableDeliveryMessageCell = memo(
+    ({
+      cellValue,
+      handleTooltipShow,
+      handleTooltipHide,
+    }: {
+      cellValue: string;
+      handleTooltipShow: (content: string, x: number, y: number) => void;
+      handleTooltipHide: () => void;
+    }) => {
+      const handleClick = async () => {
+        if (cellValue && cellValue.trim()) {
+          try {
+            await navigator.clipboard.writeText(cellValue);
+            handleTooltipShow("복사되었습니다!", 0, 0);
+            setTimeout(() => {
+              handleTooltipShow(cellValue || "배송메시지 없음", 0, 0);
+            }, 1000);
+          } catch (err) {
+            console.error("클립보드 복사 실패:", err);
+            handleTooltipShow("복사 실패", 0, 0);
+            setTimeout(() => {
+              handleTooltipShow(cellValue || "배송메시지 없음", 0, 0);
+            }, 1000);
+          }
+        }
+      };
+
+      return (
+        <div className="flex items-center justify-center">
+          <div
+            className={`px-2 py-1 rounded text-xs font-medium border ${
+              cellValue && cellValue.trim()
+                ? "cursor-pointer bg-green-100 border-green-300 text-green-800 hover:bg-green-200"
+                : "cursor-not-allowed bg-gray-200 border-gray-400 text-gray-500 opacity-60"
+            }`}
+            onMouseEnter={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              handleTooltipShow(
+                cellValue && cellValue.trim()
+                  ? cellValue
+                  : "배송메시지 없음 (클릭 불가)",
+                rect.left + rect.width / 2,
+                rect.top - 10
+              );
+            }}
+            onMouseLeave={handleTooltipHide}
+            onClick={handleClick}
+          >
+            MSG
+          </div>
+        </div>
+      );
+    }
+  );
+
+  // 운송장 입력 필드 컴포넌트 메모이제이션
+  const TableDeliveryInputCell = memo(
+    ({
+      rowId,
+      deliveryData,
+      handleDeliveryDataChange,
+    }: {
+      rowId: number;
+      deliveryData: any;
+      handleDeliveryDataChange: (
+        rowId: number,
+        field: string,
+        value: string
+      ) => void;
+    }) => (
+      <div className="flex flex-col gap-1">
+        <select
+          className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded"
+          value={deliveryData[rowId]?.carrier || ""}
+          onChange={(e) =>
+            handleDeliveryDataChange(rowId, "carrier", e.target.value)
+          }
+        >
+          <option value="">택배사 선택</option>
+          <option value="CJ택배">CJ택배</option>
+          <option value="우체국택배">우체국택배</option>
+          <option value="로젠택배">로젠택배</option>
+          <option value="롯데택배">롯데택배</option>
+          <option value="한진택배">한진택배</option>
+          <option value="천일택배">천일택배</option>
+        </select>
+        <input
+          type="text"
+          placeholder="운송장번호"
+          className="w-full px-2 py-0.5 text-xs border border-gray-300 rounded"
+          value={deliveryData[rowId]?.trackingNumber || ""}
+          onChange={(e) =>
+            handleDeliveryDataChange(rowId, "trackingNumber", e.target.value)
+          }
+        />
+      </div>
+    )
+  );
+
+  TableCheckbox.displayName = "TableCheckbox";
+  TableMappingCodeCell.displayName = "TableMappingCodeCell";
+  TableInternalCodeCell.displayName = "TableInternalCodeCell";
+  TableDeliveryMessageCell.displayName = "TableDeliveryMessageCell";
+  TableDeliveryInputCell.displayName = "TableDeliveryInputCell";
+  TableRow.displayName = "TableRow";
+  const orderStatusIdx = useMemo(
+    () => headers.findIndex((h) => h === "주문상태"),
+    [headers]
+  );
 
   // 적용된 필터 목록 생성 (업로드 일자는 맨 앞에)
-  const activeFilters: Array<{type: string; label: string; value: string}> = [];
+  const activeFilters = useMemo(() => {
+    const filters: Array<{type: string; label: string; value: string}> = [];
 
-  // 업로드 일자는 항상 맨 앞에 추가
-  if (uploadTimeFrom && uploadTimeTo) {
-    activeFilters.push({
-      type: "dateRange",
-      label: "업로드 일자",
-      value: `${uploadTimeFrom} ~ ${uploadTimeTo}`,
-    });
-  }
+    // 업로드 일자는 항상 맨 앞에 추가
+    if (uploadTimeFrom && uploadTimeTo) {
+      filters.push({
+        type: "dateRange",
+        label: "업로드 일자",
+        value: `${uploadTimeFrom} ~ ${uploadTimeTo}`,
+      });
+    }
 
-  // 나머지 필터들 추가
-  if (selectedType) {
-    activeFilters.push({type: "type", label: "내외주", value: selectedType});
-  }
-  if (selectedPostType) {
-    activeFilters.push({
-      type: "postType",
-      label: "택배사",
-      value: selectedPostType,
-    });
-  }
-  if (selectedVendor) {
-    activeFilters.push({
-      type: "vendor",
-      label: "업체명",
-      value: selectedVendor,
-    });
-  }
-  if (selectedOrderStatus) {
-    activeFilters.push({
-      type: "orderStatus",
-      label: "주문상태",
-      value: selectedOrderStatus,
-    });
-  }
-  if (appliedSearchField && appliedSearchValue) {
-    activeFilters.push({
-      type: "search",
-      label: appliedSearchField,
-      value: appliedSearchValue,
-    });
-  }
+    // 나머지 필터들 추가
+    if (selectedType) {
+      filters.push({type: "type", label: "내외주", value: selectedType});
+    }
+    if (selectedPostType) {
+      filters.push({
+        type: "postType",
+        label: "택배사",
+        value: selectedPostType,
+      });
+    }
+    if (selectedVendor) {
+      filters.push({
+        type: "vendor",
+        label: "업체명",
+        value: selectedVendor,
+      });
+    }
+    if (selectedOrderStatus) {
+      filters.push({
+        type: "orderStatus",
+        label: "주문상태",
+        value: selectedOrderStatus,
+      });
+    }
+    if (appliedSearchField && appliedSearchValue) {
+      filters.push({
+        type: "search",
+        label: appliedSearchField,
+        value: appliedSearchValue,
+      });
+    }
+
+    return filters;
+  }, [
+    uploadTimeFrom,
+    uploadTimeTo,
+    selectedType,
+    selectedPostType,
+    selectedVendor,
+    selectedOrderStatus,
+    appliedSearchField,
+    appliedSearchValue,
+  ]);
 
   // 로딩 중일 때
   if (loading) {
@@ -650,11 +1128,12 @@ const SavedDataTable = memo(function SavedDataTable({
   if (totalCount === 0) {
     return (
       <>
-        <div className="h-full mb-2 text-sm text-gray-600 flex items-center justify-between">
+        <div
+          className="sticky top-0 z-20 bg-white mb-2 text-sm 
+        text-gray-600 flex items-center justify-between py-3 px-2"
+        >
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="py-1.5">
-              총 {totalCount}건 (페이지 {currentPage} / {totalPages})
-            </span>
+            <span className="py-1.5">총 {tableRows.length}건</span>
             {activeFilters.length > 0 && (
               <div className="flex items-center gap-1 flex-wrap">
                 <span className="text-gray-400">|</span>
@@ -688,7 +1167,10 @@ const SavedDataTable = memo(function SavedDataTable({
 
   return (
     <>
-      <div className="h-full mb-2 text-sm text-gray-600 flex items-center justify-between">
+      <div
+        className="sticky top-0 z-20 bg-white mb-2 text-sm text-gray-600 
+      flex items-center justify-between py-3 px-2"
+      >
         <div className="flex items-center gap-2 flex-wrap">
           <span className="py-1.5">
             총 {totalCount}건 (페이지 {currentPage} / {totalPages})
@@ -704,7 +1186,7 @@ const SavedDataTable = memo(function SavedDataTable({
               <button
                 onClick={handleCancelSelected}
                 disabled={isCanceling || isDeleting}
-                className="px-4 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-sm 
+                className="px-4 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-sm
                 font-bold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isCanceling ? "처리 중..." : `${selectedRows.size}건 취소`}
@@ -712,7 +1194,7 @@ const SavedDataTable = memo(function SavedDataTable({
               <button
                 onClick={handleDeleteSelected}
                 disabled={isCanceling || isDeleting}
-                className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm 
+                className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm
                 font-bold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isDeleting ? "삭제 중..." : `${selectedRows.size}건 삭제`}
@@ -764,12 +1246,16 @@ const SavedDataTable = memo(function SavedDataTable({
           )}
         </div>
       </div>
-      <div className="mt-2 w-full h-[600px] overflow-x-auto text-black overflow-y-auto">
+      <div
+        ref={parentRef}
+        className="mt-2 w-full overflow-x-auto text-black"
+        style={{height: "600px"}}
+      >
         <table
           className="border border-collapse border-gray-400 w-full min-w-[800px]"
           style={{tableLayout: "fixed"}}
         >
-          <thead className="sticky -top-px">
+          <thead className="sticky top-0 z-10 bg-white">
             <tr>
               <th
                 className="border border-[#cacaca] bg-gray-100 px-2 py-2 text-xs text-center"
@@ -808,7 +1294,7 @@ const SavedDataTable = memo(function SavedDataTable({
                               {lineIdx === 0 ? (
                                 line
                               ) : (
-                                <span className="text-gray-500 font-medium">
+                                <span className="text-blue-600 font-medium">
                                   {line}
                                 </span>
                               )}
@@ -827,198 +1313,68 @@ const SavedDataTable = memo(function SavedDataTable({
             </tr>
           </thead>
           <tbody>
-            {paginatedRows.map((row: any, rowIdx: number) => {
-              const mappingCodeIdx = headers.findIndex((h) => h === "매핑코드");
-              const currentCode =
-                mappingCodeIdx !== -1 ? row[headers[mappingCodeIdx]] : "";
-              const orderStatus =
-                orderStatusIdx !== -1 ? row[headers[orderStatusIdx]] : "";
-              const isCancelled = orderStatus === "취소";
-              const isSelected = selectedRows.has(row.id);
-
-              return (
-                <tr
-                  key={`${row.id}-${rowIdx}`}
-                  className={`${
-                    isCancelled ? "bg-red-50" : isSelected ? "bg-gray-50" : ""
-                  }`}
-                  style={{height: "56px"}}
+            <tr>
+              <td
+                colSpan={filteredHeaders.length + 1}
+                style={{padding: 0, border: "none"}}
+              >
+                <div
+                  style={{
+                    height: `${virtualizer.getTotalSize()}px`,
+                    width: "100%",
+                    position: "relative",
+                  }}
                 >
-                  <td
-                    className="border px-2 border-gray-300 text-xs text-center align-middle cursor-pointer hover:bg-gray-50"
-                    style={{width: "40px", height: "56px"}}
-                    onClick={() => handleSelectRow(row.id, !isSelected)}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={(e) =>
-                        handleSelectRow(row.id, e.target.checked)
-                      }
-                      onClick={(e) => e.stopPropagation()}
-                      className="cursor-pointer"
-                    />
-                  </td>
-                  {filteredHeaders.map((header, colIdx) => {
-                    const isMappingCode = header === "매핑코드";
-                    const isId = header === "id";
-                    const isRegistrationDate = header === "등록일";
-                    const isDeliveryInput = header === "운송장입력";
-                    const cellValue = getCombinedCellValue(row, header);
-                    const isMultiLine = cellValue.includes("\n");
-
-                    // 합쳐진 셀인지 확인
-                    const isCombinedCell = (() => {
-                      switch (header) {
-                        case "수취인명":
-                          const receiverName = row["수취인명"] || "";
-                          const ordererName = row["주문자명"] || "";
-                          return (
-                            receiverName &&
-                            ordererName &&
-                            receiverName !== ordererName
-                          );
-                        case "수취인 전화번호":
-                          const receiverPhone = row["수취인 전화번호"] || "";
-                          const ordererPhone = row["주문자 전화번호"] || "";
-                          return (
-                            receiverPhone &&
-                            ordererPhone &&
-                            receiverPhone !== ordererPhone
-                          );
-                        case "내부코드":
-                          const internalCode = row["내부코드"] || "";
-                          const orderCode = row["주문번호"] || "";
-                          return internalCode && orderCode;
-                        case "업체명":
-                          const vendorName = row["업체명"] || "";
-                          const shopName = row["쇼핑몰명"] || "";
-                          return (
-                            vendorName && shopName && vendorName !== shopName
-                          );
-                        default:
-                          return false;
-                      }
-                    })();
-
+                  {virtualizer.getVirtualItems().map((virtualItem) => {
+                    const row = paginatedRows[virtualItem.index];
                     return (
-                      <td
-                        key={colIdx}
-                        className={`border px-2 border-gray-300 text-xs align-middle ${
-                          isRegistrationDate ? "text-center" : "text-left"
-                        } ${
-                          (isMappingCode && currentCode) ||
-                          isId ||
-                          isDeliveryInput
-                            ? "cursor-pointer hover:bg-blue-50"
-                            : ""
-                        }`}
+                      <div
+                        key={`${row.id}-${virtualItem.index}`}
                         style={{
-                          width:
-                            header === "운송장입력" && isDeliveryInputMode
-                              ? "200px"
-                              : getColumnWidth(header),
-                          height: "56px",
-                          lineHeight: "1.4",
-                          wordBreak: "break-word",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: isMultiLine ? "pre-line" : "nowrap",
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          width: "100%",
+                          height: `${virtualItem.size}px`,
+                          transform: `translateY(${virtualItem.start}px)`,
                         }}
-                        onClick={() => {
-                          if (isMappingCode && currentCode) {
-                            setEditingRow({
-                              id: row.id,
-                              rowData: row,
-                            });
-                          } else if (isId) {
-                            setDetailRow(row);
-                          }
-                        }}
-                        title={
-                          !isDeliveryInput
-                            ? cellValue.replace(/\n/g, " / ")
-                            : ""
-                        }
                       >
-                        {isDeliveryInput ? (
-                          <div className="flex flex-col gap-1">
-                            <select
-                              className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded"
-                              value={
-                                deliveryData[row.id]?.carrier ||
-                                row["택배사"] ||
-                                ""
+                        <table
+                          style={{
+                            width: "100%",
+                            tableLayout: "fixed",
+                            minWidth: "800px",
+                          }}
+                        >
+                          <tbody>
+                            <TableRow
+                              row={row}
+                              rowIdx={virtualItem.index}
+                              headers={headers}
+                              orderStatusIdx={orderStatusIdx}
+                              filteredHeaders={filteredHeaders}
+                              selectedRows={selectedRows}
+                              handleSelectRow={handleSelectRow}
+                              handleDetailClick={handleDetailClick}
+                              handleEditClick={handleEditClick}
+                              getCombinedCellValue={getCombinedCellValue}
+                              formatDateTime={formatDateTime}
+                              deliveryData={deliveryData}
+                              handleDeliveryDataChange={
+                                handleDeliveryDataChange
                               }
-                              onChange={(e) => {
-                                setDeliveryData((prev) => ({
-                                  ...prev,
-                                  [row.id]: {
-                                    carrier: e.target.value,
-                                    trackingNumber:
-                                      prev[row.id]?.trackingNumber || "",
-                                  },
-                                }));
-                              }}
-                            >
-                              <option value="">택배사 선택</option>
-                              <option value="CJ택배">CJ택배</option>
-                              <option value="우체국택배">우체국택배</option>
-                              <option value="로젠택배">로젠택배</option>
-                              <option value="롯데택배">롯데택배</option>
-                              <option value="한진택배">한진택배</option>
-                              <option value="천일택배">천일택배</option>
-                            </select>
-                            <input
-                              type="text"
-                              placeholder="운송장번호"
-                              className="w-full px-2 py-0.5 text-xs border border-gray-300 rounded"
-                              value={deliveryData[row.id]?.trackingNumber || ""}
-                              onChange={(e) => {
-                                setDeliveryData((prev) => ({
-                                  ...prev,
-                                  [row.id]: {
-                                    carrier:
-                                      prev[row.id]?.carrier ||
-                                      row["택배사"] ||
-                                      "",
-                                    trackingNumber: e.target.value,
-                                  },
-                                }));
-                              }}
+                              isDeliveryInputMode={isDeliveryInputMode}
+                              handleTooltipShow={handleTooltipShow}
+                              handleTooltipHide={handleTooltipHide}
                             />
-                          </div>
-                        ) : (isMappingCode && currentCode) || isId ? (
-                          <span className="text-blue-600 underline">
-                            {cellValue}
-                          </span>
-                        ) : isCombinedCell && isMultiLine ? (
-                          <span>
-                            {cellValue
-                              .split("\n")
-                              .map((line: string, lineIdx: number) => (
-                                <span key={lineIdx}>
-                                  {lineIdx === 0 ? (
-                                    line
-                                  ) : (
-                                    <span className="text-gray-500 font-medium">
-                                      {line}
-                                    </span>
-                                  )}
-                                  {lineIdx <
-                                    cellValue.split("\n").length - 1 && <br />}
-                                </span>
-                              ))}
-                          </span>
-                        ) : (
-                          cellValue
-                        )}
-                      </td>
+                          </tbody>
+                        </table>
+                      </div>
                     );
                   })}
-                </tr>
-              );
-            })}
+                </div>
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -1050,6 +1406,23 @@ const SavedDataTable = memo(function SavedDataTable({
           rowData={detailRow}
           onClose={() => setDetailRow(null)}
         />
+      )}
+
+      {/* 배송메시지 툴팁 */}
+      {tooltip && tooltip.visible && (
+        <div
+          className="fixed z-50 bg-black text-white text-xs px-2 py-1 rounded shadow-lg pointer-events-none"
+          style={{
+            left: tooltip.x,
+            top: tooltip.y,
+            transform: "translate(-50%, -100%)",
+            maxWidth: "300px",
+            wordBreak: "break-word",
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          {tooltip.content}
+        </div>
       )}
     </>
   );

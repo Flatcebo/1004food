@@ -4,12 +4,14 @@ export default function ModalTable({
   onSubmit,
   children,
   disabled,
+  hideSubmitButton,
 }: {
   open: boolean;
   onClose: () => void;
-  onSubmit: () => void;
+  onSubmit?: () => void;
   children: React.ReactNode;
   disabled?: boolean;
+  hideSubmitButton?: boolean;
 }) {
   if (!open) return null;
   return (
@@ -32,17 +34,19 @@ export default function ModalTable({
 
         <div className="relative bottom-0 w-full h-[80px] flex flex-col items-end gap-[8px] mt-4">
           <div className="flex flex-row items-center justify-end gap-[16px] text-white font-semibold">
-            <button
-              onClick={onSubmit}
-              disabled={disabled}
-              className={`px-[32px] py-[10px] rounded-md transition-colors ${
-                disabled
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-[#1ca2fb] hover:bg-[#1ca2fba0]"
-              }`}
-            >
-              Upload
-            </button>
+            {!hideSubmitButton && (
+              <button
+                onClick={onSubmit}
+                disabled={disabled}
+                className={`px-[32px] py-[10px] rounded-md transition-colors ${
+                  disabled
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-[#1ca2fb] hover:bg-[#1ca2fba0]"
+                }`}
+              >
+                Upload
+              </button>
+            )}
             <button
               onClick={onClose}
               className="bg-[#fc5656] hover:bg-[#fc5656a0] px-[32px] py-[10px] rounded-md transition-colors"

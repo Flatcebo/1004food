@@ -13,6 +13,7 @@ interface RecommendModalProps {
   onSelect: (name: string, code: string, item?: any, id?: number) => void;
   onClose: () => void;
   onDirectInput: (name: string, rowIdx: number) => void;
+  onDelete?: (item: any) => void;
 }
 
 export default function RecommendModal({
@@ -23,6 +24,7 @@ export default function RecommendModal({
   onSelect,
   onClose,
   onDirectInput,
+  onDelete,
 }: RecommendModalProps) {
   if (!open || recommendList.length === 0) return null;
 
@@ -103,7 +105,22 @@ export default function RecommendModal({
                                 : ""
                             }`}
                           >
-                            {displayValue}
+                            {key === "etc" && onDelete ? (
+                              <button
+                                type="button"
+                                className="px-2 py-1 bg-red-500 hover:bg-red-600 text-white text-xs rounded"
+                                onClick={(e) => {
+                                  e.stopPropagation(); // 행 클릭 이벤트 방지
+                                  if (confirm(`"${item.name}" 상품을 삭제하시겠습니까?`)) {
+                                    onDelete(item);
+                                  }
+                                }}
+                              >
+                                삭제
+                              </button>
+                            ) : (
+                              displayValue
+                            )}
                           </td>
                         );
                       })}

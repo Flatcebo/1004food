@@ -49,7 +49,7 @@ export function useFileSave({
             }
             return uploadedFiles.find((f) => f.id === fileId);
           })
-          .filter((f) => f !== null);
+          .filter((f) => f != null);
       } else {
         filesToUpload = uploadedFiles.map((file) => {
           const storedFile = sessionStorage.getItem(`uploadedFile_${file.id}`);

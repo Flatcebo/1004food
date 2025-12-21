@@ -123,10 +123,10 @@ export async function POST(request: NextRequest) {
         }
 
         // 조건부 쿼리 구성
-        const buildQuery = () => {
+        const buildQuery = (includeId: boolean = false) => {
           if (conditions.length === 0) {
             return sql`
-              SELECT ur.row_data
+              SELECT ${includeId ? sql`ur.id,` : sql``} ur.row_data
               FROM upload_rows ur
               INNER JOIN uploads u ON ur.upload_id = u.id
               ORDER BY u.created_at DESC, ur.id DESC
@@ -135,7 +135,7 @@ export async function POST(request: NextRequest) {
 
           // 첫 번째 조건으로 WHERE 시작
           let query = sql`
-            SELECT ur.row_data
+            SELECT ${includeId ? sql`ur.id,` : sql``} ur.row_data
             FROM upload_rows ur
             INNER JOIN uploads u ON ur.upload_id = u.id
             WHERE ${conditions[0]}
@@ -163,10 +163,32 @@ export async function POST(request: NextRequest) {
           }
           return rowData;
         });
+
+        // 발주서 다운로드이고 전체 다운로드 시 주문상태 업데이트
+        const templateName = (templateData.name || "").normalize("NFC").trim();
+        const isPurchaseOrder = templateName.includes("발주");
+        if (isPurchaseOrder && (!rowIds || rowIds.length === 0)) {
+          try {
+            const idData = await buildQuery(true);
+            const idsToUpdate = idData.map((r: any) => r.id);
+
+            if (idsToUpdate.length > 0) {
+              // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
+              await sql`
+                UPDATE upload_rows
+                SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
+                WHERE id = ANY(${idsToUpdate})
+              `;
+            }
+          } catch (updateError) {
+            console.error("주문상태 업데이트 실패:", updateError);
+            // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리
+          }
+        }
       } else {
         // 필터가 없으면 모든 데이터 조회
         const allData = await sql`
-          SELECT row_data
+          SELECT ${!rowIds || rowIds.length === 0 ? sql`id,` : sql``} row_data
           FROM upload_rows
           ORDER BY id DESC
         `;
@@ -181,6 +203,27 @@ export async function POST(request: NextRequest) {
           }
           return rowData;
         });
+
+        // 발주서 다운로드이고 전체 다운로드 시 주문상태 업데이트
+        const templateName = (templateData.name || "").normalize("NFC").trim();
+        const isPurchaseOrder = templateName.includes("발주");
+        if (isPurchaseOrder && (!rowIds || rowIds.length === 0)) {
+          try {
+            const idsToUpdate = allData.map((r: any) => r.id);
+
+            if (idsToUpdate.length > 0) {
+              // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
+              await sql`
+                UPDATE upload_rows
+                SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
+                WHERE id = ANY(${idsToUpdate})
+              `;
+            }
+          } catch (updateError) {
+            console.error("주문상태 업데이트 실패:", updateError);
+            // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리
+          }
+        }
       }
     }
 
@@ -670,6 +713,24 @@ export async function POST(request: NextRequest) {
     const encodedFileName = encodeURIComponent(fileName); // UTF-8 인코딩
     // filename* 우선, filename ASCII fallback 병행
     const contentDisposition = `attachment; filename="${safeFileName}"; filename*=UTF-8''${encodedFileName}`;
+
+    // 발주서 다운로드인 경우 주문상태 업데이트 (템플릿 이름에 "발주"가 포함된 경우)
+    const templateName = (templateData.name || "").normalize("NFC").trim();
+    const isPurchaseOrder = templateName.includes("발주");
+
+    if (isPurchaseOrder && rowIds && rowIds.length > 0) {
+      try {
+        // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
+        await sql`
+          UPDATE upload_rows
+          SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
+          WHERE id = ANY(${rowIds})
+        `;
+      } catch (updateError) {
+        console.error("주문상태 업데이트 실패:", updateError);
+        // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리
+      }
+    }
 
     // 헤더를 Headers 객체로 직접 설정하여 파싱 문제 방지
     const responseHeaders = new Headers();

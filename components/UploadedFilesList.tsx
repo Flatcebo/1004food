@@ -6,7 +6,7 @@ import {useCallback} from "react";
 
 interface UploadedFilesListProps {
   uploadedFiles: UploadedFile[];
-  fileValidationStatus: {[fileId: string]: boolean};
+  fileValidationStatus: {[fileId: string]: { isValid: boolean; errors: string[] }};
   onFileClick: (fileId: string) => void;
   onFileDelete: (fileId: string) => void;
   onResetData: () => void;
@@ -58,6 +58,9 @@ export default function UploadedFilesList({
               <th className="border border-gray-300 px-4 py-2 text-center w-[100px]">
                 건수
               </th>
+              <th className="border border-gray-300 px-4 py-2 text-center w-[200px]">
+                검증 상태
+              </th>
               <th className="border border-gray-300 px-4 py-2 text-center w-[160px]">
                 작업
               </th>
@@ -65,7 +68,8 @@ export default function UploadedFilesList({
           </thead>
           <tbody className="h-full">
             {uploadedFiles.map((file) => {
-              const isValid = fileValidationStatus[file.id] !== false; // 기본값은 true
+              const validationResult = fileValidationStatus[file.id] || { isValid: true, errors: [] };
+              const isValid = validationResult.isValid;
               return (
                 <tr
                   key={file.id}
@@ -93,6 +97,23 @@ export default function UploadedFilesList({
                   </td>
                   <td className="border border-gray-300 px-4 py-2 text-center">
                     {file.rowCount}건
+                  </td>
+                  <td className="border border-gray-300 px-4 py-2 text-center">
+                    {isValid ? (
+                      <span className="text-green-600 font-semibold">✓ 검증 통과</span>
+                    ) : (
+                      <div className="text-red-600">
+                        <div className="font-semibold mb-1">✗ 검증 실패</div>
+                        <div className="text-xs max-h-20 overflow-y-auto">
+                          {validationResult.errors.slice(0, 3).map((error, idx) => (
+                            <div key={idx} className="mb-1">{error}</div>
+                          ))}
+                          {validationResult.errors.length > 3 && (
+                            <div className="text-gray-500">외 {validationResult.errors.length - 3}건...</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </td>
                   <td className="border border-gray-300 px-4 py-2 text-center">
                     <div className="flex items-center justify-center gap-2">

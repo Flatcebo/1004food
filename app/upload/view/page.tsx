@@ -1547,6 +1547,48 @@ function FileViewContent() {
                                     );
                                     setRecommendIdx(null);
                                   }}
+                                  onDelete={async (item) => {
+                                    if (!item.id) return;
+
+                                    try {
+                                      // 상품 삭제 API 호출
+                                      const response = await fetch(
+                                        `/api/products/delete?id=${item.id}`,
+                                        {
+                                          method: "DELETE",
+                                        }
+                                      );
+
+                                      const result = await response.json();
+
+                                      if (result.success) {
+                                        // codes 상태에서 삭제된 상품 제거
+                                        const updatedCodes = codes.filter(
+                                          (code: any) => code.id !== item.id
+                                        );
+                                        setCodes(updatedCodes);
+                                        // productCodeMap에서도 제거 (상품명이 같은 경우)
+                                        const updatedProductCodeMap = {
+                                          ...productCodeMap,
+                                        };
+                                        delete updatedProductCodeMap[item.name];
+                                        setProductCodeMap(
+                                          updatedProductCodeMap
+                                        );
+                                        alert("상품이 삭제되었습니다.");
+                                        setRecommendIdx(null); // 모달 닫기
+                                      } else {
+                                        alert(
+                                          `상품 삭제 실패: ${result.error}`
+                                        );
+                                      }
+                                    } catch (error) {
+                                      console.error("상품 삭제 실패:", error);
+                                      alert(
+                                        "상품 삭제 중 오류가 발생했습니다."
+                                      );
+                                    }
+                                  }}
                                 />
                               )}
                             </div>
@@ -1584,15 +1626,90 @@ function FileViewContent() {
         fieldNameMap={fieldNameMap}
         onClose={closeDirectInputModal}
         onSave={async () => {
+          const savedProductName = directInputModal.values.name; // 저장된 상품명 기억
           await saveDirectInputModal();
-          // 저장 후 codes 목록 다시 불러오기 (DB에 저장된 최신 데이터 반영)
+
+          // 상품 저장 후 최신 codes를 다시 불러오기
           try {
             const response = await fetch("/api/products/list");
             const result = await response.json();
             if (result.success) {
-              setCodes(result.data || []);
+              const newCodes = result.data || [];
+              setCodes(newCodes);
               // codesOriginRef도 업데이트
-              codesOriginRef.current = result.data || [];
+              codesOriginRef.current = newCodes;
+
+              // 새로 불러온 codes에서 상품 찾기
+              const newProduct = newCodes.find(
+                (c: any) => c.name === savedProductName
+              );
+              if (newProduct && newProduct.type && newProduct.postType) {
+                // 상품명이 일치하는 행들의 내외주, 택배사 실시간 업데이트
+                const headerRow = tableData[0];
+                const nameIdx = headerIndex?.nameIdx;
+                const typeIdx = headerRow.findIndex((h: any) => h === "내외주");
+                const postTypeIdx = headerRow.findIndex(
+                  (h: any) => h === "택배사"
+                );
+                const mappingIdx = headerRow.findIndex(
+                  (h: any) => h === "매핑코드"
+                );
+
+                if (
+                  nameIdx !== undefined &&
+                  nameIdx !== -1 &&
+                  (typeIdx !== -1 || postTypeIdx !== -1 || mappingIdx !== -1)
+                ) {
+                  const updatedTable = tableData.map((row, idx) => {
+                    if (idx === 0) return row;
+                    const rowName = row[nameIdx];
+                    if (
+                      rowName &&
+                      String(rowName).trim() === savedProductName.trim()
+                    ) {
+                      const newRow = [...row];
+                      if (mappingIdx !== -1 && newProduct.code) {
+                        newRow[mappingIdx] = newProduct.code;
+                      }
+                      if (typeIdx !== -1 && newProduct.type) {
+                        newRow[typeIdx] = newProduct.type;
+                      }
+                      if (postTypeIdx !== -1 && newProduct.postType) {
+                        newRow[postTypeIdx] = newProduct.postType;
+                      }
+                      return newRow;
+                    }
+                    return row;
+                  });
+
+                  setTableData(updatedTable);
+
+                  // productCodeMap에도 업데이트
+                  const updatedProductCodeMap = {
+                    ...productCodeMap,
+                    [savedProductName]: newProduct.code || "",
+                  };
+                  setProductCodeMap(updatedProductCodeMap);
+
+                  // 파일 데이터도 업데이트
+                  if (fileId) {
+                    const updatedFile = {
+                      ...file,
+                      tableData: updatedTable,
+                      productCodeMap: updatedProductCodeMap,
+                    };
+                    setFile(updatedFile);
+                    sessionStorage.setItem(
+                      `uploadedFile_${fileId}`,
+                      JSON.stringify(updatedFile)
+                    );
+                    const updatedFiles = uploadedFiles.map((f) =>
+                      f.id === fileId ? updatedFile : f
+                    );
+                    setUploadedFiles(updatedFiles);
+                  }
+                }
+              }
             }
           } catch (error) {
             console.error("상품 목록 조회 실패:", error);

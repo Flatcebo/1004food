@@ -3,9 +3,9 @@ import {UploadedFile} from "@/stores/uploadStore";
 /**
  * 파일의 매핑코드와 업체명이 모두 입력되었는지 확인
  * @param file 검증할 파일 객체
- * @returns 모든 row의 매핑코드와 업체명이 공란이 아니면 true
+ * @returns 모든 row의 매핑코드와 업체명이 공란이 아니면 true, 검증 실패 이유를 포함한 객체
  */
-export function checkFileValidation(file: UploadedFile | any): boolean {
+export function checkFileValidation(file: UploadedFile | any): { isValid: boolean; errors: string[] } {
   if (!file || !file.tableData || !file.tableData.length) {
     console.log("파일 데이터가 없습니다:", file);
     return false; // 파일이 없거나 데이터가 없으면 무효
@@ -21,6 +21,8 @@ export function checkFileValidation(file: UploadedFile | any): boolean {
   );
   const qtyIdx = headerRow.findIndex((h: any) => h === "수량");
 
+  const errors: string[] = [];
+
   console.log("파일 검증 시작:", {
     fileName: file.fileName,
     nameIdx,
@@ -33,16 +35,17 @@ export function checkFileValidation(file: UploadedFile | any): boolean {
 
   // 상품명 인덱스가 없으면 업체명만 확인
   if (typeof nameIdx !== "number" || nameIdx === -1) {
-    if (vendorIdx === -1) return true;
+    if (vendorIdx === -1) return { isValid: true, errors: [] };
     for (let i = 1; i < file.tableData.length; i++) {
       const row = file.tableData[i];
       const vendorName = String(row[vendorIdx] || "").trim();
       if (!vendorName) {
-        console.log(`행 ${i}: 업체명이 공란입니다.`);
-        return false;
+        const errorMsg = `행 ${i}: 업체명이 공란입니다.`;
+        console.log(errorMsg);
+        errors.push(errorMsg);
       }
     }
-    return true;
+    return { isValid: errors.length === 0, errors };
   }
 
   // productCodeMap 가져오기
@@ -88,23 +91,26 @@ export function checkFileValidation(file: UploadedFile | any): boolean {
 
     // 수량이 2 이상이면 false
     if (quantity >= 2) {
-      console.log(`행 ${i}: 수량이 2 이상입니다 (${quantity})`);
-      return false;
+      const errorMsg = `행 ${i}: 수량이 2 이상입니다 (${quantity}). 상품명: "${productName}"`;
+      console.log(errorMsg);
+      errors.push(errorMsg);
     }
 
     // 매핑코드가 없으면 false
     if (!mappingCode) {
-      console.log(`행 ${i}: 매핑코드가 공란입니다. 상품명: "${productName}"`);
-      return false;
+      const errorMsg = `행 ${i}: 매핑코드가 공란입니다. 상품명: "${productName}"`;
+      console.log(errorMsg);
+      errors.push(errorMsg);
     }
 
     // 업체명 컬럼이 있는 경우: 업체명이 공란이 아니어야 함
     if (vendorIdx !== -1 && !vendorName) {
-      console.log(`행 ${i}: 업체명이 공란입니다. 상품명: "${productName}"`);
-      return false;
+      const errorMsg = `행 ${i}: 업체명이 공란입니다. 상품명: "${productName}"`;
+      console.log(errorMsg);
+      errors.push(errorMsg);
     }
   }
 
-  console.log("파일 검증 성공:", file.fileName);
-  return true; // 모든 row의 매핑코드와 업체명이 공란이 아니면 true
+  console.log("파일 검증 완료:", file.fileName, { isValid: errors.length === 0, errorCount: errors.length });
+  return { isValid: errors.length === 0, errors }; // 모든 row의 매핑코드와 업체명이 공란이 아니면 true
 }

@@ -1,15 +1,12 @@
 "use client";
 
-import {useEffect, useState} from "react";
+import {useEffect, useState, useRef, useCallback} from "react";
 import {useUploadStore} from "@/stores/uploadStore";
 import {useLoadingStore} from "@/stores/loadingStore";
 import ModalTable from "@/components/ModalTable";
-import FileUploadArea from "@/components/FileUploadArea";
-import UploadedFilesList from "@/components/UploadedFilesList";
+import OrderModalContent from "@/components/OrderModalContent";
 import SavedDataTable from "@/components/SavedDataTable";
 import DataFilters from "@/components/DataFilters";
-import DirectInputModal from "@/components/DirectInputModal";
-import DataTable from "@/components/DataTable";
 import LoadingOverlay from "@/components/LoadingOverlay";
 import {useUploadData} from "@/hooks/useUploadData";
 import {useFileValidation} from "@/hooks/useFileValidation";
@@ -17,11 +14,37 @@ import {useFileMessageHandler} from "@/hooks/useFileMessageHandler";
 import {useAutoMapping} from "@/hooks/useAutoMapping";
 import {useFileSave} from "@/hooks/useFileSave";
 import {useDragAndDrop} from "@/hooks/useDragAndDrop";
+import {useDeliveryUpload} from "@/hooks/useDeliveryUpload";
 import {fieldNameMap} from "@/constants/fieldMappings";
 import {generateAutoDeliveryMessage} from "@/utils/vendorMessageUtils";
+import {
+  IoReloadCircle,
+  IoCloudUpload,
+  IoCheckmarkCircle,
+  IoCloseCircle,
+  IoTime,
+} from "react-icons/io5";
 
 export default function Page() {
   const [isDeliveryInputMode, setIsDeliveryInputMode] = useState(false);
+  const [isDeliveryUploadModalOpen, setIsDeliveryUploadModalOpen] =
+    useState(false);
+  const [modalMode, setModalMode] = useState<"excel" | "delivery" | null>(null);
+
+  // 운송장 업로드 훅 사용
+  const {
+    isUploading,
+    uploadProgress,
+    currentOrderNumber,
+    deliveryResults,
+    finalResult,
+    deliveryError,
+    deliveryFileInputRef,
+    handleDeliveryFileChange,
+    handleDeliveryDrop,
+    handleDeliveryDragOver,
+    resetDeliveryUploadState,
+  } = useDeliveryUpload();
 
   const {
     tableData,
@@ -163,6 +186,11 @@ export default function Page() {
     productCodeMap
   );
 
+  // 검증 상태를 boolean으로 변환하는 헬퍼 함수
+  const getValidationStatus = (fileId: string): boolean => {
+    return fileValidationStatus[fileId]?.isValid ?? true;
+  };
+
   // 검증이 통과한 파일들을 자동으로 확인 처리
   useEffect(() => {
     if (uploadedFiles.length === 0) return;
@@ -170,7 +198,7 @@ export default function Page() {
     // 약간의 지연을 두어 검증 완료 후 실행
     const timeoutId = setTimeout(() => {
       uploadedFiles.forEach((file) => {
-        const isValid = fileValidationStatus[file.id] !== false; // 기본값은 true
+        const isValid = getValidationStatus(file.id);
         const isConfirmed = confirmedFiles.has(file.id);
 
         // 검증이 통과했고 아직 확인되지 않은 파일만 자동 확인
@@ -394,17 +422,18 @@ export default function Page() {
     handleFileChange,
   });
 
-  const handleCloseModal = () => {
+  // 엑셀 업로드 관련 상태 초기화
+  const resetExcelUploadState = () => {
     setIsModalOpen(false);
     setTableData([]);
     setFileName("");
     setProductCodeMap({});
-    // 파일 목록 및 관련 데이터 초기화
     setUploadedFiles([]);
     setHeaderIndex(null);
     setRecommendIdx(null);
     setRecommendList([]);
     codesOriginRef.current = [];
+
     // sessionStorage에서 업로드된 파일 데이터 제거
     uploadedFiles.forEach((file) => {
       sessionStorage.removeItem(`uploadedFile_${file.id}`);
@@ -413,6 +442,17 @@ export default function Page() {
     Array.from(confirmedFiles).forEach((fileId) => {
       unconfirmFile(fileId);
     });
+  };
+
+  const handleCloseModal = () => {
+    if (modalMode === "excel") {
+      resetExcelUploadState();
+      // 서버에서 임시 저장된 파일 불러오기
+      loadFilesFromServer();
+    } else if (modalMode === "delivery") {
+      resetDeliveryUploadState();
+    }
+    setModalMode(null);
   };
 
   // 파일 저장 훅
@@ -438,6 +478,7 @@ export default function Page() {
 
   const handleFileDelete = async (fileId: string) => {
     removeUploadedFile(fileId);
+    unconfirmFile(fileId); // confirmedFiles에서도 제거
     sessionStorage.removeItem(`uploadedFile_${fileId}`);
 
     // 서버에서도 삭제
@@ -459,11 +500,11 @@ export default function Page() {
 
   // 유효하지 않은 파일이 있는지 체크 (빨간 배경이 있는 파일)
   const hasInvalidFiles = uploadedFiles.some(
-    (file) => fileValidationStatus[file.id] === false
+    (file) => !getValidationStatus(file.id)
   );
 
   return (
-    <div className="w-full h-full flex flex-col items-start justify-start pt-4 px-4">
+    <div className="w-full h-full flex flex-col items-start justify-start px-4">
       {/* 업로드 로딩 오버레이 */}
       <LoadingOverlay
         isOpen={isLoading}
@@ -472,9 +513,9 @@ export default function Page() {
         subMessage={subMessage}
       />
 
-      <div className="w-full bg-[#ffffff] rounded-lg px-8 shadow-md pb-12">
+      <div className="w-full pb-80">
         {/* 저장된 데이터 테이블 */}
-        <div className="w-full mt-6">
+        <div className="w-full mt-6 bg-[#ffffff] rounded-lg px-8 py-6 shadow-md">
           <div className="mb-4 flex gap-4 items-center justify-between">
             <h2 className="text-xl font-bold">저장된 데이터</h2>
 
@@ -482,29 +523,43 @@ export default function Page() {
               <button
                 className="px-5 py-2 bg-blue-600 text-white text-sm font-bold rounded hover:bg-blue-800"
                 onClick={() => {
-                  setIsModalOpen(true);
+                  setModalMode("excel");
                 }}
               >
                 엑셀 업로드
               </button>
 
               <button
+                className="px-5 py-2 bg-green-600 text-white text-sm font-bold rounded hover:bg-green-800"
+                onClick={() => {
+                  setModalMode("delivery");
+                }}
+              >
+                운송장 업로드
+              </button>
+
+              <button
                 className={`px-5 py-2 text-white text-sm font-bold rounded hover:bg-opacity-80 ${
-                  isDeliveryInputMode ? 'bg-green-600' : 'bg-orange-600'
+                  isDeliveryInputMode ? "bg-orange-600" : "bg-amber-700"
                 }`}
                 onClick={() => {
                   setIsDeliveryInputMode(!isDeliveryInputMode);
                 }}
               >
-                {isDeliveryInputMode ? '운송장 입력 취소' : '운송장 입력'}
+                {isDeliveryInputMode ? "운송장 입력 취소" : "운송장 입력"}
               </button>
 
               <button
-                className="px-5 py-2 bg-gray-500 text-white text-sm rounded hover:bg-gray-600"
+                className="w-[60px] h-[36px] px-0 py-0 text-white text-sm rounded 
+                bg-[#333333] hover:bg-[#7e7e7e] flex items-center justify-center"
                 onClick={fetchSavedData}
                 disabled={loading}
               >
-                새로고침
+                <IoReloadCircle
+                  className={`w-[30px] h-[30px] rounded-full ${
+                    loading ? "animate-spin" : ""
+                  }`}
+                />
               </button>
             </div>
           </div>
@@ -558,117 +613,59 @@ export default function Page() {
       </div>
 
       <ModalTable
-        open={isModalOpen}
+        open={modalMode !== null}
         onClose={handleCloseModal}
         onSubmit={async () => {
-          const success = await handleSaveWithConfirmedFiles();
-          if (success) {
-            handleCloseModal();
+          if (modalMode === "excel") {
+            const success = await handleSaveWithConfirmedFiles();
+            if (success) {
+              handleCloseModal();
+            }
           }
         }}
-        disabled={hasInvalidFiles}
+        disabled={modalMode === "excel" && hasInvalidFiles}
+        hideSubmitButton={modalMode === "delivery"}
       >
-        <FileUploadArea
+        <OrderModalContent
+          modalMode={modalMode}
           dragActive={dragActive}
           fileInputRef={fileInputRef}
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onFileChange={handleFileChange}
-        />
-
-        <UploadedFilesList
-          uploadedFiles={uploadedFiles}
+          deliveryFileInputRef={deliveryFileInputRef}
+          handleDrop={handleDrop}
+          handleDragOver={handleDragOver}
+          handleDragLeave={handleDragLeave}
+          handleFileChange={handleFileChange}
+          handleDeliveryFileChange={handleDeliveryFileChange}
+          handleDeliveryDrop={handleDeliveryDrop}
+          handleDeliveryDragOver={handleDeliveryDragOver}
+          handleResetData={handleResetData}
+          handleFileDelete={handleFileDelete}
+          openFileInNewWindow={openFileInNewWindow}
           fileValidationStatus={fileValidationStatus}
-          onFileClick={openFileInNewWindow}
-          onFileDelete={handleFileDelete}
-          onResetData={handleResetData}
+          directInputModal={directInputModal}
+          setDirectInputValue={setDirectInputValue}
+          closeDirectInputModal={closeDirectInputModal}
+          saveDirectInputModal={saveDirectInputModal}
+          openDirectInputModal={openDirectInputModal}
+          tableData={tableData}
+          fileName={fileName}
+          headerIndex={headerIndex}
+          productCodeMap={productCodeMap}
+          codesOriginRef={codesOriginRef}
+          codes={codes}
+          recommendIdx={recommendIdx}
+          recommendList={recommendList}
+          handleInputCode={handleInputCode}
+          handleRecommendClick={handleRecommendClick}
+          handleSelectSuggest={handleSelectSuggest}
+          onCloseRecommend={() => setRecommendIdx(null)}
+          isUploading={isUploading}
+          uploadProgress={uploadProgress}
+          currentOrderNumber={currentOrderNumber}
+          deliveryResults={deliveryResults}
+          finalResult={finalResult}
+          deliveryError={deliveryError}
         />
-
-        <DirectInputModal
-          open={directInputModal.open}
-          fields={directInputModal.fields}
-          values={directInputModal.values}
-          fieldNameMap={fieldNameMap}
-          onClose={closeDirectInputModal}
-          onSave={saveDirectInputModal}
-          onValueChange={setDirectInputValue}
-        />
-
-        {/* 테이블 데이터 표시 */}
-        {uploadedFiles.length === 0 && (
-          <DataTable
-            tableData={tableData}
-            fileName={fileName}
-            headerIndex={headerIndex}
-            productCodeMap={productCodeMap}
-            codesOriginRef={codesOriginRef}
-            codes={codes}
-            recommendIdx={recommendIdx}
-            recommendList={recommendList}
-            onInputCode={handleInputCode}
-            onRecommendClick={handleRecommendClick}
-            onSelectSuggest={(selectedName, selectedCode, selectedItem) => {
-              // 먼저 productCodeMap 업데이트
-              const updatedProductCodeMap = {
-                ...productCodeMap,
-                [selectedName]: selectedCode,
-              };
-              setProductCodeMap(updatedProductCodeMap);
-
-              // 매핑코드, 내외주, 택배사 실시간 업데이트
-              if (tableData.length > 0 && headerIndex) {
-                const headerRow = tableData[0];
-                const mappingIdx = headerRow.findIndex(
-                  (h: any) => h === "매핑코드"
-                );
-                const typeIdx = headerRow.findIndex((h: any) => h === "내외주");
-                const postTypeIdx = headerRow.findIndex(
-                  (h: any) => h === "택배사"
-                );
-
-                if (mappingIdx !== -1 || typeIdx !== -1 || postTypeIdx !== -1) {
-                  // 선택한 항목의 데이터 사용 (없으면 codes에서 찾기)
-                  const itemData =
-                    selectedItem ||
-                    codes.find(
-                      (c: any) =>
-                        c.name === selectedName && c.code === selectedCode
-                    );
-
-                  const updatedTable = tableData.map((row, idx) => {
-                    if (idx === 0) return row;
-                    const rowName = row[headerIndex.nameIdx!];
-                    // 같은 상품명을 가진 모든 행 업데이트
-                    if (
-                      rowName &&
-                      String(rowName).trim() === selectedName.trim()
-                    ) {
-                      const newRow = [...row];
-                      if (mappingIdx !== -1 && selectedCode) {
-                        newRow[mappingIdx] = selectedCode;
-                      }
-                      if (typeIdx !== -1 && itemData?.type) {
-                        newRow[typeIdx] = itemData.type;
-                      }
-                      if (postTypeIdx !== -1 && itemData?.postType) {
-                        newRow[postTypeIdx] = itemData.postType;
-                      }
-                      return newRow;
-                    }
-                    return row;
-                  });
-                  setTableData(updatedTable);
-                }
-              }
-
-              // 모달 닫기
-              handleSelectSuggest(selectedName, selectedCode);
-            }}
-            onDirectInput={openDirectInputModal}
-            onCloseRecommend={() => setRecommendIdx(null)}
-          />
-        )}
       </ModalTable>
     </div>
   );

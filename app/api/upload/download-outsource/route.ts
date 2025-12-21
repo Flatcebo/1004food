@@ -177,10 +177,10 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const buildQuery = () => {
+      const buildQuery = (includeId: boolean = false) => {
         if (conditions.length === 0) {
           return sql`
-            SELECT ur.row_data
+            SELECT ${includeId ? sql`ur.id,` : sql``} ur.row_data
             FROM upload_rows ur
             INNER JOIN uploads u ON ur.upload_id = u.id
             ORDER BY u.created_at DESC, ur.id DESC
@@ -188,7 +188,7 @@ export async function POST(request: NextRequest) {
         }
 
         let query = sql`
-          SELECT ur.row_data
+          SELECT ${includeId ? sql`ur.id,` : sql``} ur.row_data
           FROM upload_rows ur
           INNER JOIN uploads u ON ur.upload_id = u.id
           WHERE ${conditions[0]}
@@ -204,15 +204,80 @@ export async function POST(request: NextRequest) {
 
       const filteredData = await buildQuery();
       dataRows = filteredData.map((r: any) => r.row_data || {});
+
+      // 전체 다운로드 시 주문상태 업데이트 (rowIds가 없을 때)
+      if (!rowIds || rowIds.length === 0) {
+        try {
+          const idData = await buildQuery(true);
+          const idsToUpdate = idData.map((r: any) => r.id);
+
+          for (const rowId of idsToUpdate) {
+            // 현재 row_data 가져오기
+            const currentRow = await sql`
+              SELECT row_data FROM upload_rows WHERE id = ${rowId}
+            `;
+
+            if (currentRow.length > 0) {
+              const currentData = currentRow[0].row_data;
+              // 주문상태를 "발주서 다운"으로 업데이트
+              const updatedData = {
+                ...currentData,
+                주문상태: "발주서 다운"
+              };
+
+              await sql`
+                UPDATE upload_rows
+                SET row_data = ${JSON.stringify(updatedData)}
+                WHERE id = ${rowId}
+              `;
+            }
+          }
+        } catch (updateError) {
+          console.error("주문상태 업데이트 실패:", updateError);
+          // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리
+        }
+      }
     } else {
       // 조건 없으면 모든 데이터 조회
       const allData = await sql`
-        SELECT ur.row_data
+        SELECT ur.id, ur.row_data
         FROM upload_rows ur
         INNER JOIN uploads u ON ur.upload_id = u.id
         ORDER BY u.created_at DESC, ur.id DESC
       `;
       dataRows = allData.map((r: any) => r.row_data || {});
+
+      // 전체 다운로드 시 주문상태 업데이트 (rowIds가 없을 때)
+      if (!rowIds || rowIds.length === 0) {
+        try {
+          const idsToUpdate = allData.map((r: any) => r.id);
+
+          for (const rowId of idsToUpdate) {
+            // 현재 row_data 가져오기
+            const currentRow = await sql`
+              SELECT row_data FROM upload_rows WHERE id = ${rowId}
+            `;
+
+            if (currentRow.length > 0) {
+              const currentData = currentRow[0].row_data;
+              // 주문상태를 "발주서 다운"으로 업데이트
+              const updatedData = {
+                ...currentData,
+                주문상태: "발주서 다운"
+              };
+
+              await sql`
+                UPDATE upload_rows
+                SET row_data = ${JSON.stringify(updatedData)}
+                WHERE id = ${rowId}
+              `;
+            }
+          }
+        } catch (updateError) {
+          console.error("주문상태 업데이트 실패:", updateError);
+          // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리
+        }
+      }
     }
 
     // 템플릿명 확인 (외주 발주서인지 체크)
@@ -512,6 +577,21 @@ export async function POST(request: NextRequest) {
       const encodedZipFileName = encodeURIComponent(zipFileName);
       const contentDisposition = `attachment; filename="outsource.zip"; filename*=UTF-8''${encodedZipFileName}`;
 
+      // 외주 발주서 다운로드가 성공하면 주문상태 업데이트
+      if (rowIds && rowIds.length > 0) {
+        try {
+          // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
+          await sql`
+            UPDATE upload_rows
+            SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
+            WHERE id = ANY(${rowIds})
+          `;
+        } catch (updateError) {
+          console.error("주문상태 업데이트 실패:", updateError);
+          // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리
+        }
+      }
+
       const responseHeaders = new Headers();
       responseHeaders.set("Content-Type", "application/zip");
       responseHeaders.set("Content-Disposition", contentDisposition);
@@ -659,6 +739,36 @@ export async function POST(request: NextRequest) {
     const encodedFileName = encodeURIComponent(fileName); // UTF-8 인코딩
     // filename* 우선, filename ASCII fallback 병행
     const contentDisposition = `attachment; filename="${safeFileName}"; filename*=UTF-8''${encodedFileName}`;
+
+    // 발주서 다운로드가 성공하면 주문상태 업데이트
+    if (rowIds && rowIds.length > 0) {
+      try {
+        for (const rowId of rowIds) {
+          // 현재 row_data 가져오기
+          const currentRow = await sql`
+            SELECT row_data FROM upload_rows WHERE id = ${rowId}
+          `;
+
+          if (currentRow.length > 0) {
+            const currentData = currentRow[0].row_data;
+            // 주문상태를 "발주서 다운"으로 업데이트
+            const updatedData = {
+              ...currentData,
+              주문상태: "발주서 다운"
+            };
+
+            await sql`
+              UPDATE upload_rows
+              SET row_data = ${JSON.stringify(updatedData)}
+              WHERE id = ${rowId}
+            `;
+          }
+        }
+      } catch (updateError) {
+        console.error("주문상태 업데이트 실패:", updateError);
+        // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리
+      }
+    }
 
     const responseHeaders = new Headers();
     responseHeaders.set(

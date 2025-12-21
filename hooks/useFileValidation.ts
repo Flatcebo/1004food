@@ -7,7 +7,7 @@ export function useFileValidation(
   productCodeMap?: {[name: string]: string}
 ) {
   const [fileValidationStatus, setFileValidationStatus] = useState<{
-    [fileId: string]: boolean;
+    [fileId: string]: { isValid: boolean; errors: string[] };
   }>({});
   const productCodeMapRef = useRef(productCodeMap);
   const uploadedFilesRef = useRef(uploadedFiles);
@@ -28,7 +28,7 @@ export function useFileValidation(
     
     if (currentFiles.length === 0) return;
     
-    const newValidationStatus: {[fileId: string]: boolean} = {};
+    const newValidationStatus: {[fileId: string]: { isValid: boolean; errors: string[] }} = {};
     currentFiles.forEach((file) => {
       const storedFile = sessionStorage.getItem(`uploadedFile_${file.id}`);
       let fileToCheck = file;
@@ -67,10 +67,10 @@ export function useFileValidation(
     };
   }, [uploadedFiles, productCodeMap, updateValidation]);
 
-  const updateValidationStatus = (fileId: string, isValid: boolean) => {
+  const updateValidationStatus = (fileId: string, isValid: boolean, errors: string[] = []) => {
     setFileValidationStatus((prev) => ({
       ...prev,
-      [fileId]: isValid,
+      [fileId]: { isValid, errors },
     }));
   };
 

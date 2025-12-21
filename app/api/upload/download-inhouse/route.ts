@@ -176,10 +176,10 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const buildQuery = () => {
+      const buildQuery = (includeId: boolean = false) => {
         if (conditions.length === 0) {
           return sql`
-            SELECT ur.row_data
+            SELECT ${includeId ? sql`ur.id,` : sql``} ur.row_data
             FROM upload_rows ur
             INNER JOIN uploads u ON ur.upload_id = u.id
             ORDER BY u.created_at DESC, ur.id DESC
@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
         }
 
         let query = sql`
-          SELECT ur.row_data
+          SELECT ${includeId ? sql`ur.id,` : sql``} ur.row_data
           FROM upload_rows ur
           INNER JOIN uploads u ON ur.upload_id = u.id
           WHERE ${conditions[0]}
@@ -203,15 +203,56 @@ export async function POST(request: NextRequest) {
 
       const filteredData = await buildQuery();
       dataRows = filteredData.map((r: any) => r.row_data || {});
+
+      // 전체 다운로드 시 주문상태 업데이트 (rowIds가 없을 때)
+      if (!rowIds || rowIds.length === 0) {
+        try {
+          const idData = await buildQuery(true);
+          const idsToUpdate = idData.map((r: any) => r.id);
+
+          if (idsToUpdate.length > 0) {
+            // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
+            await sql`
+              UPDATE upload_rows
+              SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
+              WHERE id = ANY(${idsToUpdate})
+            `;
+          }
+        } catch (updateError) {
+          console.error("주문상태 업데이트 실패:", updateError);
+          // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리
+        }
+      }
     } else {
       // 조건 없으면 모든 데이터 조회
       const allData = await sql`
-        SELECT ur.row_data
+        SELECT ${
+          !rowIds || rowIds.length === 0 ? sql`ur.id,` : sql``
+        } ur.row_data
         FROM upload_rows ur
         INNER JOIN uploads u ON ur.upload_id = u.id
         ORDER BY u.created_at DESC, ur.id DESC
       `;
       dataRows = allData.map((r: any) => r.row_data || {});
+
+      // 전체 다운로드 시 주문상태 업데이트 (rowIds가 없을 때)
+      if (!rowIds || rowIds.length === 0) {
+        try {
+          const idsToUpdate = allData.map((r: any) => r.id);
+
+          if (idsToUpdate.length > 0) {
+            // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
+            await sql`
+              UPDATE upload_rows
+              SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
+              WHERE id = ANY(${idsToUpdate})
+            `;
+          }
+        } catch (updateError) {
+          console.error("주문상태 업데이트 실패:", updateError);
+          // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리
+        }
+      }
     }
 
     // 매핑코드별 가격, 사방넷명, 업체명 정보 조회
@@ -349,27 +390,12 @@ export async function POST(request: NextRequest) {
     // 발주서 다운로드가 성공하면 주문상태 업데이트
     if (rowIds && rowIds.length > 0) {
       try {
-        for (const rowId of rowIds) {
-          // 현재 row_data 가져오기
-          const currentRow = await sql`
-            SELECT row_data FROM upload_rows WHERE id = ${rowId}
-          `;
-
-          if (currentRow.length > 0) {
-            const currentData = currentRow[0].row_data;
-            // 주문상태를 "발주서 다운"으로 업데이트
-            const updatedData = {
-              ...currentData,
-              주문상태: "발주서 다운"
-            };
-
-            await sql`
-              UPDATE upload_rows
-              SET row_data = ${JSON.stringify(updatedData)}
-              WHERE id = ${rowId}
-            `;
-          }
-        }
+        // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
+        await sql`
+          UPDATE upload_rows
+          SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
+          WHERE id = ANY(${rowIds})
+        `;
       } catch (updateError) {
         console.error("주문상태 업데이트 실패:", updateError);
         // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리

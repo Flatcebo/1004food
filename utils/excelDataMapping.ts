@@ -13,7 +13,7 @@ export function mapDataToTemplate(
   // 절대값으로 설정할 필드들
   const normalizedHeader = header.replace(/\s+/g, "").toLowerCase();
 
-  // 박스단위: 항상 2로 설정 (숫자 타입)
+  // 박스단위: 공란 처리 (CJ외주 발주서용)
   if (
     normalizedHeader.includes("박스") ||
     normalizedHeader === "박스" ||
@@ -21,7 +21,7 @@ export function mapDataToTemplate(
     normalizedHeader === "박스정보" ||
     normalizedHeader === "박스크기"
   ) {
-    return prepareExcelCellValue(2, true);
+    return ""; // 공란 처리
   }
 
   // 부피단위: 항상 60으로 설정 (숫자 타입)
@@ -62,6 +62,10 @@ export function mapDataToTemplate(
     받는사람: "수취인명",
     "받는사람\r\n(띄어쓰기제거)": "수취인명",
     주문하신분: "주문자명",
+    보내는분: "주문자명",
+    "보내는 분": "주문자명",
+    보내는사람: "주문자명",
+    "보내는 사람": "주문자명",
   };
 
   // 매핑된 헤더명 사용

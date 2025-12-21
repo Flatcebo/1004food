@@ -17,7 +17,7 @@ interface DirectInputModalProps {
   values: {[key: string]: string};
   fieldNameMap: {[key: string]: string};
   onClose: () => void;
-  onSave: () => void;
+  onSave: () => void | Promise<void>;
   onValueChange: (key: string, value: string) => void;
   nameReadOnly?: boolean; // 상품명 입력란을 읽기 전용으로 할지 여부
 }
