@@ -307,6 +307,7 @@ const SavedDataTable = memo(function SavedDataTable({
       let filters = {
         type: selectedType || undefined,
         postType: selectedPostType || undefined,
+        company: selectedCompany || undefined,
         vendor: selectedVendor || undefined,
         orderStatus: selectedOrderStatus || undefined,
         searchField: appliedSearchField || undefined,
@@ -801,7 +802,12 @@ const SavedDataTable = memo(function SavedDataTable({
                   wordBreak: "break-word",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
-                  whiteSpace: isMultiLine ? "pre-line" : "nowrap",
+                  whiteSpace:
+                    header === "수취인명"
+                      ? "nowrap"
+                      : isMultiLine
+                      ? "pre-line"
+                      : "nowrap",
                 }}
                 onClick={() => {
                   if (isMappingCode && currentCode) {
