@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get("type");
     const postType = searchParams.get("postType");
     const vendor = searchParams.get("vendor");
+    const company = searchParams.get("company");
     const orderStatus = searchParams.get("orderStatus");
     const searchField = searchParams.get("searchField");
     const searchValue = searchParams.get("searchValue");
@@ -37,6 +38,9 @@ export async function GET(request: NextRequest) {
     }
     if (vendor) {
       conditions.push(sql`ur.row_data->>'업체명' = ${vendor}`);
+    }
+    if (company) {
+      conditions.push(sql`ur.row_data->>'업체명' = ${company}`);
     }
     if (orderStatus) {
       conditions.push(sql`ur.row_data->>'주문상태' = ${orderStatus}`);
@@ -106,10 +110,11 @@ export async function GET(request: NextRequest) {
         : 0;
 
     // 필터 목록 조회
-    const [typeList, postTypeList, vendorList] = await Promise.all([
+    const [typeList, postTypeList, vendorList, companyList] = await Promise.all([
       sql`SELECT DISTINCT row_data->>'내외주' as type FROM upload_rows WHERE row_data->>'내외주' IS NOT NULL ORDER BY type`,
       sql`SELECT DISTINCT row_data->>'택배사' as post_type FROM upload_rows WHERE row_data->>'택배사' IS NOT NULL ORDER BY post_type`,
       sql`SELECT DISTINCT name as vendor FROM purchase WHERE name IS NOT NULL ORDER BY name`,
+      sql`SELECT DISTINCT row_data->>'업체명' as company FROM upload_rows WHERE row_data->>'업체명' IS NOT NULL ORDER BY company`,
     ]);
 
     return NextResponse.json({
@@ -125,6 +130,7 @@ export async function GET(request: NextRequest) {
         types: typeList.map((t: any) => t.type).filter(Boolean),
         postTypes: postTypeList.map((pt: any) => pt.post_type).filter(Boolean),
         vendors: vendorList.map((v: any) => v.vendor).filter(Boolean),
+        companies: companyList.map((c: any) => c.company).filter(Boolean),
       },
     });
   } catch (error: any) {

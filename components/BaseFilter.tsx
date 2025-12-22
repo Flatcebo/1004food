@@ -13,11 +13,13 @@ interface BaseFilterProps {
     types?: string[];
     postTypes?: string[];
     categories?: string[];
+    companies?: string[];
     vendors?: string[];
   };
   selectedType: string;
   selectedPostType: string;
   selectedCategory?: string;
+  selectedCompany?: string;
   selectedVendor?: string;
   selectedOrderStatus?: string;
   searchField: string;
@@ -29,6 +31,7 @@ interface BaseFilterProps {
   onTypeChange: (type: string) => void;
   onPostTypeChange: (postType: string) => void;
   onCategoryChange?: (category: string) => void;
+  onCompanyChange?: (company: string) => void;
   onVendorChange?: (vendor: string) => void;
   onOrderStatusChange?: (status: string) => void;
   onSearchFieldChange: (field: string) => void;
@@ -39,6 +42,7 @@ interface BaseFilterProps {
   onApplySearchFilter: () => void;
   onResetFilters: () => void;
   showCategory?: boolean;
+  showCompany?: boolean;
   showVendor?: boolean;
   showOrderStatus?: boolean;
   showDateRange?: boolean;
@@ -50,6 +54,7 @@ export default function BaseFilter({
   selectedType,
   selectedPostType,
   selectedCategory = "",
+  selectedCompany = "",
   selectedVendor = "",
   selectedOrderStatus = "",
   searchField,
@@ -65,6 +70,7 @@ export default function BaseFilter({
   onTypeChange,
   onPostTypeChange,
   onCategoryChange,
+  onCompanyChange,
   onVendorChange,
   onOrderStatusChange,
   onSearchFieldChange,
@@ -75,6 +81,7 @@ export default function BaseFilter({
   onApplySearchFilter,
   onResetFilters,
   showCategory = false,
+  showCompany = false,
   showVendor = false,
   showOrderStatus = false,
   showDateRange = false,
@@ -129,9 +136,26 @@ export default function BaseFilter({
             </select>
           </label>
         )}
+        {showCompany && onCompanyChange && (
+          <label className="text-sm font-medium">
+            업체명 :
+            <select
+              className="ml-2 px-2 py-1 border border-gray-300 rounded"
+              value={selectedCompany}
+              onChange={(e) => onCompanyChange(e.target.value)}
+            >
+              <option value="">전체</option>
+              {filters.companies?.map((company) => (
+                <option key={company} value={company}>
+                  {company}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {showVendor && onVendorChange && (
           <label className="text-sm font-medium">
-            업체명:
+            매입처명 :
             <select
               className="ml-2 px-2 py-1 border border-gray-300 rounded"
               value={selectedVendor}

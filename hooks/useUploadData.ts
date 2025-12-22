@@ -5,6 +5,7 @@ interface Filters {
   types: string[];
   postTypes: string[];
   vendors: string[];
+  companies: string[];
 }
 
 export function useUploadData() {
@@ -13,9 +14,11 @@ export function useUploadData() {
     types: [],
     postTypes: [],
     vendors: [],
+    companies: [],
   });
   const [selectedType, setSelectedType] = useState<string>("");
   const [selectedPostType, setSelectedPostType] = useState<string>("");
+  const [selectedCompany, setSelectedCompany] = useState<string>("");
   const [selectedVendor, setSelectedVendor] = useState<string>("");
   const [selectedOrderStatus, setSelectedOrderStatus] =
     useState<string>("공급중");
@@ -29,6 +32,7 @@ export function useUploadData() {
   // 실제 적용되는 필터 (검색 버튼 클릭 시 적용)
   const [appliedType, setAppliedType] = useState<string>("");
   const [appliedPostType, setAppliedPostType] = useState<string>("");
+  const [appliedCompany, setAppliedCompany] = useState<string>("");
   const [appliedVendor, setAppliedVendor] = useState<string>("");
   const [appliedOrderStatus, setAppliedOrderStatus] =
     useState<string>("공급중");
@@ -53,6 +57,7 @@ export function useUploadData() {
       // 적용된 필터만 사용
       if (appliedType) params.append("type", appliedType);
       if (appliedPostType) params.append("postType", appliedPostType);
+      if (appliedCompany) params.append("company", appliedCompany);
       if (appliedVendor) params.append("vendor", appliedVendor);
       if (appliedOrderStatus) params.append("orderStatus", appliedOrderStatus);
       // 적용된 검색 필드와 값만 사용
@@ -92,6 +97,7 @@ export function useUploadData() {
   }, [
     appliedType,
     appliedPostType,
+    appliedCompany,
     appliedVendor,
     appliedOrderStatus,
     appliedSearchField,
@@ -117,6 +123,7 @@ export function useUploadData() {
   }, [
     appliedType,
     appliedPostType,
+    appliedCompany,
     appliedVendor,
     appliedOrderStatus,
     appliedSearchField,
@@ -230,6 +237,7 @@ export function useUploadData() {
   const applySearchFilter = useCallback(() => {
     setAppliedType(selectedType);
     setAppliedPostType(selectedPostType);
+    setAppliedCompany(selectedCompany);
     setAppliedVendor(selectedVendor);
     setAppliedOrderStatus(selectedOrderStatus);
     setAppliedSearchField(searchField);
@@ -241,6 +249,7 @@ export function useUploadData() {
   }, [
     selectedType,
     selectedPostType,
+    selectedCompany,
     selectedVendor,
     selectedOrderStatus,
     searchField,
@@ -254,6 +263,7 @@ export function useUploadData() {
   const resetFilters = useCallback(() => {
     setSelectedType("");
     setSelectedPostType("");
+    setSelectedCompany("");
     setSelectedVendor("");
     setSelectedOrderStatus("공급중");
     setSearchField("수취인명");
@@ -263,6 +273,7 @@ export function useUploadData() {
     setItemsPerPage(20);
     setAppliedType("");
     setAppliedPostType("");
+    setAppliedCompany("");
     setAppliedVendor("");
     setAppliedOrderStatus("공급중");
     setAppliedSearchField("");
@@ -280,6 +291,8 @@ export function useUploadData() {
     setSelectedType,
     selectedPostType,
     setSelectedPostType,
+    selectedCompany,
+    setSelectedCompany,
     selectedVendor,
     setSelectedVendor,
     selectedOrderStatus,
@@ -296,6 +309,7 @@ export function useUploadData() {
     setItemsPerPage,
     appliedType,
     appliedPostType,
+    appliedCompany,
     appliedVendor,
     appliedOrderStatus,
     appliedSearchField,
@@ -305,6 +319,7 @@ export function useUploadData() {
     appliedItemsPerPage,
     setAppliedType,
     setAppliedPostType,
+    setAppliedCompany,
     setAppliedVendor,
     setAppliedOrderStatus,
     setAppliedSearchField,

@@ -22,6 +22,7 @@ interface SavedDataTableProps {
   // 필터 정보
   selectedType?: string;
   selectedPostType?: string;
+  selectedCompany?: string;
   selectedVendor?: string;
   selectedOrderStatus?: string;
   appliedSearchField?: string;
@@ -46,6 +47,7 @@ const SavedDataTable = memo(function SavedDataTable({
   onDataUpdate,
   selectedType = "",
   selectedPostType = "",
+  selectedCompany = "",
   selectedVendor = "",
   selectedOrderStatus = "",
   appliedSearchField = "",
@@ -1076,6 +1078,13 @@ const SavedDataTable = memo(function SavedDataTable({
         type: "postType",
         label: "택배사",
         value: selectedPostType,
+      });
+    }
+    if (selectedCompany) {
+      filters.push({
+        type: "company",
+        label: "업체명",
+        value: selectedCompany,
       });
     }
     if (selectedVendor) {

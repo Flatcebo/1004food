@@ -97,6 +97,8 @@ export default function Page() {
     setSelectedType,
     selectedPostType,
     setSelectedPostType,
+    selectedCompany,
+    setSelectedCompany,
     selectedVendor,
     setSelectedVendor,
     selectedOrderStatus,
@@ -113,6 +115,7 @@ export default function Page() {
     setItemsPerPage,
     appliedType,
     appliedPostType,
+    appliedCompany,
     appliedVendor,
     appliedOrderStatus,
     appliedSearchField,
@@ -122,6 +125,7 @@ export default function Page() {
     appliedItemsPerPage,
     setAppliedType,
     setAppliedPostType,
+    setAppliedCompany,
     setAppliedVendor,
     setAppliedOrderStatus,
     setAppliedSearchField,
@@ -151,19 +155,23 @@ export default function Page() {
     switch (filterType) {
       case "type":
         setSelectedType("");
-        setAppliedType("");
+        if (setAppliedType) setAppliedType("");
         break;
       case "postType":
         setSelectedPostType("");
-        setAppliedPostType("");
+        if (setAppliedPostType) setAppliedPostType("");
+        break;
+      case "company":
+        setSelectedCompany("");
+        if (setAppliedCompany) setAppliedCompany("");
         break;
       case "vendor":
         setSelectedVendor("");
-        setAppliedVendor("");
+        if (setAppliedVendor) setAppliedVendor("");
         break;
       case "orderStatus":
         setSelectedOrderStatus("공급중");
-        setAppliedOrderStatus("공급중");
+        if (setAppliedOrderStatus) setAppliedOrderStatus("공급중");
         break;
       case "search":
         setSearchField("");
@@ -568,6 +576,7 @@ export default function Page() {
             filters={filters}
             selectedType={selectedType}
             selectedPostType={selectedPostType}
+            selectedCompany={selectedCompany}
             selectedVendor={selectedVendor}
             searchField={searchField}
             searchValue={searchValue}
@@ -576,6 +585,7 @@ export default function Page() {
             itemsPerPage={itemsPerPage}
             onTypeChange={setSelectedType}
             onPostTypeChange={setSelectedPostType}
+            onCompanyChange={setSelectedCompany}
             onVendorChange={setSelectedVendor}
             selectedOrderStatus={selectedOrderStatus}
             onOrderStatusChange={setSelectedOrderStatus}
@@ -600,6 +610,7 @@ export default function Page() {
             onDataUpdate={fetchSavedData}
             selectedType={appliedType}
             selectedPostType={appliedPostType}
+            selectedCompany={appliedCompany}
             selectedVendor={appliedVendor}
             selectedOrderStatus={appliedOrderStatus}
             appliedSearchField={appliedSearchField}

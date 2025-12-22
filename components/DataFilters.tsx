@@ -6,10 +6,12 @@ interface DataFiltersProps {
   filters: {
     types: string[];
     postTypes: string[];
+    companies: string[];
     vendors: string[];
   };
   selectedType: string;
   selectedPostType: string;
+  selectedCompany: string;
   selectedVendor: string;
   selectedOrderStatus: string;
   searchField: string;
@@ -19,6 +21,7 @@ interface DataFiltersProps {
   itemsPerPage: number;
   onTypeChange: (type: string) => void;
   onPostTypeChange: (postType: string) => void;
+  onCompanyChange: (company: string) => void;
   onVendorChange: (vendor: string) => void;
   onOrderStatusChange: (status: string) => void;
   onSearchFieldChange: (field: string) => void;
@@ -34,6 +37,7 @@ export default function DataFilters(props: DataFiltersProps) {
   return (
     <BaseFilter
       {...props}
+      showCompany={true}
       showVendor={true}
       showOrderStatus={true}
       showDateRange={true}
