@@ -1270,7 +1270,7 @@ const SavedDataTable = memo(function SavedDataTable({
           className="border border-collapse border-gray-400 w-full min-w-[800px]"
           style={{tableLayout: "fixed"}}
         >
-          <thead className="sticky top-0 z-10 bg-white">
+          <thead className="sticky -top-px z-10 bg-white">
             <tr>
               <th
                 className="border border-[#cacaca] bg-gray-100 px-2 py-2 text-xs text-center"
