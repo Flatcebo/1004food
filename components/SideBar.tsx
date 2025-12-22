@@ -117,7 +117,7 @@ export default function SideBar() {
         </div>
 
         <div className="w-full text-center text-sm text-white py-2">
-          beta0.0.2
+          beta 1.0.0
         </div>
       </div>
     </div>
