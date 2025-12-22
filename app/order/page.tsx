@@ -387,6 +387,11 @@ export default function Page() {
   }, [uploadedFiles, codes, productCodeMap, setUploadedFiles]);
 
   // 모달이 열릴 때 서버에서 임시 파일 불러오기
+  // 페이지 로드 시 서버에서 파일 리스트 가져오기
+  useEffect(() => {
+    loadFilesFromServer();
+  }, [loadFilesFromServer]);
+
   useEffect(() => {
     if (isModalOpen) {
       setTableData([]);

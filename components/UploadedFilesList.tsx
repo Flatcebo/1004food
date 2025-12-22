@@ -20,16 +20,6 @@ export default function UploadedFilesList({
   onResetData,
 }: UploadedFilesListProps) {
   const {isLoading} = useLoadingStore();
-  // if (uploadedFiles.length === 0) return null;
-  // 1218
-  const refreshUploadedFiles = useCallback(() => {
-    const {setUploadedFiles} = useUploadStore();
-    const storedFiles = sessionStorage.getItem("uploadedFiles");
-    if (storedFiles) {
-      setUploadedFiles(JSON.parse(storedFiles) as UploadedFile[]);
-    }
-  }, [uploadedFiles]);
-  refreshUploadedFiles();
   //
 
   if (isLoading) return <div>Loading...</div>;
