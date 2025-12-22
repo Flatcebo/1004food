@@ -1,9 +1,10 @@
-import React, {useMemo} from "react";
+import React, {useMemo, useState} from "react";
 import FileUploadArea from "@/components/FileUploadArea";
 import UploadedFilesList from "@/components/UploadedFilesList";
 import DirectInputModal from "@/components/DirectInputModal";
 import DataTable from "@/components/DataTable";
-import {IoTime, IoCheckmarkCircle, IoCloseCircle} from "react-icons/io5";
+import SessionSelectorModal from "@/components/SessionSelectorModal";
+import {IoTime, IoCheckmarkCircle, IoCloseCircle, IoFolderOpen} from "react-icons/io5";
 import {useUploadStore} from "@/stores/uploadStore";
 import {fieldNameMap} from "@/constants/fieldMappings";
 
@@ -100,7 +101,8 @@ export default function OrderModalContent({
   finalResult,
   deliveryError,
 }: OrderModalContentProps) {
-  const {uploadedFiles} = useUploadStore();
+  const [sessionModalOpen, setSessionModalOpen] = useState(false);
+  const {uploadedFiles, currentSession, selectedSessionId, selectSession} = useUploadStore();
 
   // 운송장 업로드 실시간 통계 계산
   const deliveryStats = useMemo(() => {
@@ -130,6 +132,33 @@ export default function OrderModalContent({
       {/* 엑셀 업로드 모드 */}
       {modalMode === "excel" && (
         <>
+          {/* 세션 선택 영역 */}
+          <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <IoFolderOpen className="w-5 h-5 text-gray-600" />
+                <span className="text-sm font-medium text-gray-700">현재 세션:</span>
+                <span className="text-sm font-semibold text-blue-600">
+                  {selectedSessionId === null
+                    ? "모든 세션"
+                    : currentSession?.sessionName || "기본 세션"}
+                </span>
+                {currentSession && (
+                  <span className="text-xs text-gray-500">
+                    ({new Date(currentSession.createdAt).toLocaleDateString()})
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => setSessionModalOpen(true)}
+                className="px-3 py-1.5 bg-blue-500 text-white text-sm rounded-md hover:bg-blue-600 transition-colors flex items-center gap-1"
+              >
+                <IoFolderOpen className="w-4 h-4" />
+                세션 변경
+              </button>
+            </div>
+          </div>
+
           <FileUploadArea
             dragActive={dragActive}
             fileInputRef={fileInputRef}
@@ -325,6 +354,13 @@ export default function OrderModalContent({
           )}
         </div>
       )}
+
+      {/* 세션 선택 모달 */}
+      <SessionSelectorModal
+        open={sessionModalOpen}
+        onClose={() => setSessionModalOpen(false)}
+        onSelectSession={selectSession}
+      />
     </>
   );
 }

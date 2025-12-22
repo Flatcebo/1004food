@@ -1,10 +1,25 @@
 import {NextResponse} from "next/server";
 import sql from "@/lib/db";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const countOnly = searchParams.get('count') === 'true';
+
+    if (countOnly) {
+      // 상품 수만 조회
+      const result = await sql`
+        SELECT COUNT(*) as total FROM products
+      `;
+
+      return NextResponse.json({
+        success: true,
+        total: parseInt(result[0].total),
+      });
+    }
+
     const products = await sql`
-      SELECT 
+      SELECT
         id,
         type,
         post_type as "postType",

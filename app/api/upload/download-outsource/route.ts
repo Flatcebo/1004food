@@ -4,6 +4,59 @@ import * as Excel from "exceljs";
 import {mapDataToTemplate, sortExcelData} from "@/utils/excelDataMapping";
 import JSZip from "jszip";
 
+// 전화번호에 하이픈을 추가하여 형식 맞춤
+function formatPhoneNumber(phoneNumber: string): string {
+  if (!phoneNumber || phoneNumber.length < 9) return phoneNumber;
+
+  const numOnly = phoneNumber.replace(/\D/g, "");
+
+  // 이미 하이픈이 제대로 되어 있는지 확인
+  if (phoneNumber.includes("-")) {
+    const parts = phoneNumber.split("-");
+    if (parts.length === 3) {
+      // 하이픈이 3부분으로 나뉘어 있는 경우 올바른 형식인지 확인
+      const formatted = formatPhoneNumber(parts.join(""));
+      if (formatted !== parts.join("")) {
+        return formatted;
+      }
+      return phoneNumber; // 이미 올바른 형식이면 그대로 반환
+    }
+  }
+
+  // 02 지역번호 (02-XXXX-XXXX)
+  if (numOnly.startsWith("02")) {
+    if (numOnly.length === 9) {
+      // 02-XXX-XXXX
+      return `${numOnly.slice(0, 2)}-${numOnly.slice(2, 5)}-${numOnly.slice(
+        5
+      )}`;
+    } else if (numOnly.length === 10) {
+      // 02-XXXX-XXXX
+      return `${numOnly.slice(0, 2)}-${numOnly.slice(2, 6)}-${numOnly.slice(
+        6
+      )}`;
+    }
+  }
+  // 휴대폰 및 기타 지역번호 (0XX-XXXX-XXXX)
+  else if (numOnly.startsWith("0") && numOnly.length === 11) {
+    // 010-XXXX-XXXX 등
+    return `${numOnly.slice(0, 3)}-${numOnly.slice(3, 7)}-${numOnly.slice(7)}`;
+  }
+  // 0508 대역 (0508-XXXX-XXXX)
+  else if (numOnly.startsWith("0508") && numOnly.length === 12) {
+    // 0508-XXXX-XXXX
+    return `${numOnly.slice(0, 4)}-${numOnly.slice(4, 8)}-${numOnly.slice(8)}`;
+  }
+  // 050X 대역 (050X-XXXX-XXXX) - 0508 제외
+  else if (numOnly.startsWith("050") && numOnly.length === 12) {
+    // 050X-XXXX-XXXX (0500, 0501, 0502, 0503, 0504, 0505, 0506, 0507, 0509)
+    return `${numOnly.slice(0, 4)}-${numOnly.slice(4, 8)}-${numOnly.slice(8)}`;
+  }
+
+  // 기타 경우는 그대로 반환
+  return phoneNumber;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -161,6 +214,9 @@ export async function POST(request: NextRequest) {
       if (vendor) {
         conditions.push(sql`ur.row_data->>'업체명' = ${vendor}`);
       }
+      if (filters.company) {
+        conditions.push(sql`ur.row_data->>'업체명' = ${filters.company}`);
+      }
       if (orderStatus) {
         conditions.push(sql`ur.row_data->>'주문상태' = ${orderStatus}`);
       }
@@ -207,35 +263,43 @@ export async function POST(request: NextRequest) {
 
       // 전체 다운로드 시 주문상태 업데이트 (rowIds가 없을 때)
       if (!rowIds || rowIds.length === 0) {
-        try {
-          const idData = await buildQuery(true);
-          const idsToUpdate = idData.map((r: any) => r.id);
-
-          for (const rowId of idsToUpdate) {
-            // 현재 row_data 가져오기
-            const currentRow = await sql`
-              SELECT row_data FROM upload_rows WHERE id = ${rowId}
-            `;
-
-            if (currentRow.length > 0) {
-              const currentData = currentRow[0].row_data;
-              // 주문상태를 "발주서 다운"으로 업데이트
-              const updatedData = {
-                ...currentData,
-                주문상태: "발주서 다운"
-              };
-
+        // 주문상태 업데이트를 비동기로 처리하여 다운로드 속도 향상
+        setImmediate(async () => {
+          try {
+            if (conditions.length === 0) {
+              // 조건이 없으면 전체 업데이트
               await sql`
                 UPDATE upload_rows
-                SET row_data = ${JSON.stringify(updatedData)}
-                WHERE id = ${rowId}
+                SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
+                WHERE EXISTS (
+                  SELECT 1 FROM uploads u WHERE u.id = upload_rows.upload_id
+                )
               `;
+            } else {
+              // 기존 조건을 재사용하여 직접 UPDATE
+              let updateQuery = sql`
+                UPDATE upload_rows
+                SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
+                FROM uploads u
+                WHERE upload_rows.upload_id = u.id
+              `;
+
+              // 기존 조건들을 AND로 연결
+              for (let i = 0; i < conditions.length; i++) {
+                const condition = conditions[i];
+                // ur. -> upload_rows., u. -> u. 로 변경
+                const modifiedCondition = condition
+                  .replace(/ur\.row_data/g, "upload_rows.row_data")
+                  .replace(/u\.created_at/g, "u.created_at");
+                updateQuery = sql`${updateQuery} AND ${modifiedCondition}`;
+              }
+
+              await updateQuery;
             }
+          } catch (updateError) {
+            console.error("주문상태 업데이트 실패:", updateError);
           }
-        } catch (updateError) {
-          console.error("주문상태 업데이트 실패:", updateError);
-          // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리
-        }
+        });
       }
     } else {
       // 조건 없으면 모든 데이터 조회
@@ -249,34 +313,23 @@ export async function POST(request: NextRequest) {
 
       // 전체 다운로드 시 주문상태 업데이트 (rowIds가 없을 때)
       if (!rowIds || rowIds.length === 0) {
-        try {
-          const idsToUpdate = allData.map((r: any) => r.id);
+        // 주문상태 업데이트를 비동기로 처리하여 다운로드 속도 향상
+        setImmediate(async () => {
+          try {
+            const idsToUpdate = allData.map((r: any) => r.id);
 
-          for (const rowId of idsToUpdate) {
-            // 현재 row_data 가져오기
-            const currentRow = await sql`
-              SELECT row_data FROM upload_rows WHERE id = ${rowId}
-            `;
-
-            if (currentRow.length > 0) {
-              const currentData = currentRow[0].row_data;
-              // 주문상태를 "발주서 다운"으로 업데이트
-              const updatedData = {
-                ...currentData,
-                주문상태: "발주서 다운"
-              };
-
+            if (idsToUpdate.length > 0) {
+              // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
               await sql`
                 UPDATE upload_rows
-                SET row_data = ${JSON.stringify(updatedData)}
-                WHERE id = ${rowId}
+                SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
+                WHERE id = ANY(${idsToUpdate})
               `;
             }
+          } catch (updateError) {
+            console.error("주문상태 업데이트 실패:", updateError);
           }
-        } catch (updateError) {
-          console.error("주문상태 업데이트 실패:", updateError);
-          // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리
-        }
+        });
       }
     }
 
@@ -290,6 +343,48 @@ export async function POST(request: NextRequest) {
       dataRows = dataRows.filter(
         (row: any) => row.내외주 === "외주" && row.매핑코드 !== "106464"
       );
+
+      // 전화번호 필드들에 하이픈 추가 가공
+      dataRows = dataRows.map((row: any) => {
+        const processedRow = {...row};
+
+        // 수취인 전화번호 가공
+        if (processedRow["수취인 전화번호"]) {
+          processedRow["수취인 전화번호"] = formatPhoneNumber(
+            processedRow["수취인 전화번호"]
+          );
+        }
+
+        // 주문자 전화번호 가공
+        if (processedRow["주문자 전화번호"]) {
+          processedRow["주문자 전화번호"] = formatPhoneNumber(
+            processedRow["주문자 전화번호"]
+          );
+        }
+
+        // 전화번호1 가공
+        if (processedRow["전화번호1"]) {
+          processedRow["전화번호1"] = formatPhoneNumber(
+            processedRow["전화번호1"]
+          );
+        }
+
+        // 전화번호2 가공
+        if (processedRow["전화번호2"]) {
+          processedRow["전화번호2"] = formatPhoneNumber(
+            processedRow["전화번호2"]
+          );
+        }
+
+        // 전화번호 가공
+        if (processedRow["전화번호"]) {
+          processedRow["전화번호"] = formatPhoneNumber(
+            processedRow["전화번호"]
+          );
+        }
+
+        return processedRow;
+      });
 
       if (dataRows.length === 0) {
         return NextResponse.json(
@@ -459,17 +554,9 @@ export async function POST(request: NextRequest) {
             if (headerStr.includes("전화번호1") || headerStr === "전화번호1") {
               let value = mapDataToTemplate(row, headerStr, {
                 templateName: templateData.name,
+                formatPhone: true, // 외주 발주서에서는 전화번호에 하이픈 추가
               });
-              let stringValue = value != null ? String(value) : "";
-              const numOnly = stringValue.replace(/\D/g, "");
-              if (
-                (numOnly.length === 10 || numOnly.length === 11) &&
-                !numOnly.startsWith("0")
-              ) {
-                phone1Value = "0" + numOnly;
-              } else if (numOnly.length > 0) {
-                phone1Value = numOnly;
-              }
+              phone1Value = value != null ? String(value) : "";
             }
           });
 
@@ -480,6 +567,7 @@ export async function POST(request: NextRequest) {
 
             let value = mapDataToTemplate(row, headerStr, {
               templateName: templateData.name,
+              formatPhone: true, // 외주 발주서에서는 전화번호에 하이픈 추가
             });
 
             let stringValue = value != null ? String(value) : "";
@@ -496,11 +584,6 @@ export async function POST(request: NextRequest) {
             // 주문번호인 경우 내부코드 사용
             if (headerStr === "주문번호" || headerStr.includes("주문번호")) {
               stringValue = row["내부코드"] || stringValue;
-            }
-
-            // F열 (6번째 컬럼)이고 헤더가 비어있으면 수량 입력
-            if (headerIdx === 5 && (!headerStr || headerStr.trim() === "")) {
-              stringValue = row["수량"] || "";
             }
 
             if (headerStr.includes("전화") || headerStr.includes("연락")) {
@@ -522,6 +605,9 @@ export async function POST(request: NextRequest) {
               ) {
                 stringValue = phone1Value;
               }
+
+              // 하이픈 추가하여 전화번호 형식 맞춤
+              stringValue = formatPhoneNumber(stringValue);
             }
 
             if (headerStr.includes("우편")) {
@@ -579,17 +665,19 @@ export async function POST(request: NextRequest) {
 
       // 외주 발주서 다운로드가 성공하면 주문상태 업데이트
       if (rowIds && rowIds.length > 0) {
-        try {
-          // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
-          await sql`
-            UPDATE upload_rows
-            SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
-            WHERE id = ANY(${rowIds})
-          `;
-        } catch (updateError) {
-          console.error("주문상태 업데이트 실패:", updateError);
-          // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리
-        }
+        // 주문상태 업데이트를 비동기로 처리하여 다운로드 속도 향상
+        setImmediate(async () => {
+          try {
+            // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
+            await sql`
+              UPDATE upload_rows
+              SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
+              WHERE id = ANY(${rowIds})
+            `;
+          } catch (updateError) {
+            console.error("주문상태 업데이트 실패:", updateError);
+          }
+        });
       }
 
       const responseHeaders = new Headers();
@@ -653,6 +741,46 @@ export async function POST(request: NextRequest) {
       }
     });
 
+    // 전화번호 필드들에 하이픈 추가 가공
+    dataRows = dataRows.map((row: any) => {
+      const processedRow = {...row};
+
+      // 수취인 전화번호 가공
+      if (processedRow["수취인 전화번호"]) {
+        processedRow["수취인 전화번호"] = formatPhoneNumber(
+          processedRow["수취인 전화번호"]
+        );
+      }
+
+      // 주문자 전화번호 가공
+      if (processedRow["주문자 전화번호"]) {
+        processedRow["주문자 전화번호"] = formatPhoneNumber(
+          processedRow["주문자 전화번호"]
+        );
+      }
+
+      // 전화번호1 가공
+      if (processedRow["전화번호1"]) {
+        processedRow["전화번호1"] = formatPhoneNumber(
+          processedRow["전화번호1"]
+        );
+      }
+
+      // 전화번호2 가공
+      if (processedRow["전화번호2"]) {
+        processedRow["전화번호2"] = formatPhoneNumber(
+          processedRow["전화번호2"]
+        );
+      }
+
+      // 전화번호 가공
+      if (processedRow["전화번호"]) {
+        processedRow["전화번호"] = formatPhoneNumber(processedRow["전화번호"]);
+      }
+
+      return processedRow;
+    });
+
     // 데이터를 2차원 배열로 변환 (mapDataToTemplate 함수 사용)
     let excelData = dataRows.map((row: any) => {
       // 각 헤더에 대해 mapDataToTemplate을 사용하여 데이터 매핑
@@ -663,21 +791,28 @@ export async function POST(request: NextRequest) {
 
         let value = mapDataToTemplate(row, headerStr, {
           templateName: templateData.name,
+          formatPhone: true, // 외주 발주서에서는 전화번호에 하이픈 추가
         });
 
         // 모든 값을 문자열로 변환 (0 유지)
         let stringValue = value != null ? String(value) : "";
 
-        // 전화번호가 10-11자리 숫자이고 0으로 시작하지 않으면 앞에 0 추가
+        // 전화번호가 10-11자리 숫자이고 0으로 시작하지 않으면 앞에 0 추가 및 하이픈 추가
         if (headerStr.includes("전화") || headerStr.includes("연락")) {
-          const numOnly = stringValue.replace(/\D/g, ""); // 숫자만 추출
-          if (
-            (numOnly.length === 10 || numOnly.length === 11) &&
-            !numOnly.startsWith("0")
-          ) {
-            stringValue = "0" + numOnly; // 숫자만 사용하고 0 추가
-          } else if (numOnly.length > 0) {
-            stringValue = numOnly; // 하이픈 등 제거하고 숫자만
+          // 이미 하이픈이 있는 경우는 건너뜀 (mapDataToTemplate에서 이미 처리됨)
+          if (!stringValue.includes("-")) {
+            const numOnly = stringValue.replace(/\D/g, ""); // 숫자만 추출
+            if (
+              (numOnly.length === 10 || numOnly.length === 11) &&
+              !numOnly.startsWith("0")
+            ) {
+              stringValue = "0" + numOnly; // 숫자만 사용하고 0 추가
+            } else if (numOnly.length > 0) {
+              stringValue = numOnly; // 하이픈 등 제거하고 숫자만
+            }
+
+            // 하이픈 추가하여 전화번호 형식 맞춤
+            stringValue = formatPhoneNumber(stringValue);
           }
         }
 
@@ -742,32 +877,19 @@ export async function POST(request: NextRequest) {
 
     // 발주서 다운로드가 성공하면 주문상태 업데이트
     if (rowIds && rowIds.length > 0) {
-      try {
-        for (const rowId of rowIds) {
-          // 현재 row_data 가져오기
-          const currentRow = await sql`
-            SELECT row_data FROM upload_rows WHERE id = ${rowId}
+      // 주문상태 업데이트를 비동기로 처리하여 다운로드 속도 향상
+      setImmediate(async () => {
+        try {
+          // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
+          await sql`
+            UPDATE upload_rows
+            SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
+            WHERE id = ANY(${rowIds})
           `;
-
-          if (currentRow.length > 0) {
-            const currentData = currentRow[0].row_data;
-            // 주문상태를 "발주서 다운"으로 업데이트
-            const updatedData = {
-              ...currentData,
-              주문상태: "발주서 다운"
-            };
-
-            await sql`
-              UPDATE upload_rows
-              SET row_data = ${JSON.stringify(updatedData)}
-              WHERE id = ${rowId}
-            `;
-          }
+        } catch (updateError) {
+          console.error("주문상태 업데이트 실패:", updateError);
         }
-      } catch (updateError) {
-        console.error("주문상태 업데이트 실패:", updateError);
-        // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리
-      }
+      });
     }
 
     const responseHeaders = new Headers();

@@ -107,6 +107,9 @@ export async function POST(request: NextRequest) {
         if (vendor) {
           conditions.push(sql`ur.row_data->>'업체명' = ${vendor}`);
         }
+        // if (company) {
+        //   conditions.push(sql`ur.row_data->>'업체명' = ${company}`);
+        // }
         if (orderStatus) {
           conditions.push(sql`ur.row_data->>'주문상태' = ${orderStatus}`);
         }
@@ -168,22 +171,43 @@ export async function POST(request: NextRequest) {
         const templateName = (templateData.name || "").normalize("NFC").trim();
         const isPurchaseOrder = templateName.includes("발주");
         if (isPurchaseOrder && (!rowIds || rowIds.length === 0)) {
-          try {
-            const idData = await buildQuery(true);
-            const idsToUpdate = idData.map((r: any) => r.id);
+          // 주문상태 업데이트를 비동기로 처리하여 다운로드 속도 향상
+          setImmediate(async () => {
+            try {
+              if (conditions.length === 0) {
+                // 조건이 없으면 전체 업데이트
+                await sql`
+                  UPDATE upload_rows
+                  SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
+                  WHERE EXISTS (
+                    SELECT 1 FROM uploads u WHERE u.id = upload_rows.upload_id
+                  )
+                `;
+              } else {
+                // 기존 조건을 재사용하여 직접 UPDATE
+                let updateQuery = sql`
+                  UPDATE upload_rows
+                  SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
+                  FROM uploads u
+                  WHERE upload_rows.upload_id = u.id
+                `;
 
-            if (idsToUpdate.length > 0) {
-              // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
-              await sql`
-                UPDATE upload_rows
-                SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
-                WHERE id = ANY(${idsToUpdate})
-              `;
+                // 기존 조건들을 AND로 연결
+                for (let i = 0; i < conditions.length; i++) {
+                  const condition = conditions[i];
+                  // ur. -> upload_rows., u. -> u. 로 변경
+                  const modifiedCondition = condition
+                    .replace(/ur\.row_data/g, "upload_rows.row_data")
+                    .replace(/u\.created_at/g, "u.created_at");
+                  updateQuery = sql`${updateQuery} AND ${modifiedCondition}`;
+                }
+
+                await updateQuery;
+              }
+            } catch (updateError) {
+              console.error("주문상태 업데이트 실패:", updateError);
             }
-          } catch (updateError) {
-            console.error("주문상태 업데이트 실패:", updateError);
-            // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리
-          }
+          });
         }
       } else {
         // 필터가 없으면 모든 데이터 조회

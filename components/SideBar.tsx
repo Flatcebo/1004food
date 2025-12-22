@@ -5,14 +5,6 @@ import Link from "next/link";
 import {usePathname} from "next/navigation";
 
 const menuNames: {path: string; name: string}[] = [
-  // {
-  //   path: "/",
-  //   name: "홈",
-  // },
-  //{
-  // path: "/upload",
-  //name: "발주서 업로드",
-  // },
   {
     path: "/order",
     name: "주문 리스트",
@@ -25,6 +17,10 @@ const menuNames: {path: string; name: string}[] = [
     path: "/upload/templates",
     name: "양식 템플릿 관리",
   },
+  {
+    path: "/products/upload",
+    name: "상품 데이터 업로드",
+  },
 ];
 
 export default function SideBar() {
@@ -36,6 +32,7 @@ export default function SideBar() {
     pathname?.startsWith("/upload/preview");
   const isOrderActive = pathname === "/order";
   const isProductsActive = pathname === "/products";
+  const isProductUploadActive = pathname === "/products/upload";
   const isTemplatesActive = pathname === "/upload/templates";
 
   return (
@@ -56,19 +53,34 @@ export default function SideBar() {
 
         <div className="w-full flex-1 flex mx-4 my-6">
           <div className="w-full flex flex-col items-start font-semibold text-[16px] gap-2">
-            {menuNames.map((menu, key) => (
-              <Link
-                key={key}
-                href={menu.path}
-                className={`w-full px-4 py-2 rounded-lg transition-all duration-200 ${
-                  pathname === menu.path
-                    ? "text-[#888eab]"
-                    : "hover:bg-gray-700 hover:translate-x-1 active:scale-95 text-white"
-                }`}
-              >
-                <span>{menu.name}</span>
-              </Link>
-            ))}
+            {menuNames.map((menu, key) => {
+              const isActive =
+                menu.path === "/"
+                  ? pathname === "/"
+                  : menu.path === "/products/upload"
+                  ? isProductUploadActive
+                  : menu.path === "/order"
+                  ? isOrderActive
+                  : menu.path === "/products"
+                  ? isProductsActive
+                  : menu.path === "/upload/templates"
+                  ? isTemplatesActive
+                  : false;
+
+              return (
+                <Link
+                  key={key}
+                  href={menu.path}
+                  className={`w-full px-4 py-2 rounded-lg transition-all duration-200 ${
+                    isActive
+                      ? "text-[#888eab]"
+                      : "hover:bg-gray-700 hover:translate-x-1 active:scale-95 text-white"
+                  }`}
+                >
+                  <span>{menu.name}</span>
+                </Link>
+              );
+            })}
             {/* <Link
               href="/upload"
               className={`w-full px-4 py-2 rounded-lg transition-all duration-200 ${

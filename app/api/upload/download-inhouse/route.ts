@@ -160,6 +160,9 @@ export async function POST(request: NextRequest) {
       if (vendor) {
         conditions.push(sql`ur.row_data->>'업체명' = ${vendor}`);
       }
+      if (filters.company) {
+        conditions.push(sql`ur.row_data->>'업체명' = ${filters.company}`);
+      }
       if (orderStatus) {
         conditions.push(sql`ur.row_data->>'주문상태' = ${orderStatus}`);
       }
@@ -206,22 +209,43 @@ export async function POST(request: NextRequest) {
 
       // 전체 다운로드 시 주문상태 업데이트 (rowIds가 없을 때)
       if (!rowIds || rowIds.length === 0) {
-        try {
-          const idData = await buildQuery(true);
-          const idsToUpdate = idData.map((r: any) => r.id);
+        // 주문상태 업데이트를 비동기로 처리하여 다운로드 속도 향상
+        setImmediate(async () => {
+          try {
+            if (conditions.length === 0) {
+              // 조건이 없으면 전체 업데이트
+              await sql`
+                UPDATE upload_rows
+                SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
+                WHERE EXISTS (
+                  SELECT 1 FROM uploads u WHERE u.id = upload_rows.upload_id
+                )
+              `;
+            } else {
+              // 기존 조건을 재사용하여 직접 UPDATE
+              let updateQuery = sql`
+                UPDATE upload_rows
+                SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
+                FROM uploads u
+                WHERE upload_rows.upload_id = u.id
+              `;
 
-          if (idsToUpdate.length > 0) {
-            // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
-            await sql`
-              UPDATE upload_rows
-              SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
-              WHERE id = ANY(${idsToUpdate})
-            `;
+              // 기존 조건들을 AND로 연결
+              for (let i = 0; i < conditions.length; i++) {
+                const condition = conditions[i];
+                // ur. -> upload_rows., u. -> u. 로 변경
+                const modifiedCondition = condition
+                  .replace(/ur\.row_data/g, "upload_rows.row_data")
+                  .replace(/u\.created_at/g, "u.created_at");
+                updateQuery = sql`${updateQuery} AND ${modifiedCondition}`;
+              }
+
+              await updateQuery;
+            }
+          } catch (updateError) {
+            console.error("주문상태 업데이트 실패:", updateError);
           }
-        } catch (updateError) {
-          console.error("주문상태 업데이트 실패:", updateError);
-          // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리
-        }
+        });
       }
     } else {
       // 조건 없으면 모든 데이터 조회
@@ -285,6 +309,25 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // 템플릿명 확인 (내주 발주서인지 체크)
+    const templateName = (templateData.name || "").normalize("NFC").trim();
+    const isInhouse = templateName.includes("내주");
+
+    // 내주 발주서인 경우: 내주 데이터만 필터링
+    if (isInhouse) {
+      // 내외주가 "내주"인 것들만 필터링 + 매핑코드 106464 제외
+      dataRows = dataRows.filter(
+        (row: any) => row.내외주 === "내주" && row.매핑코드 !== "106464"
+      );
+
+      if (dataRows.length === 0) {
+        return NextResponse.json(
+          {success: false, error: "내주 데이터가 없습니다."},
+          {status: 404}
+        );
+      }
+    }
+
     // 데이터에 공급가와 사방넷명 주입
     dataRows.forEach((row: any) => {
       if (row.매핑코드) {
@@ -313,6 +356,7 @@ export async function POST(request: NextRequest) {
       return headers.map((header: any) => {
         let value = mapDataToTemplate(row, header, {
           templateName: templateData.name,
+          isInhouse: isInhouse, // 내주 발주서임을 명시적으로 전달
         });
 
         // 모든 값을 문자열로 변환 (0 유지)

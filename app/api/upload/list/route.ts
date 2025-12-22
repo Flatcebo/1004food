@@ -4,6 +4,40 @@ import sql from "@/lib/db";
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
+    const statsOnly = searchParams.get("stats") === "true";
+
+    // 통계만 요청한 경우
+    if (statsOnly) {
+      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD 형식
+
+      // 총 주문 수
+      const totalResult = await sql`
+        SELECT COUNT(*) as total FROM upload_rows
+      `;
+
+      // 오늘 주문 수 (업로드 날짜 기준)
+      const todayResult = await sql`
+        SELECT COUNT(*) as today FROM upload_rows ur
+        INNER JOIN uploads u ON ur.upload_id = u.id
+        WHERE DATE(u.created_at) = ${today}
+      `;
+
+      // 대기 주문 수 (주문상태가 '대기'인 경우)
+      const pendingResult = await sql`
+        SELECT COUNT(*) as pending FROM upload_rows
+        WHERE row_data->>'주문상태' IN ('대기', '접수', '준비중')
+      `;
+
+      return NextResponse.json({
+        success: true,
+        stats: {
+          totalOrders: parseInt(totalResult[0].total),
+          todayOrders: parseInt(todayResult[0].today),
+          pendingOrders: parseInt(pendingResult[0].pending),
+        },
+      });
+    }
+
     const type = searchParams.get("type");
     const postType = searchParams.get("postType");
     const vendor = searchParams.get("vendor");

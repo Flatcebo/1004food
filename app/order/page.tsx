@@ -618,8 +618,15 @@ export default function Page() {
             selectedCompany={appliedCompany}
             selectedVendor={appliedVendor}
             selectedOrderStatus={appliedOrderStatus}
+            appliedType={appliedType}
+            appliedPostType={appliedPostType}
+            appliedCompany={appliedCompany}
+            appliedVendor={appliedVendor}
+            appliedOrderStatus={appliedOrderStatus}
             appliedSearchField={appliedSearchField}
             appliedSearchValue={appliedSearchValue}
+            appliedUploadTimeFrom={appliedUploadTimeFrom}
+            appliedUploadTimeTo={appliedUploadTimeTo}
             uploadTimeFrom={appliedUploadTimeFrom}
             uploadTimeTo={appliedUploadTimeTo}
             onRemoveFilter={handleRemoveFilter}

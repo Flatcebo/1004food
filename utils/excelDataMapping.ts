@@ -4,16 +4,60 @@ import {
   normalizeStringValue,
 } from "./excelTypeConversion";
 
+// 전화번호에 하이픈을 추가하여 형식 맞춤
+function formatPhoneNumber(phoneNumber: string): string {
+  if (!phoneNumber || phoneNumber.length < 9) return phoneNumber;
+
+  const numOnly = phoneNumber.replace(/\D/g, "");
+
+  // 이미 하이픈이 제대로 되어 있는지 확인
+  if (phoneNumber.includes("-")) {
+    const parts = phoneNumber.split("-");
+    if (parts.length === 3) {
+      // 하이픈이 3부분으로 나뉘어 있는 경우 올바른 형식인지 확인
+      const formatted = formatPhoneNumber(parts.join(""));
+      if (formatted !== parts.join("")) {
+        return formatted;
+      }
+      return phoneNumber; // 이미 올바른 형식이면 그대로 반환
+    }
+  }
+
+  // 02 지역번호 (02-XXXX-XXXX)
+  if (numOnly.startsWith("02")) {
+    if (numOnly.length === 9) { // 02-XXX-XXXX
+      return `${numOnly.slice(0, 2)}-${numOnly.slice(2, 5)}-${numOnly.slice(5)}`;
+    } else if (numOnly.length === 10) { // 02-XXXX-XXXX
+      return `${numOnly.slice(0, 2)}-${numOnly.slice(2, 6)}-${numOnly.slice(6)}`;
+    }
+  }
+  // 휴대폰 및 기타 지역번호 (0XX-XXXX-XXXX)
+  else if (numOnly.startsWith("0") && numOnly.length === 11) { // 010-XXXX-XXXX 등
+    return `${numOnly.slice(0, 3)}-${numOnly.slice(3, 7)}-${numOnly.slice(7)}`;
+  }
+  // 0508 대역 (0508-XXXX-XXXX)
+  else if (numOnly.startsWith("0508") && numOnly.length === 12) { // 0508-XXXX-XXXX
+    return `${numOnly.slice(0, 4)}-${numOnly.slice(4, 8)}-${numOnly.slice(8)}`;
+  }
+  // 050X 대역 (050X-XXXX-XXXX) - 0508 제외
+  else if (numOnly.startsWith("050") && numOnly.length === 12) { // 050X-XXXX-XXXX (0500, 0501, 0502, 0503, 0504, 0505, 0506, 0507, 0509)
+    return `${numOnly.slice(0, 4)}-${numOnly.slice(4, 8)}-${numOnly.slice(8)}`;
+  }
+
+  // 기타 경우는 그대로 반환
+  return phoneNumber;
+}
+
 // 데이터 매핑 함수 - 템플릿 헤더에 맞게 데이터 변환
 export function mapDataToTemplate(
   row: any,
   header: string,
-  options?: {templateName?: string; preferSabangName?: boolean}
+  options?: {templateName?: string; preferSabangName?: boolean; isInhouse?: boolean; formatPhone?: boolean}
 ): any {
   // 절대값으로 설정할 필드들
   const normalizedHeader = header.replace(/\s+/g, "").toLowerCase();
 
-  // 박스단위: 공란 처리 (CJ외주 발주서용)
+  // 박스단위: 템플릿명에 따라 다르게 처리
   if (
     normalizedHeader.includes("박스") ||
     normalizedHeader === "박스" ||
@@ -21,6 +65,11 @@ export function mapDataToTemplate(
     normalizedHeader === "박스정보" ||
     normalizedHeader === "박스크기"
   ) {
+    // 내주 발주서의 경우 박스단위를 2로 설정
+    if (options?.isInhouse || options?.templateName?.includes("내주")) {
+      return prepareExcelCellValue(2, true);
+    }
+    // 그 외의 경우 공란 처리 (CJ외주 발주서용)
     return ""; // 공란 처리
   }
 
@@ -83,25 +132,51 @@ export function mapDataToTemplate(
     if (postalValue) return normalizeStringValue(postalValue);
   }
 
-  // 전화번호1 (수취인 전화번호) 관련 특별 처리 (문자열로 유지)
-  if (header === "전화번호1" || normalizedHeader === "전화번호1") {
-    const phoneValue =
-      row["전화번호"] ||
-      row["수취인전화번호"] ||
-      row["수취인 전화번호"] ||
-      row["전화번호1"] ||
-      "";
-    if (phoneValue) return normalizeStringValue(phoneValue);
-  }
+  // 전화번호 관련 필드 특별 처리 (문자열로 유지)
+  if (normalizedHeader.includes("전화번호") || header.includes("전화번호")) {
+    let phoneValue = "";
 
-  // 전화번호 (주문자 전화번호) 관련 특별 처리 (문자열로 유지)
-  if (
-    (header === "전화번호" || normalizedHeader === "전화번호") &&
-    !header.includes("1")
-  ) {
-    const phoneValue =
-      row["주문자전화번호"] || row["주문자 전화번호"] || row["전화번호"] || "";
-    if (phoneValue) return normalizeStringValue(phoneValue);
+    // 먼저 해당 헤더명의 필드에서 값을 가져옴
+    phoneValue = row[header] || row[header.replace(/\s+/g, "")] || "";
+
+    // 값이 없으면 기존 로직대로 특정 필드에서 가져옴 (하위 호환성 유지)
+    if (!phoneValue) {
+      // 전화번호1 (수취인 전화번호)
+      if (header === "전화번호1" || normalizedHeader === "전화번호1") {
+        phoneValue =
+          row["전화번호1"] ||
+          row["전화번호"] ||
+          row["수취인전화번호"] ||
+          row["수취인 전화번호"] ||
+          "";
+      }
+      // 전화번호2 (보조 전화번호)
+      else if (header === "전화번호2" || normalizedHeader === "전화번호2") {
+        phoneValue =
+          row["전화번호2"] ||
+          row["보조전화번호"] ||
+          row["보조 전화번호"] ||
+          row["주문자전화번호"] ||
+          row["주문자 전화번호"] ||
+          "";
+      }
+      // 전화번호 (주문자 전화번호)
+      else if (header === "전화번호" || (normalizedHeader === "전화번호" && !header.includes("1") && !header.includes("2"))) {
+        phoneValue =
+          row["전화번호"] ||
+          row["주문자전화번호"] ||
+          row["주문자 전화번호"] ||
+          "";
+      }
+    }
+
+    if (phoneValue) {
+      const normalized = normalizeStringValue(phoneValue);
+      if (options?.formatPhone) {
+        return formatPhoneNumber(normalized);
+      }
+      return normalized;
+    }
   }
 
   // 공급가 관련 특별 처리 (salePrice 우선 사용, 숫자로 변환)

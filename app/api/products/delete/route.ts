@@ -3,17 +3,25 @@ import sql from "@/lib/db";
 
 export async function DELETE(request: NextRequest) {
   try {
+    // 먼저 request body에서 ids를 확인
+    const body = await request.json().catch(() => ({}));
+    const { ids: bodyIds } = body;
+
+    // URL 쿼리 파라미터에서도 확인 (하위 호환성)
     const url = new URL(request.url);
     const id = url.searchParams.get('id');
     const ids = url.searchParams.get('ids')?.split(',').map(Number);
 
     let targetIds: number[];
 
-    if (id) {
-      // 단일 ID 삭제
+    if (bodyIds && Array.isArray(bodyIds) && bodyIds.length > 0) {
+      // request body에서 여러 ID 삭제
+      targetIds = bodyIds.map(Number);
+    } else if (id) {
+      // 단일 ID 삭제 (쿼리 파라미터)
       targetIds = [parseInt(id)];
     } else if (ids && ids.length > 0) {
-      // 여러 ID 삭제
+      // 여러 ID 삭제 (쿼리 파라미터)
       targetIds = ids;
     } else {
       return NextResponse.json(

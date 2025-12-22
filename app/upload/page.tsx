@@ -1,21 +1,26 @@
 "use client";
 
-import DirectInputModal from "@/components/DirectInputModal";
-import FileUploadArea from "@/components/FileUploadArea";
-import UploadedFilesList from "@/components/UploadedFilesList";
-import {useAutoMapping} from "@/hooks/useAutoMapping";
-import {useFileSave} from "@/hooks/useFileSave";
-import {useFileValidation} from "@/hooks/useFileValidation";
-import {useUploadData} from "@/hooks/useUploadData";
+
 import {useUploadStore} from "@/stores/uploadStore";
-import {fieldNameMap} from "@/constants/fieldMappings";
-import DataTable from "@/components/DataTable";
 import {useEffect} from "react";
-import {useDragAndDrop} from "@/hooks/useDragAndDrop";
-import {useLoadingStore} from "@/stores/loadingStore";
-import LoadingOverlay from "@/components/LoadingOverlay";
 
 export default function Page() {
+  // const {loadSessions} = useUploadStore();
+
+  // useEffect(() => {
+  //   loadSessions();
+  // }, [loadSessions]);
+
+  return (
+    <div className="w-full h-full flex flex-col items-start justify-start p-4">
+      {/* <SessionSelector /> */}
+      <div className="w-full h-full flex flex-col items-center justify-start bg-white p-8 rounded-lg shadow-md mt-4">
+        {/* 여기에 기존 업로드 관련 컴포넌트들 추가 */}
+      </div>
+    </div>
+  );
+
+  // 기존 주석 처리된 코드들...
   // const {
   //   tableData,
   //   setTableData,

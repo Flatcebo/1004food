@@ -25,8 +25,15 @@ interface SavedDataTableProps {
   selectedCompany?: string;
   selectedVendor?: string;
   selectedOrderStatus?: string;
+  appliedType?: string;
+  appliedPostType?: string;
+  appliedCompany?: string;
+  appliedVendor?: string;
+  appliedOrderStatus?: string;
   appliedSearchField?: string;
   appliedSearchValue?: string;
+  appliedUploadTimeFrom?: string;
+  appliedUploadTimeTo?: string;
   uploadTimeFrom?: string;
   uploadTimeTo?: string;
   // 필터 제거 함수
@@ -50,8 +57,15 @@ const SavedDataTable = memo(function SavedDataTable({
   selectedCompany = "",
   selectedVendor = "",
   selectedOrderStatus = "",
+  appliedType = "",
+  appliedPostType = "",
+  appliedCompany = "",
+  appliedVendor = "",
+  appliedOrderStatus = "",
   appliedSearchField = "",
   appliedSearchValue = "",
+  appliedUploadTimeFrom = "",
+  appliedUploadTimeTo = "",
   uploadTimeFrom = "",
   uploadTimeTo = "",
   onRemoveFilter,
@@ -305,15 +319,15 @@ const SavedDataTable = memo(function SavedDataTable({
     try {
       // 현재 적용된 필터 정보를 다운로드 요청에 포함
       let filters = {
-        type: selectedType || undefined,
-        postType: selectedPostType || undefined,
-        company: selectedCompany || undefined,
-        vendor: selectedVendor || undefined,
-        orderStatus: selectedOrderStatus || undefined,
+        type: appliedType || undefined,
+        postType: appliedPostType || undefined,
+        company: appliedCompany || undefined,
+        vendor: appliedVendor || undefined,
+        orderStatus: appliedOrderStatus || undefined,
         searchField: appliedSearchField || undefined,
         searchValue: appliedSearchValue || undefined,
-        uploadTimeFrom: uploadTimeFrom || undefined,
-        uploadTimeTo: uploadTimeTo || undefined,
+        uploadTimeFrom: appliedUploadTimeFrom || undefined,
+        uploadTimeTo: appliedUploadTimeTo || undefined,
       };
 
       // 템플릿 확인

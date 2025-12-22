@@ -1,6 +1,17 @@
 import {create} from "zustand";
 import {RefObject, createRef} from "react";
 import * as XLSX from "xlsx";
+import {
+  UploadSession,
+  getCurrentSessionId,
+  getCurrentSession,
+  setCurrentSession,
+  createNewSession,
+  getAllSessions,
+  switchSession,
+  deleteSession
+} from "@/utils/sessionUtils";
+import {useAuthStore} from "@/stores/authStore";
 
 type ColumnDef = {
   key: string;
@@ -160,6 +171,19 @@ export interface UploadedFile {
 }
 
 export interface UploadStoreState {
+  // 세션 관리
+  currentSession: UploadSession | null;
+  availableSessions: UploadSession[];
+  selectedSessionId: string | null; // 'all' 또는 특정 세션 ID
+  setCurrentSession: (session: UploadSession | null) => void;
+  setAvailableSessions: (sessions: UploadSession[]) => void;
+  setSelectedSessionId: (sessionId: string | null) => void;
+  loadSessions: () => Promise<void>;
+  createSession: (sessionName: string) => Promise<boolean>;
+  switchToSession: (session: UploadSession) => void;
+  deleteCurrentSession: () => Promise<boolean>;
+  selectSession: (sessionId: string | null) => void;
+
   tableData: any[][];
   setTableData: (data: any[][]) => void;
 
@@ -249,6 +273,121 @@ export interface UploadStoreState {
 }
 
 export const useUploadStore = create<UploadStoreState>((set, get) => ({
+  // 세션 관리 초기 상태
+  currentSession: null,
+  availableSessions: [],
+  selectedSessionId: null,
+
+  setCurrentSession: (session) => set({currentSession: session}),
+  setAvailableSessions: (sessions) => set({availableSessions: sessions}),
+  setSelectedSessionId: (sessionId) => set({selectedSessionId: sessionId}),
+
+  loadSessions: async () => {
+    try {
+      const {user} = useAuthStore.getState();
+      const sessions = await getAllSessions(user?.id);
+      const currentSession = getCurrentSession();
+      const currentSessionId = await getCurrentSessionId();
+
+      // 현재 세션이 목록에 없으면 추가
+      let updatedSessions = [...sessions];
+      if (currentSession && !sessions.find(s => s.sessionId === currentSession.sessionId)) {
+        updatedSessions.push(currentSession);
+      }
+
+      // localStorage에서 이전에 선택한 세션 불러오기
+      let finalSelectedId: string | null = currentSessionId; // 기본값은 현재 세션
+      if (typeof window !== 'undefined') {
+        const savedSelectedId = localStorage.getItem('selected_session_id');
+        if (savedSelectedId === 'all') {
+          finalSelectedId = null; // 모든 세션
+        } else if (savedSelectedId && savedSelectedId !== 'null') {
+          finalSelectedId = savedSelectedId; // 특정 세션
+        }
+      }
+
+      set({
+        availableSessions: updatedSessions,
+        currentSession: currentSession,
+        selectedSessionId: finalSelectedId
+      });
+    } catch (error) {
+      console.error('세션 로드 실패:', error);
+    }
+  },
+
+  createSession: async (sessionName: string) => {
+    try {
+      const {user} = useAuthStore.getState();
+      const newSession = await createNewSession(sessionName, user?.id);
+      if (newSession) {
+        // 세션 목록 다시 로드
+        await get().loadSessions();
+        return true;
+      }
+    } catch (error) {
+      console.error('세션 생성 실패:', error);
+    }
+    return false;
+  },
+
+  switchToSession: (session: UploadSession) => {
+    switchSession(session);
+    set({
+      currentSession: session,
+      selectedSessionId: session.sessionId
+    });
+    // 세션 변경 시 파일 목록 다시 로드
+    get().loadFilesFromServer();
+  },
+
+  selectSession: (sessionId: string | null) => {
+    const {availableSessions} = get();
+
+    // 선택된 세션을 localStorage에 저장
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('selected_session_id', sessionId || 'all');
+    }
+
+    if (sessionId === null) {
+      // 모든 세션 선택
+      set({
+        selectedSessionId: null,
+        currentSession: null
+      });
+    } else {
+      // 특정 세션 선택
+      const session = availableSessions.find(s => s.sessionId === sessionId);
+      if (session) {
+        get().switchToSession(session);
+      }
+    }
+    // 세션 변경 시 파일 목록 다시 로드
+    get().loadFilesFromServer();
+  },
+
+  deleteCurrentSession: async () => {
+    const currentSession = get().currentSession;
+    if (!currentSession) return false;
+
+    try {
+      const success = await deleteSession(currentSession.sessionId);
+      if (success) {
+        // 세션 목록 다시 로드
+        await get().loadSessions();
+        // 기본 세션으로 전환
+        const sessions = get().availableSessions;
+        if (sessions.length > 0) {
+          get().switchToSession(sessions[0]);
+        }
+        return true;
+      }
+    } catch (error) {
+      console.error('세션 삭제 실패:', error);
+    }
+    return false;
+  },
+
   tableData: [],
   setTableData: (data) => set({tableData: data}),
   isModalOpen: false,
@@ -283,10 +422,12 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       return {confirmedFiles: newSet};
     }),
   saveFilesToServer: async () => {
-    const {uploadedFiles} = get();
+    const {uploadedFiles, selectedSessionId} = get();
     if (uploadedFiles.length === 0) {
       return false;
     }
+
+    const sessionId = selectedSessionId || await getCurrentSessionId();
 
     try {
       const response = await fetch("/api/upload/temp/save", {
@@ -296,6 +437,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
         },
         body: JSON.stringify({
           files: uploadedFiles,
+          sessionId: sessionId,
         }),
       });
 
@@ -320,10 +462,12 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     }
   },
   loadFilesFromServer: async () => {
-    const {setUploadedFiles, confirmFile} = get();
+    const {setUploadedFiles, confirmFile, selectedSessionId} = get();
+
+    const sessionId = selectedSessionId === null ? 'all' : (selectedSessionId || await getCurrentSessionId());
 
     try {
-      const response = await fetch("/api/upload/temp/list");
+      const response = await fetch(`/api/upload/temp/list?sessionId=${sessionId}`);
       const result = await response.json();
 
       if (result.success && result.data) {
