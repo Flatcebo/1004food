@@ -86,6 +86,11 @@ export default function Page() {
     loadFilesFromServer,
   } = useUploadStore();
 
+  // console.log("uploadedFiles >>>", uploadedFiles);
+  // console.log("confirmedFiles >>>", confirmedFiles);
+  // console.log("codes >>>", codes);
+  // console.log("productCodeMap >>>", productCodeMap);
+
   // 로딩 상태
   const {isLoading, title, message, subMessage, startLoading} =
     useLoadingStore();
@@ -253,6 +258,10 @@ export default function Page() {
     loadFilesFromServer,
   });
 
+  // 현재 선택된 파일 ID 찾기
+  const currentFileId =
+    uploadedFiles.find((file) => file.fileName === fileName)?.id || "";
+
   // 자동 매핑 훅
   const {codesOriginRef} = useAutoMapping({
     tableData,
@@ -262,128 +271,156 @@ export default function Page() {
     setTableData,
     setProductCodeMap,
     setHeaderIndex,
+    fileId: currentFileId,
   });
 
   // 각 업로드된 파일에 자동 매핑 적용
   useEffect(() => {
-    if (uploadedFiles.length === 0 || codes.length === 0) return;
+    if (uploadedFiles.length === 0 || codes.length === 0) {
+      // codes가 아직 로드되지 않았으면 로드 시도
+      if (uploadedFiles.length > 0 && codes.length === 0) {
+        const loadProducts = async () => {
+          const {fetchProducts} = await import("@/utils/api");
+          const result = await fetchProducts();
+          if (result.success) {
+            setCodes(result.data || []);
+          }
+        };
+        loadProducts();
+      }
+      return;
+    }
 
-    // 약간의 지연을 두어 파일 업로드 완료 후 실행
-    const timeoutId = setTimeout(() => {
-      let hasChanges = false;
-      const updatedFiles = uploadedFiles.map((file) => {
-        if (!file.tableData || !file.tableData.length) return file;
-        if (!file.headerIndex || typeof file.headerIndex.nameIdx !== "number")
-          return file;
+    console.log("🔄 자동 매핑 시작:", {
+      filesCount: uploadedFiles.length,
+      codesCount: codes.length,
+    });
 
-        const headerRow = file.tableData[0];
-        const nameIdx = file.headerIndex.nameIdx;
-        const mappingIdx = headerRow.findIndex((h: any) => h === "매핑코드");
-        const typeIdx = headerRow.findIndex((h: any) => h === "내외주");
-        const postTypeIdx = headerRow.findIndex((h: any) => h === "택배사");
+    // codes가 로드되면 즉시 자동 매핑 실행
+    let hasChanges = false;
+    const updatedFiles = uploadedFiles.map((file) => {
+      if (!file.tableData || !file.tableData.length) return file;
+      if (!file.headerIndex || typeof file.headerIndex.nameIdx !== "number")
+        return file;
 
-        if (mappingIdx === -1 && typeIdx === -1 && postTypeIdx === -1)
-          return file;
+      const headerRow = file.tableData[0];
+      const nameIdx = file.headerIndex.nameIdx;
+      const mappingIdx = headerRow.findIndex((h: any) => h === "매핑코드");
+      const typeIdx = headerRow.findIndex((h: any) => h === "내외주");
+      const postTypeIdx = headerRow.findIndex((h: any) => h === "택배사");
 
-        let fileChanged = false;
-        const fileProductCodeMap = {...file.productCodeMap};
+      if (mappingIdx === -1 && typeIdx === -1 && postTypeIdx === -1)
+        return file;
 
-        const updatedTableData = file.tableData.map((row, idx) => {
-          if (idx === 0) return row;
+      let fileChanged = false;
+      const fileProductCodeMap = {...file.productCodeMap};
 
-          const nameVal = row[nameIdx];
-          if (!nameVal || typeof nameVal !== "string") return row;
-          const name = nameVal.trim();
-          if (!name) return row;
+      const updatedTableData = file.tableData.map((row, idx) => {
+        if (idx === 0) return row;
 
-          let rowChanged = false;
-          let updatedRow = row;
+        const nameVal = row[nameIdx];
+        if (!nameVal || typeof nameVal !== "string") return row;
+        const name = nameVal.trim();
+        if (!name) return row;
 
-          // 코드 우선순위: 파일의 productCodeMap > 전역 productCodeMap > codes 자동 매칭
-          let codeVal = fileProductCodeMap[name] || productCodeMap[name];
-          const found = codes.find((c: any) => c.name === name);
-          if (!codeVal && found?.code) codeVal = found.code;
+        let rowChanged = false;
+        let updatedRow = row;
 
-          if (mappingIdx >= 0 && codeVal && row[mappingIdx] !== codeVal) {
+        // 코드 우선순위: 파일의 productCodeMap > 전역 productCodeMap > codes 자동 매칭
+        let codeVal = fileProductCodeMap[name] || productCodeMap[name];
+        const found = codes.find((c: any) => c.name === name);
+        if (!codeVal && found?.code) {
+          codeVal = found.code;
+          // 자동 매핑된 코드를 로그로 출력 (첫 번째 매칭만)
+          if (idx === 1 && !fileProductCodeMap[name] && !productCodeMap[name]) {
+            console.log(`✅ 자동 매핑: "${name}" → "${codeVal}"`);
+          }
+        }
+
+        if (mappingIdx >= 0 && codeVal && row[mappingIdx] !== codeVal) {
+          if (!rowChanged) {
+            updatedRow = [...row];
+            rowChanged = true;
+          }
+          updatedRow[mappingIdx] = codeVal;
+          fileChanged = true;
+        }
+
+        if (found) {
+          if (typeIdx >= 0 && found.type && row[typeIdx] !== found.type) {
             if (!rowChanged) {
               updatedRow = [...row];
               rowChanged = true;
             }
-            updatedRow[mappingIdx] = codeVal;
+            updatedRow[typeIdx] = found.type;
             fileChanged = true;
           }
-
-          if (found) {
-            if (typeIdx >= 0 && found.type && row[typeIdx] !== found.type) {
-              if (!rowChanged) {
-                updatedRow = [...row];
-                rowChanged = true;
-              }
-              updatedRow[typeIdx] = found.type;
-              fileChanged = true;
+          if (
+            postTypeIdx >= 0 &&
+            found.postType &&
+            row[postTypeIdx] !== found.postType
+          ) {
+            if (!rowChanged) {
+              updatedRow = [...row];
+              rowChanged = true;
             }
-            if (
-              postTypeIdx >= 0 &&
-              found.postType &&
-              row[postTypeIdx] !== found.postType
-            ) {
-              if (!rowChanged) {
-                updatedRow = [...row];
-                rowChanged = true;
-              }
-              updatedRow[postTypeIdx] = found.postType;
-              fileChanged = true;
-            }
+            updatedRow[postTypeIdx] = found.postType;
+            fileChanged = true;
           }
-
-          // productCodeMap에 비어있고 자동매칭된 코드가 있으면 map에도 채워둠
-          if (!fileProductCodeMap[name] && found?.code) {
-            fileProductCodeMap[name] = found.code;
-          }
-
-          return updatedRow;
-        });
-
-        if (fileChanged) {
-          hasChanges = true;
-
-          // 배송메시지 자동 생성 적용
-          const originalMessagesRef: {[rowIdx: number]: string} = {};
-          const autoMessageTableData = generateAutoDeliveryMessage(
-            updatedTableData,
-            originalMessagesRef
-          );
-
-          const updatedFile = {
-            ...file,
-            tableData: autoMessageTableData,
-            productCodeMap: fileProductCodeMap,
-          };
-
-          // sessionStorage 업데이트
-          try {
-            sessionStorage.setItem(
-              `uploadedFile_${file.id}`,
-              JSON.stringify(updatedFile)
-            );
-          } catch (error) {
-            console.error("sessionStorage 업데이트 실패:", error);
-          }
-
-          return updatedFile;
         }
 
-        return file;
+        // productCodeMap에 비어있고 자동매칭된 코드가 있으면 map에도 채워둠
+        if (!fileProductCodeMap[name] && found?.code) {
+          fileProductCodeMap[name] = found.code;
+        }
+
+        return updatedRow;
       });
 
-      if (hasChanges) {
-        setUploadedFiles(updatedFiles);
-      }
-    }, 500); // 파일 업로드 및 codes 로드 완료 후 실행
+      if (fileChanged) {
+        hasChanges = true;
 
-    return () => {
-      clearTimeout(timeoutId);
-    };
+        // 배송메시지 자동 생성 적용
+        const originalMessagesRef: {[rowIdx: number]: string} = {};
+        const autoMessageTableData = generateAutoDeliveryMessage(
+          updatedTableData,
+          originalMessagesRef
+        );
+
+        const updatedFile = {
+          ...file,
+          tableData: autoMessageTableData,
+          productCodeMap: fileProductCodeMap,
+        };
+
+        // sessionStorage 업데이트
+        try {
+          sessionStorage.setItem(
+            `uploadedFile_${file.id}`,
+            JSON.stringify(updatedFile)
+          );
+        } catch (error) {
+          console.error("sessionStorage 업데이트 실패:", error);
+        }
+
+        return updatedFile;
+      }
+
+      return file;
+    });
+
+    if (hasChanges) {
+      console.log("✅ 자동 매핑 완료, 파일 업데이트 및 서버 저장 시작");
+      setUploadedFiles(updatedFiles);
+
+      // 자동 매핑 완료 후 서버에 저장 (약간의 지연을 두어 상태 업데이트 완료 후 실행)
+      setTimeout(async () => {
+        const {saveFilesToServer} = useUploadStore.getState();
+        await saveFilesToServer();
+      }, 200);
+    } else {
+      console.log("ℹ️ 자동 매핑 변경사항 없음");
+    }
   }, [uploadedFiles, codes, productCodeMap, setUploadedFiles]);
 
   // 모달이 열릴 때 서버에서 임시 파일 불러오기
@@ -417,8 +454,14 @@ export default function Page() {
   ]);
 
   // 상품 목록 fetch (DB에서)
+  // 모달이 열릴 때 또는 파일이 업로드될 때 codes 로드
   useEffect(() => {
-    if (!isModalOpen) return;
+    // codes가 이미 로드되어 있으면 다시 로드하지 않음
+    if (codes.length > 0) return;
+
+    // 모달이 열리지 않았고 파일도 없으면 로드하지 않음
+    if (!isModalOpen && uploadedFiles.length === 0) return;
+
     const loadProducts = async () => {
       const {fetchProducts} = await import("@/utils/api");
       const result = await fetchProducts();
@@ -427,7 +470,7 @@ export default function Page() {
       }
     };
     loadProducts();
-  }, [isModalOpen, setCodes]);
+  }, [isModalOpen, uploadedFiles.length, codes.length, setCodes]);
 
   // 드래그 앤 드롭 훅
   const {handleDrop, handleDragOver, handleDragLeave} = useDragAndDrop({
@@ -490,17 +533,31 @@ export default function Page() {
   });
 
   const handleFileDelete = async (fileId: string) => {
-    removeUploadedFile(fileId);
-    unconfirmFile(fileId); // confirmedFiles에서도 제거
-    sessionStorage.removeItem(`uploadedFile_${fileId}`);
-
-    // 서버에서도 삭제
+    // 서버에서 먼저 삭제
     try {
-      await fetch(`/api/upload/temp/delete?fileId=${fileId}`, {
+      const response = await fetch(`/api/upload/temp/delete?fileId=${fileId}`, {
         method: "DELETE",
       });
+      const result = await response.json();
+
+      if (result.success) {
+        // 서버 삭제 성공 후 로컬 상태 업데이트
+        removeUploadedFile(fileId);
+        unconfirmFile(fileId); // confirmedFiles에서도 제거
+        sessionStorage.removeItem(`uploadedFile_${fileId}`);
+      } else {
+        console.error("서버에서 파일 삭제 실패:", result.error);
+        // 서버 삭제 실패해도 로컬에서는 삭제
+        removeUploadedFile(fileId);
+        unconfirmFile(fileId);
+        sessionStorage.removeItem(`uploadedFile_${fileId}`);
+      }
     } catch (error) {
       console.error("서버에서 파일 삭제 실패:", error);
+      // 에러 발생해도 로컬에서는 삭제
+      removeUploadedFile(fileId);
+      unconfirmFile(fileId);
+      sessionStorage.removeItem(`uploadedFile_${fileId}`);
     }
   };
 

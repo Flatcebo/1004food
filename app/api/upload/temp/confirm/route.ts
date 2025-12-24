@@ -36,10 +36,12 @@ export async function POST(request: NextRequest) {
       if (!tableData || !Array.isArray(tableData) || tableData.length < 2) {
         return;
       }
-      
+
       const headerRow = tableData[0];
-      const vendorIdx = headerRow.findIndex((h: any) => h === "업체명" || h === "업체");
-      
+      const vendorIdx = headerRow.findIndex(
+        (h: any) => h === "업체명" || h === "업체"
+      );
+
       if (vendorIdx === -1) {
         // 업체명 컬럼이 없으면 빈 문자열
         const rowCount = tableData.length - 1;
@@ -73,11 +75,11 @@ export async function POST(request: NextRequest) {
     // 각 확인된 파일을 정식 uploads/upload_rows 테이블로 이동
     const results = [];
     let globalCodeIndex = 0;
-    
+
     for (const file of confirmedFiles) {
       const tableData = file.table_data;
       const productCodeMap = file.product_code_map || {};
-      
+
       if (!tableData || !Array.isArray(tableData) || tableData.length < 2) {
         console.warn(`파일 ${file.file_name}의 데이터가 비어있습니다.`);
         continue;
@@ -86,29 +88,35 @@ export async function POST(request: NextRequest) {
       // 헤더와 데이터 행 분리
       const headerRow = tableData[0];
       const dataRows = tableData.slice(1);
-      
+
       // 상품명 인덱스 찾기
-      const nameIdx = headerRow.findIndex((h: any) => h && typeof h === "string" && h.includes("상품명"));
+      const nameIdx = headerRow.findIndex(
+        (h: any) => h && typeof h === "string" && h.includes("상품명")
+      );
 
       // 배송메시지 자동 생성을 위해 원본 메시지 저장
       const originalMessagesRef: {[rowIdx: number]: string} = {};
-      
+
       // 배송메시지 자동 생성 적용
-      const updatedTableData = generateAutoDeliveryMessage(tableData, originalMessagesRef);
+      const updatedTableData = generateAutoDeliveryMessage(
+        tableData,
+        originalMessagesRef
+      );
       const updatedDataRows = updatedTableData.slice(1);
 
       // 배열을 객체로 변환 (헤더를 키로 사용)
       const rowObjects = updatedDataRows.map((row: any[], rowIndex: number) => {
         const rowObj: any = {};
         headerRow.forEach((header: string, index: number) => {
-          rowObj[header] = row[index] !== undefined && row[index] !== null ? row[index] : "";
+          rowObj[header] =
+            row[index] !== undefined && row[index] !== null ? row[index] : "";
         });
-        
+
         // 주문상태가 없으면 기본값 "공급중" 설정
         if (!rowObj["주문상태"] || rowObj["주문상태"] === "") {
           rowObj["주문상태"] = "공급중";
         }
-        
+
         // 매핑코드 추가 (productCodeMap에서 가져오기)
         if (nameIdx !== -1) {
           const productName = String(row[nameIdx] || "").trim();
@@ -116,13 +124,13 @@ export async function POST(request: NextRequest) {
             rowObj["매핑코드"] = productCodeMap[productName];
           }
         }
-        
+
         // 내부코드 추가
         if (internalCodes.length > globalCodeIndex) {
           rowObj["내부코드"] = internalCodes[globalCodeIndex];
         }
         globalCodeIndex++;
-        
+
         return rowObj;
       });
 
@@ -152,8 +160,9 @@ export async function POST(request: NextRequest) {
       // 각 행을 upload_rows에 저장 (객체 형태로)
       const insertPromises = rowObjects.map((rowObj: any) => {
         // 쇼핑몰명 추출 (여러 가능한 키에서 찾기)
-        const shopName = rowObj["쇼핑몰명"] || rowObj["쇼핑몰명(1)"] || rowObj["쇼핑몰"] || "";
-        
+        const shopName =
+          rowObj["쇼핑몰명"] || rowObj["쇼핑몰명(1)"] || rowObj["쇼핑몰"] || "";
+
         return sql`
           INSERT INTO upload_rows (upload_id, row_data, shop_name, created_at)
           VALUES (
@@ -177,7 +186,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 확인된 임시 저장 데이터 삭제
-    const confirmedFileIds = confirmedFiles.map(f => f.file_id);
+    const confirmedFileIds = confirmedFiles.map((f) => f.file_id);
     if (confirmedFileIds.length > 0) {
       await sql`
         DELETE FROM temp_files
@@ -200,4 +209,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

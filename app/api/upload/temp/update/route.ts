@@ -1,5 +1,6 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
+import {checkFileValidation} from "@/utils/fileValidation";
 
 export async function PUT(request: NextRequest) {
   try {
@@ -30,19 +31,76 @@ export async function PUT(request: NextRequest) {
       tableDataRows: tableData?.length,
     });
 
+    // validation_status 컬럼이 없으면 추가
+    try {
+      await sql`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'temp_files' AND column_name = 'validation_status') THEN
+            ALTER TABLE temp_files ADD COLUMN validation_status JSONB;
+          END IF;
+        END
+        $$;
+      `;
+    } catch (error: any) {
+      // 컬럼 추가 실패는 무시 (이미 존재할 수 있음)
+      console.log("validation_status 컬럼 확인:", error.message);
+    }
+
+    // 파일 검증 수행
+    const validationResult = checkFileValidation({
+      id: fileId,
+      fileName: "",
+      rowCount,
+      tableData,
+      headerIndex,
+      productCodeMap,
+    });
+
     // postgres.js 템플릿 리터럴 사용 (더 안전함)
-    const result = await sql`
-      UPDATE temp_files
-      SET 
-        table_data = ${JSON.stringify(tableData)},
-        row_count = ${rowCount},
-        header_index = ${JSON.stringify(headerIndex)},
-        product_code_map = ${JSON.stringify(productCodeMap)},
-        is_confirmed = ${isConfirmed ?? false},
-        updated_at = ${koreaTime.toISOString()}
-      WHERE file_id = ${fileId}
-      RETURNING *
-    `;
+    let result;
+    try {
+      result = await sql`
+        UPDATE temp_files
+        SET 
+          table_data = ${JSON.stringify(tableData)},
+          row_count = ${rowCount},
+          header_index = ${JSON.stringify(headerIndex)},
+          product_code_map = ${JSON.stringify(productCodeMap)},
+          validation_status = ${JSON.stringify(validationResult)},
+          is_confirmed = ${isConfirmed ?? false},
+          updated_at = ${koreaTime.toISOString()}
+        WHERE file_id = ${fileId}
+        RETURNING *
+      `;
+    } catch (error: any) {
+      // validation_status 컬럼이 없으면 컬럼 추가 후 다시 시도
+      if (error.message && error.message.includes('column "validation_status" does not exist')) {
+        try {
+          await sql`ALTER TABLE temp_files ADD COLUMN validation_status JSONB`;
+        } catch (addError: any) {
+          // 이미 존재할 수 있음
+          console.log("validation_status 컬럼 추가:", addError.message);
+        }
+        // 다시 업데이트 시도
+        result = await sql`
+          UPDATE temp_files
+          SET 
+            table_data = ${JSON.stringify(tableData)},
+            row_count = ${rowCount},
+            header_index = ${JSON.stringify(headerIndex)},
+            product_code_map = ${JSON.stringify(productCodeMap)},
+            validation_status = ${JSON.stringify(validationResult)},
+            is_confirmed = ${isConfirmed ?? false},
+            updated_at = ${koreaTime.toISOString()}
+          WHERE file_id = ${fileId}
+          RETURNING *
+        `;
+      } else {
+        throw error;
+      }
+    }
 
     console.log("✅ 쿼리 실행 완료. 결과:", {
       resultLength: result.length,

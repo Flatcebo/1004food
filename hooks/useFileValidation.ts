@@ -7,10 +7,11 @@ export function useFileValidation(
   productCodeMap?: {[name: string]: string}
 ) {
   const [fileValidationStatus, setFileValidationStatus] = useState<{
-    [fileId: string]: { isValid: boolean; errors: string[] };
+    [fileId: string]: {isValid: boolean; errors: string[]};
   }>({});
   const productCodeMapRef = useRef(productCodeMap);
   const uploadedFilesRef = useRef(uploadedFiles);
+  const previousFileIdsRef = useRef<Set<string>>(new Set());
 
   // 최신 값 유지
   useEffect(() => {
@@ -21,56 +22,120 @@ export function useFileValidation(
     uploadedFilesRef.current = uploadedFiles;
   }, [uploadedFiles]);
 
-  // validation 상태 업데이트 함수
-  const updateValidation = useCallback(() => {
+  // validation 상태 업데이트 함수 (특정 파일만 검증)
+  const updateValidation = useCallback((fileIds?: string[]) => {
     const currentFiles = uploadedFilesRef.current;
     const currentProductCodeMap = productCodeMapRef.current;
-    
+
     if (currentFiles.length === 0) return;
-    
-    const newValidationStatus: {[fileId: string]: { isValid: boolean; errors: string[] }} = {};
-    currentFiles.forEach((file) => {
-      const storedFile = sessionStorage.getItem(`uploadedFile_${file.id}`);
-      let fileToCheck = file;
-      if (storedFile) {
-        try {
-          fileToCheck = JSON.parse(storedFile);
-        } catch (error) {
-          console.error("파일 데이터 파싱 실패:", error);
+
+    // 검증할 파일 ID 목록 (지정되지 않으면 모든 파일)
+    const filesToValidate = fileIds 
+      ? currentFiles.filter((f: any) => fileIds.includes(f.id))
+      : currentFiles;
+
+    setFileValidationStatus((prevStatus) => {
+      const newValidationStatus = {...prevStatus};
+      
+      filesToValidate.forEach((file: any) => {
+        // DB에서 불러온 검증 상태가 있으면 우선 사용
+        if (file.validationStatus) {
+          newValidationStatus[file.id] = file.validationStatus;
+          return;
         }
-      }
-      // 파일 자체에 productCodeMap이 있으면 우선 사용, 없으면 전역 productCodeMap 사용
-      const fileProductCodeMap = fileToCheck.productCodeMap || currentProductCodeMap;
-      if (fileProductCodeMap) {
-        fileToCheck = {
-          ...fileToCheck,
-          productCodeMap: fileProductCodeMap,
-        };
-      }
-      newValidationStatus[file.id] = checkFileValidation(fileToCheck);
+
+        // DB 검증 상태가 없으면 클라이언트에서 검증 수행
+        const storedFile = sessionStorage.getItem(`uploadedFile_${file.id}`);
+        let fileToCheck = file;
+        if (storedFile) {
+          try {
+            fileToCheck = JSON.parse(storedFile);
+          } catch (error) {
+            console.error("파일 데이터 파싱 실패:", error);
+          }
+        }
+        // 파일 자체에 productCodeMap이 있으면 우선 사용, 없으면 전역 productCodeMap 사용
+        const fileProductCodeMap =
+          fileToCheck.productCodeMap || currentProductCodeMap;
+        if (fileProductCodeMap) {
+          fileToCheck = {
+            ...fileToCheck,
+            productCodeMap: fileProductCodeMap,
+          };
+        }
+        newValidationStatus[file.id] = checkFileValidation(fileToCheck);
+      });
+      
+      return newValidationStatus;
     });
-    setFileValidationStatus(newValidationStatus);
   }, []);
 
   // 파일 목록이나 productCodeMap이 변경될 때마다 validation 상태 업데이트
-  // 엑셀 업로드 시 자동 매핑 완료 후 검증 실행
+  // 새로 추가된 파일만 검증 실행, 자동 매핑 완료 후 재검증
   useEffect(() => {
-    if (uploadedFiles.length === 0) return;
+    if (uploadedFiles.length === 0) {
+      previousFileIdsRef.current = new Set();
+      return;
+    }
+
+    // 현재 파일 ID 목록
+    const currentFileIds = new Set(uploadedFiles.map((f: any) => f.id));
     
-    // 약간의 지연을 두어 자동 매핑 완료 후 검증
-    const timeoutId = setTimeout(() => {
-      updateValidation();
-    }, 300);
+    // 새로 추가된 파일 ID 찾기
+    const newFileIds = uploadedFiles
+      .filter((f: any) => !previousFileIdsRef.current.has(f.id))
+      .map((f: any) => f.id);
+
+    // DB에서 불러온 검증 상태가 있으면 우선 사용
+    const dbValidationStatus: {
+      [fileId: string]: {isValid: boolean; errors: string[]};
+    } = {};
     
-    return () => {
-      clearTimeout(timeoutId);
-    };
+    uploadedFiles.forEach((file: any) => {
+      // DB에서 불러온 검증 상태가 있으면 사용
+      if (file.validationStatus) {
+        dbValidationStatus[file.id] = file.validationStatus;
+      }
+    });
+
+    // DB 검증 상태가 있으면 먼저 설정
+    if (Object.keys(dbValidationStatus).length > 0) {
+      setFileValidationStatus((prev) => ({
+        ...prev,
+        ...dbValidationStatus,
+      }));
+    }
+
+    // 새로 추가된 파일이 있으면 검증 수행
+    if (newFileIds.length > 0) {
+      // 파일 업로드 직후 즉시 검증 수행 (자동 매핑 전)
+      updateValidation(newFileIds);
+
+      // 자동 매핑 완료 후 재검증 (약간의 지연을 두어 자동 매핑 완료 후 실행)
+      const timeoutId = setTimeout(() => {
+        updateValidation(newFileIds);
+      }, 500);
+
+      // 이전 파일 ID 목록 업데이트
+      previousFileIdsRef.current = currentFileIds;
+
+      return () => {
+        clearTimeout(timeoutId);
+      };
+    } else {
+      // 새 파일이 없으면 이전 파일 ID 목록만 업데이트
+      previousFileIdsRef.current = currentFileIds;
+    }
   }, [uploadedFiles, productCodeMap, updateValidation]);
 
-  const updateValidationStatus = (fileId: string, isValid: boolean, errors: string[] = []) => {
+  const updateValidationStatus = (
+    fileId: string,
+    isValid: boolean,
+    errors: string[] = []
+  ) => {
     setFileValidationStatus((prev) => ({
       ...prev,
-      [fileId]: { isValid, errors },
+      [fileId]: {isValid, errors},
     }));
   };
 
@@ -79,4 +144,3 @@ export function useFileValidation(
     updateValidationStatus,
   };
 }
-

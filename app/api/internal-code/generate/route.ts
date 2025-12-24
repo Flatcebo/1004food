@@ -57,9 +57,9 @@ async function getMaxIncrement(
     const incrementPart = code.slice(-4);
     const increment = parseInt(incrementPart) || 0;
 
-    console.log(
-      `[getMaxIncrement] 업체명: ${vendorName}, 날짜: ${dateStr}, 최대 increment: ${increment}`
-    );
+    // console.log(
+    //   `[getMaxIncrement] 업체명: ${vendorName}, 날짜: ${dateStr}, 최대 increment: ${increment}`
+    // );
     return increment;
   } catch (error) {
     console.error("최대 일련번호 조회 실패:", error);
@@ -78,9 +78,9 @@ async function areCodesUnique(codes: string[]): Promise<boolean> {
     `;
 
     const count = parseInt(String(result[0].count)) || 0;
-    console.log(
-      `[areCodesUnique] 확인할 코드 수: ${codes.length}, DB 중복 개수: ${count}`
-    );
+    // console.log(
+    //   `[areCodesUnique] 확인할 코드 수: ${codes.length}, DB 중복 개수: ${count}`
+    // );
 
     return count === 0;
   } catch (error) {
@@ -96,23 +96,23 @@ async function generateUniqueCodesForVendors(
   const dateStr = getDateString();
   const codes: string[] = [];
 
-  console.log(
-    `[generateUniqueCodesForVendors] 총 ${vendorNames.length}개 코드 생성 시작`
-  );
-  console.log(
-    `[generateUniqueCodesForVendors] 업체명 목록:`,
-    vendorNames.slice(0, 5),
-    vendorNames.length > 5 ? "..." : ""
-  );
+  // console.log(
+  //   `[generateUniqueCodesForVendors] 총 ${vendorNames.length}개 코드 생성 시작`
+  // );
+  // console.log(
+  //   `[generateUniqueCodesForVendors] 업체명 목록:`,
+  //   vendorNames.slice(0, 5),
+  //   vendorNames.length > 5 ? "..." : ""
+  // );
 
   // 업체명별 현재 increment 추적
   const vendorIncrements = new Map<string, number>();
 
   // 각 업체명별로 최대 increment 초기화
   const uniqueVendors = Array.from(new Set(vendorNames));
-  console.log(
-    `[generateUniqueCodesForVendors] 고유 업체명 ${uniqueVendors.length}개`
-  );
+  // console.log(
+  //   `[generateUniqueCodesForVendors] 고유 업체명 ${uniqueVendors.length}개`
+  // );
 
   for (const vendorName of uniqueVendors) {
     const maxIncrement = await getMaxIncrement(vendorName, dateStr);
@@ -129,17 +129,17 @@ async function generateUniqueCodesForVendors(
     codes.push(code);
   }
 
-  console.log(
-    `[generateUniqueCodesForVendors] 생성된 코드 샘플:`,
-    codes.slice(0, 5)
-  );
+  // console.log(
+  //   `[generateUniqueCodesForVendors] 생성된 코드 샘플:`,
+  //   codes.slice(0, 5)
+  // );
 
   // 생성된 코드 내에서 중복 확인
   const codeSet = new Set(codes);
   if (codeSet.size !== codes.length) {
-    console.error(
-      `[generateUniqueCodesForVendors] 배치 내 중복 발견! 생성: ${codes.length}개, 고유: ${codeSet.size}개`
-    );
+    // console.error(
+    //   `[generateUniqueCodesForVendors] 배치 내 중복 발견! 생성: ${codes.length}개, 고유: ${codeSet.size}개`
+    // );
     throw new Error("생성된 코드 배치 내에 중복이 있습니다.");
   }
 
@@ -152,18 +152,18 @@ async function generateUniqueCodesForVendors(
       FROM upload_rows 
       WHERE row_data->>'내부코드' = ANY(${codes})
     `;
-    console.error(
-      `[generateUniqueCodesForVendors] DB에 이미 존재하는 코드:`,
-      existingCodes.map((r: any) => r.code)
-    );
+    // console.error(
+    //   `[generateUniqueCodesForVendors] DB에 이미 존재하는 코드:`,
+    //   existingCodes.map((r: any) => r.code)
+    // );
     throw new Error(
       "생성된 내부 코드가 DB에 이미 존재합니다. 다시 시도해주세요."
     );
   }
 
-  console.log(
-    `[generateUniqueCodesForVendors] 모든 코드 생성 완료 (${codes.length}개)`
-  );
+  // console.log(
+  //   `[generateUniqueCodesForVendors] 모든 코드 생성 완료 (${codes.length}개)`
+  // );
   return codes;
 }
 

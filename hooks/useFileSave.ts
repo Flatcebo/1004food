@@ -2,6 +2,11 @@ import {useCallback} from "react";
 import {checkFileValidation} from "@/utils/fileValidation";
 import {UploadedFile} from "@/stores/uploadStore";
 import {useLoadingStore} from "@/stores/loadingStore";
+import {PRODUCT_FIELD_ORDER} from "@/constants/productFields";
+import {
+  PRODUCT_COLUMN_MAPPINGS,
+  mapExcelHeaderToDbColumn,
+} from "@/constants/productColumnMappings";
 
 interface UseFileSaveProps {
   confirmedFiles: Set<string>;
@@ -31,8 +36,28 @@ export function useFileSave({
     startLoading("업로드 중...", "업로드 준비 중...");
 
     try {
+      // codes가 비어있으면 DB에서 직접 가져오기
+      let productsToUse = codes;
+      if (!productsToUse || productsToUse.length === 0) {
+        updateLoadingMessage("상품 목록 로드 중...");
+        const {fetchProducts} = await import("@/utils/api");
+        const result = await fetchProducts();
+        if (result.success && result.data) {
+          productsToUse = result.data;
+          console.log(
+            "📦 DB에서 상품 목록 로드 완료:",
+            productsToUse.length,
+            "개"
+          );
+        } else {
+          console.warn("⚠️ 상품 목록을 가져올 수 없습니다.");
+        }
+      }
+
       const confirmedFileIds = Array.from(confirmedFiles);
       let filesToUpload: any[] = [];
+      // console.log("confirmedFileIds", confirmedFileIds);
+      // console.log("uploadedFiles", uploadedFiles);
 
       // 확인된 파일이 있으면 확인된 파일 사용, 없으면 일반 업로드된 파일 사용
       if (confirmedFileIds.length > 0) {
@@ -192,17 +217,47 @@ export function useFileSave({
           const nameIdx = file.headerIndex.nameIdx;
           const mappingIdx = headerRow.findIndex((h: any) => h === "매핑코드");
 
-          const typeIdx = headerRow.findIndex((h: any) => h === "내외주");
-          const postTypeIdx = headerRow.findIndex((h: any) => h === "택배사");
-          const pkgIdx = headerRow.findIndex((h: any) => h === "합포수량");
-          const priceIdx = headerRow.findIndex((h: any) => h === "가격");
-          const postFeeIdx = headerRow.findIndex((h: any) => h === "택배비");
+          // 모든 필드에 대한 인덱스 찾기 (mapExcelHeaderToDbColumn 사용)
+          const fieldIndices: {[key: string]: number} = {};
+          headerRow.forEach((header: any, index: number) => {
+            if (header) {
+              const dbColumn = mapExcelHeaderToDbColumn(String(header));
+              if (dbColumn && !fieldIndices.hasOwnProperty(dbColumn)) {
+                fieldIndices[dbColumn] = index;
+              }
+            }
+          });
+
+          // 디버깅: 헤더와 매핑된 인덱스 확인
+          console.log("📋 헤더 행:", headerRow);
+          console.log("🗺️ 필드 인덱스 매핑:", fieldIndices);
+
+          // 하위 호환성을 위해 기존 변수명도 유지
+          const typeIdx =
+            fieldIndices.type ??
+            headerRow.findIndex((h: any) => h === "내외주");
+          const postTypeIdx =
+            fieldIndices.postType ??
+            headerRow.findIndex((h: any) => h === "택배사");
+          const pkgIdx =
+            fieldIndices.pkg ??
+            headerRow.findIndex((h: any) => h === "합포수량");
+          const priceIdx =
+            fieldIndices.price ?? headerRow.findIndex((h: any) => h === "가격");
+          const postFeeIdx =
+            fieldIndices.postFee ??
+            headerRow.findIndex((h: any) => h === "택배비");
 
           const rows = file.tableData.slice(1).map((row: any[]) => {
-            const name = nameIdx !== -1 ? row[nameIdx] : "";
+            const name =
+              nameIdx !== -1 ? String(row[nameIdx] || "").trim() : "";
 
-            const foundCode = codes.find((c: any) => c.name === name);
-            const code = file.productCodeMap?.[name] || foundCode?.code || "";
+            const foundCode = productsToUse.find(
+              (c: any) => String(c.name || "").trim() === name
+            );
+            const rawCode =
+              file.productCodeMap?.[name] || foundCode?.code || "";
+            const code = String(rawCode || "").trim();
 
             const rowData: any = {};
             headerRow.forEach((header: any, idx: number) => {
@@ -215,50 +270,191 @@ export function useFileSave({
             rowData["주문상태"] = "공급중"; // 기본값 설정
             rowData["내부코드"] = internalCodes[codeIndex++]; // 내부 코드 추가
 
-            // 신규 상품 정보 수집 (매핑코드가 있고, codes에 이름으로 찾을 수 없는 경우)
-            if (name && code && !foundCode) {
-              // 매핑코드로 codes에서 상품 정보 찾기
-              const codeMatchedProduct = codes.find(
-                (c: any) => c.code === code
-              );
+            // 상품 정보 수집 (매핑코드가 있는 경우)
+            // 상품명이 같다면 DB에 업데이트, 없다면 DB에 신규 등록
+            if (name && code) {
+              // 매핑된 상품 찾기: 매핑코드로 우선 찾기 (productCodeMap에서 가져온 매핑코드 사용)
+              // 1순위: 매핑코드로 찾기 (productCodeMap에 저장된 매핑코드)
+              // 2순위: 이름으로 찾기 (foundCode)
+              // code와 productsToUse의 code를 모두 문자열로 변환하고 trim하여 비교
+              let matchedProduct = productsToUse.find((c: any) => {
+                const cCode = String(c.code || "").trim();
+                return cCode === code;
+              });
 
+              // 디버깅: 첫 번째 상품만 로그 출력
+              if (newProducts.length === 0) {
+                console.log("🔍 상품 찾기 시도:", {
+                  name,
+                  code,
+                  codeLength: code.length,
+                  productsLength: productsToUse.length,
+                  foundInProducts: productsToUse.some((c: any) => {
+                    const cCode = String(c.code || "").trim();
+                    return cCode === code;
+                  }),
+                  sampleProducts: productsToUse.slice(0, 3).map((c: any) => ({
+                    name: c.name,
+                    code: c.code,
+                    codeType: typeof c.code,
+                    codeTrimmed: String(c.code || "").trim(),
+                  })),
+                });
+              }
+
+              // 매핑코드로 찾지 못했으면 이름으로 찾기
+              if (!matchedProduct) {
+                matchedProduct = foundCode;
+              }
+
+              // 상품의 모든 필드를 포함하여 초기화
               const productInfo: any = {
                 name: name,
                 code: code,
               };
 
-              // 매핑코드로 찾은 상품이 있으면 그 정보를 우선 사용
-              if (codeMatchedProduct) {
+              // 상품의 모든 필드를 기본값으로 초기화
+              PRODUCT_FIELD_ORDER.forEach((field) => {
+                if (!productInfo[field]) {
+                  productInfo[field] = null;
+                }
+              });
+
+              // 매핑된 상품이 있으면 그 정보를 우선 사용 (기본값)
+              if (matchedProduct) {
                 // 기존 상품의 모든 정보를 복사 (기존 업로드 데이터 유지)
-                Object.keys(codeMatchedProduct).forEach((key) => {
+                Object.keys(matchedProduct).forEach((key) => {
                   if (
                     key !== "id" &&
                     key !== "createdAt" &&
                     key !== "updatedAt" &&
                     key !== "name" // name은 현재 row의 name 사용
                   ) {
-                    productInfo[key] = codeMatchedProduct[key];
+                    productInfo[key] = matchedProduct[key];
                   }
                 });
+
+                // 디버깅: 첫 번째 상품만 로그 출력
+                if (newProducts.length === 0) {
+                  console.log(
+                    "🔍 매핑코드로 찾은 상품 정보:",
+                    code,
+                    matchedProduct
+                  );
+                  console.log(
+                    "📦 매핑된 상품 정보에서 가져온 모든 필드:",
+                    productInfo
+                  );
+                }
+              } else {
+                // 디버깅: 매핑된 상품을 찾지 못한 경우
+                if (newProducts.length === 0) {
+                  console.log(
+                    "⚠️ 매핑된 상품을 찾지 못함:",
+                    "name=",
+                    name,
+                    "code=",
+                    code
+                  );
+                }
               }
 
-              // row에 있는 데이터로 업데이트 (비어있지 않은 경우에만)
-              if (typeIdx >= 0 && row[typeIdx]) {
+              // row에 있는 데이터로 업데이트 (값이 있는 경우에만 덮어쓰기)
+              // 모든 필드를 PRODUCT_COLUMN_MAPPINGS를 사용하여 매핑
+              Object.keys(PRODUCT_COLUMN_MAPPINGS).forEach((dbColumn) => {
+                const fieldIdx = fieldIndices[dbColumn];
+                if (
+                  fieldIdx !== undefined &&
+                  fieldIdx >= 0 &&
+                  row[fieldIdx] !== undefined &&
+                  row[fieldIdx] !== null &&
+                  row[fieldIdx] !== ""
+                ) {
+                  const value = row[fieldIdx];
+                  const trimmedValue = String(value).trim();
+
+                  // 빈 문자열이 아닌 경우에만 업데이트
+                  if (trimmedValue !== "") {
+                    // 디버깅: 첫 번째 상품만 로그 출력
+                    if (newProducts.length === 0) {
+                      console.log(
+                        `  📝 필드 매핑: ${dbColumn} (인덱스 ${fieldIdx}) = "${trimmedValue}"`
+                      );
+                    }
+
+                    // 숫자 필드 처리
+                    if (
+                      dbColumn === "price" ||
+                      dbColumn === "salePrice" ||
+                      dbColumn === "postFee"
+                    ) {
+                      const numValue = parseInt(trimmedValue);
+                      if (!isNaN(numValue)) {
+                        productInfo[dbColumn] = numValue;
+                      }
+                    }
+                    // 문자열 필드 처리
+                    else {
+                      productInfo[dbColumn] = trimmedValue;
+                    }
+                  }
+                } else if (fieldIdx !== undefined && fieldIdx >= 0) {
+                  // 디버깅: 값이 비어있는 경우
+                  if (newProducts.length === 0) {
+                    console.log(
+                      `  ⚠️ 필드 비어있음: ${dbColumn} (인덱스 ${fieldIdx}) = ${row[fieldIdx]}`
+                    );
+                  }
+                } else {
+                  // 디버깅: 필드가 엑셀에 없는 경우
+                  if (newProducts.length === 0) {
+                    console.log(
+                      `  ℹ️ 필드 없음: ${dbColumn} (엑셀에 해당 헤더가 없음)`
+                    );
+                  }
+                }
+              });
+
+              // 하위 호환성을 위해 기존 로직도 유지 (fieldIndices에 없는 경우만)
+              // 이미 위의 forEach 루프에서 처리된 필드는 건너뛰기
+              if (
+                typeIdx >= 0 &&
+                fieldIndices.type === undefined &&
+                row[typeIdx]
+              ) {
                 productInfo.type = row[typeIdx];
               }
-              if (postTypeIdx >= 0 && row[postTypeIdx]) {
+              if (
+                postTypeIdx >= 0 &&
+                fieldIndices.postType === undefined &&
+                row[postTypeIdx]
+              ) {
                 productInfo.postType = row[postTypeIdx];
               }
-              if (pkgIdx >= 0 && row[pkgIdx]) {
+              if (
+                pkgIdx >= 0 &&
+                fieldIndices.pkg === undefined &&
+                row[pkgIdx]
+              ) {
                 productInfo.pkg = String(row[pkgIdx]);
               }
-              if (priceIdx >= 0 && row[priceIdx]) {
+              if (
+                priceIdx >= 0 &&
+                fieldIndices.price === undefined &&
+                row[priceIdx]
+              ) {
                 productInfo.price = parseInt(String(row[priceIdx])) || null;
               }
-              if (postFeeIdx >= 0 && row[postFeeIdx]) {
+              if (
+                postFeeIdx >= 0 &&
+                fieldIndices.postFee === undefined &&
+                row[postFeeIdx]
+              ) {
                 productInfo.postFee = parseInt(String(row[postFeeIdx])) || null;
               }
 
+              console.log("productInfo >>>", productInfo);
+              console.log("newProducts >>>", newProducts);
               // 이미 수집된 상품인지 확인 (중복 방지)
               const existingProduct = newProducts.find(
                 (p) => p.name === name && p.code === code
@@ -298,11 +494,11 @@ export function useFileSave({
             `신규 상품 저장 중... (${newProducts.length}개)`
           );
 
-          // console.log("newProducts", newProducts);
+          console.log("newProducts", newProducts);
           const {batchCreateProducts} = await import("@/utils/api");
           const productResult = await batchCreateProducts(newProducts);
 
-          // console.log("productResult", productResult);
+          console.log("productResult", productResult);
           if (!productResult.success) {
             console.warn("신규 상품 저장 실패:", productResult.error);
             // 상품 저장 실패해도 업로드는 계속 진행

@@ -40,6 +40,8 @@ export async function POST(request: NextRequest) {
         etc,
       } = product;
 
+      console.log("product >>>", product);
+
       if (!name || !code) {
         return Promise.resolve(null);
       }
@@ -96,4 +98,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

@@ -55,6 +55,19 @@ export async function POST() {
       ALTER TABLE temp_files ALTER COLUMN session_id SET DEFAULT 'default-session'
     `;
 
+    // validation_status 컬럼 추가 (검증 상태 저장용)
+    await sql`
+      DO $$
+      BEGIN
+        -- validation_status 컬럼이 존재하지 않으면 추가
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                      WHERE table_name = 'temp_files' AND column_name = 'validation_status') THEN
+          ALTER TABLE temp_files ADD COLUMN validation_status JSONB;
+        END IF;
+      END
+      $$;
+    `;
+
     // 인덱스 생성
     await sql`
       CREATE INDEX IF NOT EXISTS idx_temp_files_file_id ON temp_files(file_id)

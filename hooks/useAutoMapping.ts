@@ -8,6 +8,7 @@ interface UseAutoMappingProps {
   setTableData: (data: any[][]) => void;
   setProductCodeMap: (map: {[name: string]: string}) => void;
   setHeaderIndex: (v: {nameIdx?: number} | null) => void;
+  fileId?: string; // 파일 ID 추가
 }
 
 export function useAutoMapping({
@@ -18,6 +19,7 @@ export function useAutoMapping({
   setTableData,
   setProductCodeMap,
   setHeaderIndex,
+  fileId,
 }: UseAutoMappingProps) {
   const codesOriginRef = useRef<any[]>([]);
 
@@ -124,11 +126,41 @@ export function useAutoMapping({
     // productCodeMap이 변경되었다면 갱신
     const originalKeys = Object.keys(productCodeMap);
     const newKeys = Object.keys(newMap);
-    if (
+    const productCodeMapChanged =
       originalKeys.length !== newKeys.length ||
-      originalKeys.some((k) => productCodeMap[k] !== newMap[k])
-    ) {
+      originalKeys.some((k) => productCodeMap[k] !== newMap[k]);
+
+    if (productCodeMapChanged) {
       setProductCodeMap(newMap);
+    }
+
+    // console.log(codes);
+    // console.log(productCodeMap);
+    // console.log(newMap);
+
+    // 변경사항이 있으면 sessionStorage에 최신 데이터 저장
+    if (changed || productCodeMapChanged) {
+      if (fileId) {
+        const storedFileKey = `uploadedFile_${fileId}`;
+        const storedFile = sessionStorage.getItem(storedFileKey);
+        if (storedFile) {
+          try {
+            const parsedFile = JSON.parse(storedFile);
+            // 최신 테이블 데이터와 productCodeMap으로 업데이트
+            const updatedFile = {
+              ...parsedFile,
+              tableData: changed ? newTable : parsedFile.tableData,
+              productCodeMap: productCodeMapChanged
+                ? newMap
+                : parsedFile.productCodeMap,
+            };
+            sessionStorage.setItem(storedFileKey, JSON.stringify(updatedFile));
+            console.log(`sessionStorage 업데이트됨: ${fileId}`);
+          } catch (error) {
+            console.error("sessionStorage 업데이트 실패:", error);
+          }
+        }
+      }
     }
   }, [
     tableData,
@@ -137,10 +169,10 @@ export function useAutoMapping({
     productCodeMap,
     setTableData,
     setProductCodeMap,
+    fileId,
   ]);
 
   return {
     codesOriginRef,
   };
 }
-

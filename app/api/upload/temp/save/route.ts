@@ -1,5 +1,6 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
+import {checkFileValidation} from "@/utils/fileValidation";
 
 // 중복 파일명 체크 함수 (세션별)
 async function checkDuplicateFileName(fileName: string, sessionId: string): Promise<boolean> {
@@ -55,16 +56,50 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        // 중복 파일명 체크 (세션별)
-        const isDuplicate = await checkDuplicateFileName(fileName, sessionId);
+        // 같은 file_id가 이미 존재하는지 확인 (업데이트인 경우)
+        const existingFile = await sql`
+          SELECT file_id FROM temp_files WHERE file_id = ${id}
+        `;
 
-        if (isDuplicate) {
-          console.log(`❌ 중복 파일명 감지로 저장 거부: "${fileName}"`);
-          return {
-            error: "DUPLICATE_FILENAME",
-            fileName: fileName,
-            message: `파일명 "${fileName}"이 이미 존재합니다.`,
-          };
+        // 같은 file_id가 없으면 중복 파일명 체크 (세션별)
+        if (existingFile.length === 0) {
+          const isDuplicate = await checkDuplicateFileName(fileName, sessionId);
+
+          if (isDuplicate) {
+            console.log(`❌ 중복 파일명 감지로 저장 거부: "${fileName}"`);
+            return {
+              error: "DUPLICATE_FILENAME",
+              fileName: fileName,
+              message: `파일명 "${fileName}"이 이미 존재합니다.`,
+            };
+          }
+        }
+
+        // 파일 검증 수행
+        const validationResult = checkFileValidation({
+          id,
+          fileName,
+          rowCount,
+          tableData,
+          headerIndex,
+          productCodeMap,
+        });
+
+        // validation_status 컬럼이 없으면 추가
+        try {
+          await sql`
+            DO $$
+            BEGIN
+              IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                            WHERE table_name = 'temp_files' AND column_name = 'validation_status') THEN
+                ALTER TABLE temp_files ADD COLUMN validation_status JSONB;
+              END IF;
+            END
+            $$;
+          `;
+        } catch (error: any) {
+          // 컬럼 추가 실패는 무시 (이미 존재할 수 있음)
+          console.log("validation_status 컬럼 확인:", error.message);
         }
 
         // session_id 컬럼 존재 여부에 따라 다르게 처리
@@ -74,7 +109,7 @@ export async function POST(request: NextRequest) {
             INSERT INTO temp_files (
               file_id, file_name, session_id, row_count,
               table_data, header_index, product_code_map,
-              created_at, updated_at
+              validation_status, created_at, updated_at
             )
             VALUES (
               ${id},
@@ -84,6 +119,7 @@ export async function POST(request: NextRequest) {
               ${JSON.stringify(tableData)},
               ${JSON.stringify(headerIndex || {})},
               ${JSON.stringify(productCodeMap || {})},
+              ${JSON.stringify(validationResult)},
               ${koreaTime.toISOString()}::timestamp,
               ${koreaTime.toISOString()}::timestamp
             )
@@ -94,17 +130,57 @@ export async function POST(request: NextRequest) {
               table_data = EXCLUDED.table_data,
               header_index = EXCLUDED.header_index,
               product_code_map = EXCLUDED.product_code_map,
+              validation_status = EXCLUDED.validation_status,
               updated_at = ${koreaTime.toISOString()}::timestamp
             RETURNING id
           `;
         } catch (error: any) {
-          // session_id 컬럼이 없으면 session_id 없이 저장
-          if (error.message && error.message.includes('column "session_id" does not exist')) {
+          // validation_status 컬럼이 없으면 다시 시도 (컬럼 추가 후)
+          if (error.message && error.message.includes('column "validation_status" does not exist')) {
+            // 컬럼 추가 시도
+            try {
+              await sql`ALTER TABLE temp_files ADD COLUMN validation_status JSONB`;
+            } catch (addError: any) {
+              // 이미 존재할 수 있음
+              console.log("validation_status 컬럼 추가:", addError.message);
+            }
+            // 다시 저장 시도
+            result = await sql`
+              INSERT INTO temp_files (
+                file_id, file_name, session_id, row_count,
+                table_data, header_index, product_code_map,
+                validation_status, created_at, updated_at
+              )
+              VALUES (
+                ${id},
+                ${fileName},
+                ${sessionId},
+                ${rowCount},
+                ${JSON.stringify(tableData)},
+                ${JSON.stringify(headerIndex || {})},
+                ${JSON.stringify(productCodeMap || {})},
+                ${JSON.stringify(validationResult)},
+                ${koreaTime.toISOString()}::timestamp,
+                ${koreaTime.toISOString()}::timestamp
+              )
+              ON CONFLICT (file_id) DO UPDATE SET
+                file_name = EXCLUDED.file_name,
+                session_id = EXCLUDED.session_id,
+                row_count = EXCLUDED.row_count,
+                table_data = EXCLUDED.table_data,
+                header_index = EXCLUDED.header_index,
+                product_code_map = EXCLUDED.product_code_map,
+                validation_status = EXCLUDED.validation_status,
+                updated_at = ${koreaTime.toISOString()}::timestamp
+              RETURNING id
+            `;
+          } else if (error.message && error.message.includes('column "session_id" does not exist')) {
+            // session_id 컬럼이 없으면 session_id 없이 저장
             result = await sql`
               INSERT INTO temp_files (
                 file_id, file_name, row_count,
                 table_data, header_index, product_code_map,
-                created_at, updated_at
+                validation_status, created_at, updated_at
               )
               VALUES (
                 ${id},
@@ -113,6 +189,7 @@ export async function POST(request: NextRequest) {
                 ${JSON.stringify(tableData)},
                 ${JSON.stringify(headerIndex || {})},
                 ${JSON.stringify(productCodeMap || {})},
+                ${JSON.stringify(validationResult)},
                 ${koreaTime.toISOString()}::timestamp,
                 ${koreaTime.toISOString()}::timestamp
               )
@@ -122,6 +199,7 @@ export async function POST(request: NextRequest) {
                 table_data = EXCLUDED.table_data,
                 header_index = EXCLUDED.header_index,
                 product_code_map = EXCLUDED.product_code_map,
+                validation_status = EXCLUDED.validation_status,
                 updated_at = ${koreaTime.toISOString()}::timestamp
               RETURNING id
             `;

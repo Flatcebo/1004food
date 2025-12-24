@@ -9,7 +9,7 @@ import {
   createNewSession,
   getAllSessions,
   switchSession,
-  deleteSession
+  deleteSession,
 } from "@/utils/sessionUtils";
 import {useAuthStore} from "@/stores/authStore";
 
@@ -291,17 +291,20 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
 
       // 현재 세션이 목록에 없으면 추가
       let updatedSessions = [...sessions];
-      if (currentSession && !sessions.find(s => s.sessionId === currentSession.sessionId)) {
+      if (
+        currentSession &&
+        !sessions.find((s) => s.sessionId === currentSession.sessionId)
+      ) {
         updatedSessions.push(currentSession);
       }
 
       // localStorage에서 이전에 선택한 세션 불러오기
       let finalSelectedId: string | null = currentSessionId; // 기본값은 현재 세션
-      if (typeof window !== 'undefined') {
-        const savedSelectedId = localStorage.getItem('selected_session_id');
-        if (savedSelectedId === 'all') {
+      if (typeof window !== "undefined") {
+        const savedSelectedId = localStorage.getItem("selected_session_id");
+        if (savedSelectedId === "all") {
           finalSelectedId = null; // 모든 세션
-        } else if (savedSelectedId && savedSelectedId !== 'null') {
+        } else if (savedSelectedId && savedSelectedId !== "null") {
           finalSelectedId = savedSelectedId; // 특정 세션
         }
       }
@@ -309,10 +312,10 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       set({
         availableSessions: updatedSessions,
         currentSession: currentSession,
-        selectedSessionId: finalSelectedId
+        selectedSessionId: finalSelectedId,
       });
     } catch (error) {
-      console.error('세션 로드 실패:', error);
+      console.error("세션 로드 실패:", error);
     }
   },
 
@@ -326,7 +329,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
         return true;
       }
     } catch (error) {
-      console.error('세션 생성 실패:', error);
+      console.error("세션 생성 실패:", error);
     }
     return false;
   },
@@ -335,7 +338,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     switchSession(session);
     set({
       currentSession: session,
-      selectedSessionId: session.sessionId
+      selectedSessionId: session.sessionId,
     });
     // 세션 변경 시 파일 목록 다시 로드
     get().loadFilesFromServer();
@@ -345,19 +348,19 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     const {availableSessions} = get();
 
     // 선택된 세션을 localStorage에 저장
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('selected_session_id', sessionId || 'all');
+    if (typeof window !== "undefined") {
+      localStorage.setItem("selected_session_id", sessionId || "all");
     }
 
     if (sessionId === null) {
       // 모든 세션 선택
       set({
         selectedSessionId: null,
-        currentSession: null
+        currentSession: null,
       });
     } else {
       // 특정 세션 선택
-      const session = availableSessions.find(s => s.sessionId === sessionId);
+      const session = availableSessions.find((s) => s.sessionId === sessionId);
       if (session) {
         get().switchToSession(session);
       }
@@ -383,7 +386,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
         return true;
       }
     } catch (error) {
-      console.error('세션 삭제 실패:', error);
+      console.error("세션 삭제 실패:", error);
     }
     return false;
   },
@@ -422,12 +425,12 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       return {confirmedFiles: newSet};
     }),
   saveFilesToServer: async () => {
-    const {uploadedFiles, selectedSessionId} = get();
+    const {uploadedFiles, selectedSessionId, loadFilesFromServer} = get();
     if (uploadedFiles.length === 0) {
       return false;
     }
 
-    const sessionId = selectedSessionId || await getCurrentSessionId();
+    const sessionId = selectedSessionId || (await getCurrentSessionId());
 
     try {
       const response = await fetch("/api/upload/temp/save", {
@@ -455,6 +458,14 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
         return false;
       }
 
+      // 서버 저장 성공 후 검증 상태를 포함한 최신 파일 목록 다시 불러오기
+      if (result.success && loadFilesFromServer) {
+        // 약간의 지연을 두어 DB 저장 완료 후 불러오기
+        setTimeout(async () => {
+          await loadFilesFromServer();
+        }, 100);
+      }
+
       return result.success;
     } catch (error) {
       console.error("서버 저장 실패:", error);
@@ -464,10 +475,15 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
   loadFilesFromServer: async () => {
     const {setUploadedFiles, confirmFile, selectedSessionId} = get();
 
-    const sessionId = selectedSessionId === null ? 'all' : (selectedSessionId || await getCurrentSessionId());
+    const sessionId =
+      selectedSessionId === null
+        ? "all"
+        : selectedSessionId || (await getCurrentSessionId());
 
     try {
-      const response = await fetch(`/api/upload/temp/list?sessionId=${sessionId}`);
+      const response = await fetch(
+        `/api/upload/temp/list?sessionId=${sessionId}`
+      );
       const result = await response.json();
 
       if (result.success && result.data) {

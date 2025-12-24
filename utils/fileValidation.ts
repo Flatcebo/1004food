@@ -5,10 +5,13 @@ import {UploadedFile} from "@/stores/uploadStore";
  * @param file 검증할 파일 객체
  * @returns 모든 row의 매핑코드와 업체명이 공란이 아니면 true, 검증 실패 이유를 포함한 객체
  */
-export function checkFileValidation(file: UploadedFile | any): { isValid: boolean; errors: string[] } {
+export function checkFileValidation(file: UploadedFile | any): {
+  isValid: boolean;
+  errors: string[];
+} {
   if (!file || !file.tableData || !file.tableData.length) {
     console.log("파일 데이터가 없습니다:", file);
-    return { isValid: false, errors: ["파일 데이터가 없습니다"] }; // 파일이 없거나 데이터가 없으면 무효
+    return {isValid: false, errors: ["파일 데이터가 없습니다"]}; // 파일이 없거나 데이터가 없으면 무효
   }
 
   const headerRow = file.tableData[0];
@@ -30,12 +33,12 @@ export function checkFileValidation(file: UploadedFile | any): { isValid: boolea
     vendorIdx,
     qtyIdx,
     rowCount: file.tableData.length - 1,
-    productCodeMapKeys: Object.keys(file.productCodeMap || {})
+    productCodeMapKeys: Object.keys(file.productCodeMap || {}),
   });
 
   // 상품명 인덱스가 없으면 업체명만 확인
   if (typeof nameIdx !== "number" || nameIdx === -1) {
-    if (vendorIdx === -1) return { isValid: true, errors: [] };
+    if (vendorIdx === -1) return {isValid: true, errors: []};
     for (let i = 1; i < file.tableData.length; i++) {
       const row = file.tableData[i];
       const vendorName = String(row[vendorIdx] || "").trim();
@@ -45,7 +48,7 @@ export function checkFileValidation(file: UploadedFile | any): { isValid: boolea
         errors.push(errorMsg);
       }
     }
-    return { isValid: errors.length === 0, errors };
+    return {isValid: errors.length === 0, errors};
   }
 
   // productCodeMap 가져오기
@@ -64,10 +67,10 @@ export function checkFileValidation(file: UploadedFile | any): { isValid: boolea
 
     // 매핑코드 확인 (우선순위: productCodeMap > 테이블 컬럼)
     let mappingCode = "";
-    
+
     // 1. productCodeMap에서 먼저 확인
     mappingCode = productCodeMap[productName] || "";
-    
+
     // 2. productCodeMap에 없으면 테이블 컬럼에서 확인
     if (!mappingCode && mappingIdx !== -1) {
       mappingCode = String(row[mappingIdx] || "").trim();
@@ -86,7 +89,8 @@ export function checkFileValidation(file: UploadedFile | any): { isValid: boolea
       vendorName,
       quantity,
       hasProductCodeMap: !!productCodeMap[productName],
-      hasTableMapping: mappingIdx !== -1 && !!String(row[mappingIdx] || "").trim()
+      hasTableMapping:
+        mappingIdx !== -1 && !!String(row[mappingIdx] || "").trim(),
     });
 
     // 수량이 2 이상이면 false
@@ -111,6 +115,9 @@ export function checkFileValidation(file: UploadedFile | any): { isValid: boolea
     }
   }
 
-  console.log("파일 검증 완료:", file.fileName, { isValid: errors.length === 0, errorCount: errors.length });
-  return { isValid: errors.length === 0, errors }; // 모든 row의 매핑코드와 업체명이 공란이 아니면 true
+  console.log("파일 검증 완료:", file.fileName, {
+    isValid: errors.length === 0,
+    errorCount: errors.length,
+  });
+  return {isValid: errors.length === 0, errors}; // 모든 row의 매핑코드와 업체명이 공란이 아니면 true
 }
