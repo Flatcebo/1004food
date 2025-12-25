@@ -42,6 +42,7 @@ export const POST_TYPE_OPTIONS = [
   {value: "롯데택배", label: "롯데택배"},
   {value: "한진택배", label: "한진택배"},
   {value: "천일택배", label: "천일택배"},
+  {value: "방문수령", label: "방문수령"},
 ] as const;
 
 /**

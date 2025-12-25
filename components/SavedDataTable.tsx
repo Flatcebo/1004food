@@ -1051,6 +1051,7 @@ const SavedDataTable = memo(function SavedDataTable({
           <option value="롯데택배">롯데택배</option>
           <option value="한진택배">한진택배</option>
           <option value="천일택배">천일택배</option>
+          <option value="방문수령">방문수령</option>
         </select>
         <input
           type="text"

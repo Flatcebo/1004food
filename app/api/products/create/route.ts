@@ -28,13 +28,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 택배사가 null이면 빈 문자열로 변환 (NULL은 UNIQUE 제약조건에서 서로 다른 값으로 취급되므로)
+    const normalizedPostType = postType || "";
+
     const result = await sql`
       INSERT INTO products (
         type, post_type, name, code, pkg, price, sale_price, post_fee,
         purchase, bill_type, category, product_type, sabang_name, etc
       ) VALUES (
         ${type || null},
-        ${postType || null},
+        ${normalizedPostType},
         ${name},
         ${code},
         ${pkg || null},
@@ -48,9 +51,9 @@ export async function POST(request: NextRequest) {
         ${sabangName || null},
         ${etc || null}
       )
-      ON CONFLICT (name, code) DO UPDATE SET
+      ON CONFLICT (name, code, post_type) DO UPDATE SET
         type = EXCLUDED.type,
-        post_type = EXCLUDED.post_type,
+        post_type = COALESCE(EXCLUDED.post_type, ''),
         pkg = EXCLUDED.pkg,
         price = EXCLUDED.price,
         sale_price = EXCLUDED.sale_price,

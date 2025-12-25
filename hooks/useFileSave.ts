@@ -316,7 +316,8 @@ export function useFileSave({
               // 상품의 모든 필드를 기본값으로 초기화
               PRODUCT_FIELD_ORDER.forEach((field) => {
                 if (!productInfo[field]) {
-                  productInfo[field] = null;
+                  // 택배사(postType)는 null 대신 빈 문자열로 초기화
+                  productInfo[field] = field === "postType" ? "" : null;
                 }
               });
 
@@ -330,7 +331,12 @@ export function useFileSave({
                     key !== "updatedAt" &&
                     key !== "name" // name은 현재 row의 name 사용
                   ) {
-                    productInfo[key] = matchedProduct[key];
+                    // 택배사(postType)는 null을 빈 문자열로 변환
+                    if (key === "postType") {
+                      productInfo[key] = matchedProduct[key] || "";
+                    } else {
+                      productInfo[key] = matchedProduct[key];
+                    }
                   }
                 });
 
@@ -395,7 +401,12 @@ export function useFileSave({
                     }
                     // 문자열 필드 처리
                     else {
-                      productInfo[dbColumn] = trimmedValue;
+                      // 택배사(postType) 필드는 빈 문자열도 유효한 값으로 처리
+                      if (dbColumn === "postType") {
+                        productInfo[dbColumn] = trimmedValue || "";
+                      } else {
+                        productInfo[dbColumn] = trimmedValue;
+                      }
                     }
                   }
                 } else if (fieldIdx !== undefined && fieldIdx >= 0) {
@@ -429,7 +440,12 @@ export function useFileSave({
                 fieldIndices.postType === undefined &&
                 row[postTypeIdx]
               ) {
-                productInfo.postType = row[postTypeIdx];
+                // 택배사 값이 있으면 trim하고, 없으면 빈 문자열로 설정
+                const postTypeValue = String(row[postTypeIdx] || "").trim();
+                productInfo.postType = postTypeValue || "";
+              } else if (fieldIndices.postType === undefined) {
+                // 택배사 필드가 없거나 값이 없으면 빈 문자열로 설정
+                productInfo.postType = "";
               }
               if (
                 pkgIdx >= 0 &&
@@ -453,12 +469,27 @@ export function useFileSave({
                 productInfo.postFee = parseInt(String(row[postFeeIdx])) || null;
               }
 
+              // 택배사가 null이면 빈 문자열로 정규화 (NULL은 UNIQUE 제약조건에서 서로 다른 값으로 취급되므로)
+              if (
+                productInfo.postType === null ||
+                productInfo.postType === undefined
+              ) {
+                productInfo.postType = "";
+              }
+
               console.log("productInfo >>>", productInfo);
               console.log("newProducts >>>", newProducts);
-              // 이미 수집된 상품인지 확인 (중복 방지)
-              const existingProduct = newProducts.find(
-                (p) => p.name === name && p.code === code
-              );
+              // 이미 수집된 상품인지 확인 (중복 방지) - 상품명, 매핑코드, 택배사 모두 같아야 중복으로 간주
+              // 택배사는 null/undefined를 빈 문자열로 정규화하여 비교
+              const normalizedPostType = productInfo.postType || "";
+              const existingProduct = newProducts.find((p) => {
+                const pPostType = p.postType || "";
+                return (
+                  p.name === name &&
+                  p.code === code &&
+                  pPostType === normalizedPostType
+                );
+              });
               if (!existingProduct) {
                 newProducts.push(productInfo);
               }
