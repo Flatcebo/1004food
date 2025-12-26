@@ -41,7 +41,15 @@ const INTERNAL_COLUMNS: ColumnDef[] = [
   {
     key: "receiverName",
     label: "수취인명",
-    aliases: ["수취인명", "수취인", "받는분", "받는 사람", "수령인", "받는분"],
+    aliases: [
+      "수취인명",
+      "수취인",
+      "받는분",
+      "받는 사람",
+      "수령인",
+      "받는분",
+      "받는분성명",
+    ],
   },
   {
     key: "receiverPhone",
@@ -57,6 +65,7 @@ const INTERNAL_COLUMNS: ColumnDef[] = [
       "수령인 전화번호",
       "수령인 전화번호1",
       "수취인 전화번호1",
+      "받는분전화번호",
     ],
   },
   {
@@ -104,7 +113,7 @@ const INTERNAL_COLUMNS: ColumnDef[] = [
   {
     key: "ordererName",
     label: "주문자명",
-    aliases: ["주문자명", "주문자", "주문자 이름"],
+    aliases: ["주문자명", "주문자", "주문자 이름", "보내는분성명"],
   },
   {
     key: "ordererPhone",
@@ -114,6 +123,7 @@ const INTERNAL_COLUMNS: ColumnDef[] = [
       "주문자 전화번화",
       "주문자전화번호",
       "주문자전화번호1",
+      "보내는분전화번호",
     ],
   },
   {
@@ -621,9 +631,51 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             return;
           }
 
-          const rawHeader = raw[0] as any[];
           const normalize = (v: any) =>
             typeof v === "string" ? v.replace(/\s+/g, "").toLowerCase() : "";
+
+          // 헤더 행 동적 감지 함수
+          const detectHeaderRow = (rows: any[][]): number => {
+            // 최대 10행까지 검사 (성능 고려)
+            const maxRowsToCheck = Math.min(10, rows.length);
+            let bestHeaderRow = 0;
+            let bestMatchCount = 0;
+
+            for (let rowIdx = 0; rowIdx < maxRowsToCheck; rowIdx++) {
+              const row = rows[rowIdx];
+              if (!row || !Array.isArray(row)) continue;
+
+              // 이 행에서 매칭되는 컬럼 개수 계산
+              let matchCount = 0;
+              INTERNAL_COLUMNS.forEach((col) => {
+                const found = row.some((cell) => {
+                  if (!cell || typeof cell !== "string") return false;
+                  return col.aliases.some(
+                    (al) => normalize(cell) === normalize(al)
+                  );
+                });
+                if (found) matchCount++;
+              });
+
+              // 더 많은 매칭을 찾으면 업데이트
+              if (matchCount > bestMatchCount) {
+                bestMatchCount = matchCount;
+                bestHeaderRow = rowIdx;
+              }
+            }
+
+            // 최소 3개 이상의 컬럼이 매칭되어야 헤더로 인정
+            // 그렇지 않으면 기본값인 0번 행 사용
+            if (bestMatchCount < 3) {
+              return 0;
+            }
+
+            return bestHeaderRow;
+          };
+
+          // 헤더 행 찾기
+          const headerRowIndex = detectHeaderRow(raw);
+          const rawHeader = raw[headerRowIndex] as any[];
 
           // 각 내부 컬럼에 대응하는 원본 인덱스 계산
           const indexMap: {[key: string]: number} = {};
@@ -635,8 +687,9 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
           });
 
           // 내부 절대 순서로 헤더/데이터 재구성
+          // 헤더 행 다음부터 데이터로 사용
           const canonicalHeader = INTERNAL_COLUMNS.map((c) => c.label);
-          const canonicalRows = raw.slice(1).map((row) =>
+          const canonicalRows = raw.slice(headerRowIndex + 1).map((row) =>
             INTERNAL_COLUMNS.map((c) => {
               const idx = indexMap[c.key];
               let value = idx >= 0 ? row[idx] ?? "" : "";
