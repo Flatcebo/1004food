@@ -12,7 +12,7 @@ export function getColumnWidth(header: string): string {
     내부코드: "119px",
     등록일: "90px",
     매핑코드: "60px",
-    주문상태: "60px",
+    주문상태: "80px",
     우편: "60px",
     우편번호: "60px",
     내외주: "50px",
@@ -41,5 +41,5 @@ export function getColumnWidth(header: string): string {
     배송메시지: "70px",
     "수취인 전화번호": "106px",
   };
-  return widthMap[header] || "100px";
+  return widthMap[header] || "70px";
 }

@@ -2,6 +2,10 @@ import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
 import * as XLSX from "xlsx";
 import {normalizeCarrierName} from "@/utils/carrierMapping";
+import {
+  detectHeaderRowByRequiredHeaders,
+  normalizeHeader,
+} from "@/utils/excelHeaderDetection";
 
 // 한국 시간(KST, UTC+9)을 반환하는 함수
 function getKoreaTime(): Date {
@@ -9,11 +13,6 @@ function getKoreaTime(): Date {
   const utcTime = now.getTime() + now.getTimezoneOffset() * 60000;
   const koreaTime = new Date(utcTime + 9 * 3600000);
   return koreaTime;
-}
-
-// 헤더를 정규화하는 함수
-function normalizeHeader(header: string): string {
-  return header.replace(/\s+/g, "").toLowerCase();
 }
 
 export async function POST(request: NextRequest) {
@@ -57,14 +56,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 헤더 파싱 및 필수 헤더 찾기
-    const headers = raw[0] as string[];
+    // 헤더 행 자동 감지 (1~6행 사이에서 찾기)
+    const requiredHeaders = [
+      {
+        name: "주문번호",
+        aliases: ["주문번호", "ordernumber"],
+      },
+      {
+        name: "운송장번호",
+        aliases: ["운송장번호", "운송장", "trackingnumber", "tracking"],
+      },
+      {
+        name: "택배사",
+        aliases: ["택배사", "carrier", "배송사", "배송업체"],
+      },
+    ];
+
+    const headerRowIndex = detectHeaderRowByRequiredHeaders(
+      raw,
+      requiredHeaders,
+      6
+    );
+    const headers = raw[headerRowIndex] as string[];
+
+    console.log(`헤더 행 감지: ${headerRowIndex + 1}행 (인덱스: ${headerRowIndex})`);
+    console.log("엑셀 헤더:", headers);
+
+    // 헤더 파싱 및 필수 헤더 인덱스 찾기
     let orderNumberIdx = -1;
     let trackingNumberIdx = -1;
     let carrierIdx = -1;
-
-    // 디버깅: 헤더 정보 로그 출력
-    console.log("엑셀 헤더:", headers);
 
     // 첫 번째 패스: 정확한 매칭 우선 (운송장번호, 주문번호 등)
     headers.forEach((header, index) => {
@@ -180,8 +201,14 @@ export async function POST(request: NextRequest) {
     // 데이터 행 파싱 및 검증
     const deliveryUpdates = [];
     const errors = [];
+    
+    // 헤더 행 다음부터 데이터로 사용
+    const dataStartIndex = headerRowIndex + 1;
+    
+    // 헤더를 제외한 전체 데이터 행 수 계산 (빈 행 제외)
+    const totalDataRows = raw.slice(dataStartIndex).filter(row => row && row.length > 0).length;
 
-    for (let i = 1; i < raw.length; i++) {
+    for (let i = dataStartIndex; i < raw.length; i++) {
       const row = raw[i];
       if (!row || row.length === 0) continue;
 
@@ -329,8 +356,8 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        message: `총 ${deliveryUpdates.length}건 중 ${successCount}건 성공, ${failCount}건 실패`,
-        totalCount: deliveryUpdates.length,
+        message: `총 ${totalDataRows}건 중 ${successCount}건 성공, ${failCount}건 실패`,
+        totalCount: totalDataRows, // 헤더를 제외한 전체 데이터 행 수
         successCount,
         failCount,
         results,

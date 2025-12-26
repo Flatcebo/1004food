@@ -507,7 +507,7 @@ const SavedDataTable = memo(function SavedDataTable({
             orderStatus:
               deliveryData[id]?.carrier &&
               deliveryData[id]?.trackingNumber?.trim()
-                ? "운송장 완료"
+                ? "배송중"
                 : "공급중", // 입력되지 않은 항목은 공급중 상태 유지
           })),
         }),
@@ -762,6 +762,7 @@ const SavedDataTable = memo(function SavedDataTable({
             const isRegistrationDate = header === "등록일";
             const isDeliveryInput = header === "운송장입력";
             const isDeliveryMessage = header === "배송메시지";
+            const isTrackingNumber = header === "운송장번호";
             const isOrdererName = header === "주문자명";
             const isOrdererPhone = header === "주문자 전화번호";
             const cellValue = getCombinedCellValue(row, header);
@@ -802,7 +803,7 @@ const SavedDataTable = memo(function SavedDataTable({
                   isDeliveryInput ||
                   isInternalCode
                     ? "cursor-pointer hover:bg-blue-50"
-                    : isDeliveryMessage
+                    : isDeliveryMessage || isTrackingNumber
                     ? "cursor-default"
                     : ""
                 } ${isOrdererName || isOrdererPhone ? "text-blue-600" : ""}`}
@@ -833,10 +834,12 @@ const SavedDataTable = memo(function SavedDataTable({
                   }
                 }}
                 title={
-                  !isDeliveryInput && !isDeliveryMessage
+                  !isDeliveryInput && !isDeliveryMessage && !isTrackingNumber
                     ? cellValue.replace(/\n/g, " / ")
                     : isDeliveryMessage
                     ? cellValue || "배송메시지 없음"
+                    : isTrackingNumber
+                    ? cellValue || "운송장번호 없음"
                     : ""
                 }
               >
@@ -848,6 +851,12 @@ const SavedDataTable = memo(function SavedDataTable({
                   />
                 ) : isDeliveryMessage ? (
                   <TableDeliveryMessageCell
+                    cellValue={cellValue}
+                    handleTooltipShow={handleTooltipShow}
+                    handleTooltipHide={handleTooltipHide}
+                  />
+                ) : isTrackingNumber ? (
+                  <TableTrackingNumberCell
                     cellValue={cellValue}
                     handleTooltipShow={handleTooltipShow}
                     handleTooltipHide={handleTooltipHide}
@@ -1021,6 +1030,63 @@ const SavedDataTable = memo(function SavedDataTable({
     }
   );
 
+  // 운송장번호 버튼 컴포넌트 메모이제이션
+  const TableTrackingNumberCell = memo(
+    ({
+      cellValue,
+      handleTooltipShow,
+      handleTooltipHide,
+    }: {
+      cellValue: string;
+      handleTooltipShow: (content: string, x: number, y: number) => void;
+      handleTooltipHide: () => void;
+    }) => {
+      const handleClick = async () => {
+        if (cellValue && cellValue.trim()) {
+          try {
+            await navigator.clipboard.writeText(cellValue);
+            handleTooltipShow("복사되었습니다!", 0, 0);
+            setTimeout(() => {
+              handleTooltipShow(cellValue || "운송장번호 없음", 0, 0);
+            }, 1000);
+          } catch (err) {
+            console.error("클립보드 복사 실패:", err);
+            handleTooltipShow("복사 실패", 0, 0);
+            setTimeout(() => {
+              handleTooltipShow(cellValue || "운송장번호 없음", 0, 0);
+            }, 1000);
+          }
+        }
+      };
+
+      const hasValue = cellValue && cellValue.trim();
+
+      return (
+        <div className="flex items-center justify-center">
+          <div
+            className={`px-2 py-1 rounded text-xs font-medium border ${
+              hasValue
+                ? "cursor-pointer bg-blue-100 border-blue-300 text-blue-800 hover:bg-blue-200"
+                : "cursor-not-allowed bg-gray-200 border-gray-400 text-gray-500"
+            }`}
+            onMouseEnter={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              handleTooltipShow(
+                hasValue ? cellValue : "운송장번호 없음 (클릭 불가)",
+                rect.left + rect.width / 2,
+                rect.top - 10
+              );
+            }}
+            onMouseLeave={handleTooltipHide}
+            onClick={handleClick}
+          >
+            TN
+          </div>
+        </div>
+      );
+    }
+  );
+
   // 운송장 입력 필드 컴포넌트 메모이제이션
   const TableDeliveryInputCell = memo(
     ({
@@ -1070,6 +1136,7 @@ const SavedDataTable = memo(function SavedDataTable({
   TableMappingCodeCell.displayName = "TableMappingCodeCell";
   TableInternalCodeCell.displayName = "TableInternalCodeCell";
   TableDeliveryMessageCell.displayName = "TableDeliveryMessageCell";
+  TableTrackingNumberCell.displayName = "TableTrackingNumberCell";
   TableDeliveryInputCell.displayName = "TableDeliveryInputCell";
   TableRow.displayName = "TableRow";
   const orderStatusIdx = useMemo(

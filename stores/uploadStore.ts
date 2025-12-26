@@ -12,6 +12,10 @@ import {
   deleteSession,
 } from "@/utils/sessionUtils";
 import {useAuthStore} from "@/stores/authStore";
+import {
+  detectHeaderRowByColumnAliases,
+  normalizeHeader,
+} from "@/utils/excelHeaderDetection";
 
 type ColumnDef = {
   key: string;
@@ -631,57 +635,25 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             return;
           }
 
-          const normalize = (v: any) =>
-            typeof v === "string" ? v.replace(/\s+/g, "").toLowerCase() : "";
-
-          // 헤더 행 동적 감지 함수
-          const detectHeaderRow = (rows: any[][]): number => {
-            // 최대 10행까지 검사 (성능 고려)
-            const maxRowsToCheck = Math.min(10, rows.length);
-            let bestHeaderRow = 0;
-            let bestMatchCount = 0;
-
-            for (let rowIdx = 0; rowIdx < maxRowsToCheck; rowIdx++) {
-              const row = rows[rowIdx];
-              if (!row || !Array.isArray(row)) continue;
-
-              // 이 행에서 매칭되는 컬럼 개수 계산
-              let matchCount = 0;
-              INTERNAL_COLUMNS.forEach((col) => {
-                const found = row.some((cell) => {
-                  if (!cell || typeof cell !== "string") return false;
-                  return col.aliases.some(
-                    (al) => normalize(cell) === normalize(al)
-                  );
-                });
-                if (found) matchCount++;
-              });
-
-              // 더 많은 매칭을 찾으면 업데이트
-              if (matchCount > bestMatchCount) {
-                bestMatchCount = matchCount;
-                bestHeaderRow = rowIdx;
-              }
-            }
-
-            // 최소 3개 이상의 컬럼이 매칭되어야 헤더로 인정
-            // 그렇지 않으면 기본값인 0번 행 사용
-            if (bestMatchCount < 3) {
-              return 0;
-            }
-
-            return bestHeaderRow;
-          };
-
-          // 헤더 행 찾기
-          const headerRowIndex = detectHeaderRow(raw);
+          // 헤더 행 자동 감지 (1~6행 사이에서 찾기, 공통 유틸리티 사용)
+          const headerRowIndex = detectHeaderRowByColumnAliases(
+            raw,
+            INTERNAL_COLUMNS.map((col) => ({
+              key: col.key,
+              aliases: col.aliases,
+            })),
+            3, // 최소 매칭 개수
+            6 // 최대 검사 행 수 (1~6행)
+          );
           const rawHeader = raw[headerRowIndex] as any[];
 
           // 각 내부 컬럼에 대응하는 원본 인덱스 계산
           const indexMap: {[key: string]: number} = {};
           INTERNAL_COLUMNS.forEach((col) => {
             const idx = rawHeader.findIndex((h) =>
-              col.aliases.some((al) => normalize(h) === normalize(al))
+              col.aliases.some(
+                (al) => normalizeHeader(String(h)) === normalizeHeader(al)
+              )
             );
             indexMap[col.key] = idx; // 없으면 -1
           });

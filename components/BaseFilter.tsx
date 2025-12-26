@@ -183,7 +183,7 @@ export default function BaseFilter({
               <option value="공급중">공급중</option>
               <option value="발주서 다운">발주서 다운</option>
               <option value="사방넷 다운">사방넷 다운</option>
-              <option value="운송장 완료">운송장 완료</option>
+              <option value="배송중">배송중</option>
               <option value="취소">취소</option>
             </select>
           </label>
