@@ -63,20 +63,74 @@ export async function POST(request: NextRequest) {
     let trackingNumberIdx = -1;
     let carrierIdx = -1;
 
-    headers.forEach((header, index) => {
-      const normalized = normalizeHeader(String(header).trim());
+    // 디버깅: 헤더 정보 로그 출력
+    console.log("엑셀 헤더:", headers);
 
-      // 다양한 헤더명 패턴 처리
-      if (normalized.includes("주문번호") || normalized.includes("ordernumber")) {
-        orderNumberIdx = index;
+    // 첫 번째 패스: 정확한 매칭 우선 (운송장번호, 주문번호 등)
+    headers.forEach((header, index) => {
+      const headerStr = String(header).trim();
+      const normalized = normalizeHeader(headerStr);
+
+      // 주문번호 정확한 매칭
+      if (orderNumberIdx === -1) {
+        if (normalized === "주문번호" || normalized === "ordernumber") {
+          orderNumberIdx = index;
+          console.log(`주문번호 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`);
+        }
       }
-      if (normalized.includes("운송장") || normalized.includes("tracking") ||
-          normalized.includes("trackingnumber") || normalized.includes("운송장번호")) {
-        trackingNumberIdx = index;
+
+      // 운송장번호 정확한 매칭 (운송장보다 우선)
+      if (trackingNumberIdx === -1) {
+        if (normalized === "운송장번호" || normalized === "trackingnumber") {
+          trackingNumberIdx = index;
+          console.log(`운송장번호 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`);
+        }
       }
-      if (normalized.includes("택배사") || normalized.includes("carrier") ||
-          normalized.includes("배송사") || normalized.includes("배송업체")) {
-        carrierIdx = index;
+
+      // 택배사 정확한 매칭
+      if (carrierIdx === -1) {
+        if (normalized === "택배사" || normalized === "carrier") {
+          carrierIdx = index;
+          console.log(`택배사 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`);
+        }
+      }
+    });
+
+    // 두 번째 패스: 포함 검사 (정확한 매칭이 없을 경우)
+    headers.forEach((header, index) => {
+      const headerStr = String(header).trim();
+      const normalized = normalizeHeader(headerStr);
+
+      // 주문번호 포함 검사
+      if (orderNumberIdx === -1) {
+        if (normalized.includes("주문번호") || normalized.includes("ordernumber")) {
+          orderNumberIdx = index;
+          console.log(`주문번호 헤더 발견 (포함 검사): "${headerStr}" (인덱스: ${index})`);
+        }
+      }
+
+      // 운송장 포함 검사 (운송장번호가 없을 때만)
+      if (trackingNumberIdx === -1) {
+        if (
+          normalized.includes("운송장") ||
+          normalized.includes("trackingnumber") ||
+          normalized.includes("tracking")
+        ) {
+          trackingNumberIdx = index;
+          console.log(`운송장 헤더 발견 (포함 검사): "${headerStr}" (인덱스: ${index})`);
+        }
+      }
+
+      // 택배사 포함 검사
+      if (carrierIdx === -1) {
+        if (
+          normalized.includes("배송사") ||
+          normalized.includes("배송업체") ||
+          normalized.includes("carrier")
+        ) {
+          carrierIdx = index;
+          console.log(`택배사 헤더 발견 (포함 검사): "${headerStr}" (인덱스: ${index})`);
+        }
       }
     });
 
@@ -85,7 +139,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "주문번호 헤더를 찾을 수 없습니다. '주문번호' 헤더가 필요합니다.",
+          error: `주문번호 헤더를 찾을 수 없습니다. '주문번호' 헤더가 필요합니다.\n발견된 헤더: ${headers.join(", ")}`,
+          foundHeaders: headers,
+          missingHeaders: ["주문번호"],
         },
         {status: 400}
       );
@@ -95,7 +151,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "운송장 헤더를 찾을 수 없습니다. '운송장' 또는 '운송장번호' 헤더가 필요합니다.",
+          error: `운송장 헤더를 찾을 수 없습니다. '운송장' 또는 '운송장번호' 헤더가 필요합니다.\n발견된 헤더: ${headers.join(", ")}`,
+          foundHeaders: headers,
+          missingHeaders: ["운송장", "운송장번호"],
         },
         {status: 400}
       );
@@ -105,11 +163,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "택배사 헤더를 찾을 수 없습니다. '택배사' 헤더가 필요합니다.",
+          error: `택배사 헤더를 찾을 수 없습니다. '택배사' 헤더가 필요합니다.\n발견된 헤더: ${headers.join(", ")}`,
+          foundHeaders: headers,
+          missingHeaders: ["택배사"],
         },
         {status: 400}
       );
     }
+
+    console.log("헤더 매핑 완료:", {
+      주문번호: headers[orderNumberIdx],
+      운송장: headers[trackingNumberIdx],
+      택배사: headers[carrierIdx],
+    });
 
     // 데이터 행 파싱 및 검증
     const deliveryUpdates = [];
