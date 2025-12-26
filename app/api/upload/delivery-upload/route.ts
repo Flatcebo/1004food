@@ -246,19 +246,39 @@ export async function POST(request: NextRequest) {
         const update = deliveryUpdates[i];
 
         try {
-          // 주문번호로 해당 데이터 찾기
-          const existingOrder = await sql`
+          // 주문번호 또는 내부코드로 해당 데이터 찾기
+          // 먼저 주문번호로 검색
+          let existingOrder = await sql`
             SELECT id, row_data FROM upload_rows
             WHERE row_data->>'주문번호' = ${update.orderNumber}
             ORDER BY id DESC
             LIMIT 1
           `;
 
+          let matchType = "주문번호";
+
+          // 주문번호로 찾지 못하면 내부코드로 검색
+          if (existingOrder.length === 0) {
+            existingOrder = await sql`
+              SELECT id, row_data FROM upload_rows
+              WHERE row_data->>'내부코드' = ${update.orderNumber}
+              ORDER BY id DESC
+              LIMIT 1
+            `;
+            if (existingOrder.length > 0) {
+              matchType = "내부코드";
+            }
+          }
+
+          if (existingOrder.length > 0) {
+            console.log(`✅ 매칭 성공: ${update.orderNumber} → ${matchType}로 찾음`);
+          }
+
           if (existingOrder.length === 0) {
             results.push({
               orderNumber: update.orderNumber,
               success: false,
-              error: "주문번호를 찾을 수 없습니다.",
+              error: `주문번호/내부코드를 찾을 수 없습니다. (검색값: ${update.orderNumber})`,
               rowNumber: update.rowNumber,
             });
             failCount++;
