@@ -4,7 +4,7 @@ import sql from "@/lib/db";
 export async function GET(request: NextRequest) {
   try {
     const {searchParams} = new URL(request.url);
-    const sessionId = searchParams.get('sessionId');
+    const sessionId = searchParams.get("sessionId");
 
     // validation_status 컬럼이 없으면 추가
     try {
@@ -25,9 +25,9 @@ export async function GET(request: NextRequest) {
 
     let files: any[] = [];
     try {
-      if (sessionId === 'all') {
+      if (sessionId === "all") {
         // 모든 세션의 파일 조회
-        files = await sql`
+        files = (await sql`
           SELECT
             file_id as id,
             file_name as "fileName",
@@ -42,10 +42,10 @@ export async function GET(request: NextRequest) {
             updated_at
           FROM temp_files
           ORDER BY created_at DESC
-        ` as any[];
+        `) as any[];
       } else if (sessionId) {
         // 임시 해결: session_id 컬럼 문제로 모든 파일을 반환
-        files = await sql`
+        files = (await sql`
           SELECT
             file_id as id,
             file_name as "fileName",
@@ -60,13 +60,16 @@ export async function GET(request: NextRequest) {
             updated_at
           FROM temp_files
           ORDER BY created_at DESC
-        ` as any[];
+        `) as any[];
       }
     } catch (error: any) {
       // validation_status 컬럼이 없으면 컬럼 없이 조회
-      if (error.message && error.message.includes('column "validation_status" does not exist')) {
-        if (sessionId === 'all') {
-          files = await sql`
+      if (
+        error.message &&
+        error.message.includes('column "validation_status" does not exist')
+      ) {
+        if (sessionId === "all") {
+          files = (await sql`
             SELECT
               file_id as id,
               file_name as "fileName",
@@ -81,9 +84,9 @@ export async function GET(request: NextRequest) {
               updated_at
             FROM temp_files
             ORDER BY created_at DESC
-          ` as any[];
+          `) as any[];
         } else if (sessionId) {
-          files = await sql`
+          files = (await sql`
             SELECT
               file_id as id,
               file_name as "fileName",
@@ -98,7 +101,7 @@ export async function GET(request: NextRequest) {
               updated_at
             FROM temp_files
             ORDER BY created_at DESC
-          ` as any[];
+          `) as any[];
         }
       } else {
         throw error;
@@ -119,4 +122,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-

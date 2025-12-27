@@ -22,6 +22,8 @@ export function checkFileValidation(file: UploadedFile | any): {
   const vendorIdx = headerRow.findIndex(
     (h: any) => h === "업체명" || h === "업체"
   );
+  const typeIdx = headerRow.findIndex((h: any) => h === "내외주");
+  const postTypeIdx = headerRow.findIndex((h: any) => h === "택배사");
   const qtyIdx = headerRow.findIndex((h: any) => h === "수량");
 
   const errors: string[] = [];
@@ -79,26 +81,23 @@ export function checkFileValidation(file: UploadedFile | any): {
     // 업체명 확인
     const vendorName =
       vendorIdx !== -1 ? String(row[vendorIdx] || "").trim() : "";
-
-    // 수량 확인
-    const quantity = qtyIdx !== -1 ? Number(row[qtyIdx]) || 0 : 0;
+    
+    // 내외주 확인
+    const type = typeIdx !== -1 ? String(row[typeIdx] || "").trim() : "";
+    
+    // 택배사 확인
+    const postType = postTypeIdx !== -1 ? String(row[postTypeIdx] || "").trim() : "";
 
     console.log(`행 ${i} 검증:`, {
       productName,
       mappingCode,
       vendorName,
-      quantity,
+      type,
+      postType,
       hasProductCodeMap: !!productCodeMap[productName],
       hasTableMapping:
         mappingIdx !== -1 && !!String(row[mappingIdx] || "").trim(),
     });
-
-    // 수량이 2 이상이면 false
-    if (quantity >= 2) {
-      const errorMsg = `행 ${i}: 수량이 2 이상입니다 (${quantity}). 상품명: "${productName}"`;
-      console.log(errorMsg);
-      errors.push(errorMsg);
-    }
 
     // 매핑코드가 없으면 false
     if (!mappingCode) {
@@ -110,6 +109,20 @@ export function checkFileValidation(file: UploadedFile | any): {
     // 업체명 컬럼이 있는 경우: 업체명이 공란이 아니어야 함
     if (vendorIdx !== -1 && !vendorName) {
       const errorMsg = `행 ${i}: 업체명이 공란입니다. 상품명: "${productName}"`;
+      console.log(errorMsg);
+      errors.push(errorMsg);
+    }
+
+    // 내외주 컬럼이 있는 경우: 내외주가 공란이 아니어야 함
+    if (typeIdx !== -1 && !type) {
+      const errorMsg = `행 ${i}: 내외주가 공란입니다. 상품명: "${productName}"`;
+      console.log(errorMsg);
+      errors.push(errorMsg);
+    }
+
+    // 택배사 컬럼이 있는 경우: 택배사가 공란이 아니어야 함
+    if (postTypeIdx !== -1 && !postType) {
+      const errorMsg = `행 ${i}: 택배사가 공란입니다. 상품명: "${productName}"`;
       console.log(errorMsg);
       errors.push(errorMsg);
     }

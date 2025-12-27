@@ -91,6 +91,9 @@ const SavedDataTable = memo(function SavedDataTable({
     // 운송장 입력 모드일 때는 매핑코드와 운송장번호만 숨김 (배송메시지는 운송장입력으로 변경됨)
     if (isDeliveryInputMode) {
       baseHiddenHeaders.push("매핑코드", "운송장번호");
+    } else {
+      // 운송장 입력 모드가 아닐 때는 운송장번호를 택배사에 합쳐서 표시하므로 숨김
+      baseHiddenHeaders.push("운송장번호");
     }
 
     return baseHiddenHeaders;
@@ -140,6 +143,8 @@ const SavedDataTable = memo(function SavedDataTable({
         return "내부코드\n주문번호";
       case "업체명":
         return "업체명\n쇼핑몰명";
+      case "택배사":
+        return "택배사\n운송장번호";
       case "우편":
         return "우편번호";
       case "id":
@@ -205,6 +210,14 @@ const SavedDataTable = memo(function SavedDataTable({
           return `${vendorName}\n${shopName}`;
         }
         return vendorName || shopName;
+
+      case "택배사":
+        const carrier = row["택배사"] || "";
+        const trackingNumber = row["운송장번호"] || "";
+        if (carrier && trackingNumber) {
+          return `${carrier}\n${trackingNumber}`;
+        }
+        return carrier || trackingNumber;
 
       case "주문자명":
         // 수취인명 컬럼에서 이미 처리되므로 이 컬럼은 숨겨짐
@@ -763,6 +776,7 @@ const SavedDataTable = memo(function SavedDataTable({
             const isDeliveryInput = header === "운송장입력";
             const isDeliveryMessage = header === "배송메시지";
             const isTrackingNumber = header === "운송장번호";
+            const isCarrier = header === "택배사";
             const isOrdererName = header === "주문자명";
             const isOrdererPhone = header === "주문자 전화번호";
             const cellValue = getCombinedCellValue(row, header);
@@ -787,6 +801,10 @@ const SavedDataTable = memo(function SavedDataTable({
                   const vendorName = row["업체명"] || "";
                   const shopName = row["쇼핑몰명"] || "";
                   return vendorName && shopName && vendorName !== shopName;
+                case "택배사":
+                  const carrier = row["택배사"] || "";
+                  const trackingNumber = row["운송장번호"] || "";
+                  return carrier && trackingNumber;
                 default:
                   return false;
               }
@@ -868,6 +886,24 @@ const SavedDataTable = memo(function SavedDataTable({
                     handleEditClick={handleEditClick}
                     row={row}
                   />
+                ) : isCarrier && isCombinedCell && isMultiLine ? (
+                  <div className="flex items-center justify-center">
+                    <TableCarrierTrackingButton
+                      carrierName={cellValue.split("\n")[0] || ""}
+                      trackingNumber={cellValue.split("\n")[1] || ""}
+                      handleTooltipShow={handleTooltipShow}
+                      handleTooltipHide={handleTooltipHide}
+                    />
+                  </div>
+                ) : isCarrier ? (
+                  <div className="flex items-center justify-center">
+                    <TableCarrierTrackingButton
+                      carrierName={row["택배사"] || ""}
+                      trackingNumber={row["운송장번호"] || ""}
+                      handleTooltipShow={handleTooltipShow}
+                      handleTooltipHide={handleTooltipHide}
+                    />
+                  </div>
                 ) : isCombinedCell && isMultiLine ? (
                   <span>
                     {cellValue
@@ -1087,6 +1123,63 @@ const SavedDataTable = memo(function SavedDataTable({
     }
   );
 
+  // 택배사 운송장번호 버튼 컴포넌트 메모이제이션
+  const TableCarrierTrackingButton = memo(
+    ({
+      carrierName,
+      trackingNumber,
+      handleTooltipShow,
+      handleTooltipHide,
+    }: {
+      carrierName: string;
+      trackingNumber: string;
+      handleTooltipShow: (content: string, x: number, y: number) => void;
+      handleTooltipHide: () => void;
+    }) => {
+      const handleClick = async () => {
+        if (trackingNumber && trackingNumber.trim()) {
+          try {
+            await navigator.clipboard.writeText(trackingNumber);
+            handleTooltipShow("복사되었습니다!", 0, 0);
+            setTimeout(() => {
+              handleTooltipShow(trackingNumber || "운송장번호 없음", 0, 0);
+            }, 1000);
+          } catch (err) {
+            console.error("클립보드 복사 실패:", err);
+            handleTooltipShow("복사 실패", 0, 0);
+            setTimeout(() => {
+              handleTooltipShow(trackingNumber || "운송장번호 없음", 0, 0);
+            }, 1000);
+          }
+        }
+      };
+
+      const hasValue = trackingNumber && trackingNumber.trim();
+
+      return (
+        <div
+          className={`px-2 py-1 rounded text-xs font-medium border ${
+            hasValue
+              ? "cursor-pointer bg-blue-100 border-blue-300 text-blue-800 hover:bg-blue-200"
+              : "cursor-not-allowed bg-gray-200 border-gray-400 text-gray-500"
+          }`}
+          onMouseEnter={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            handleTooltipShow(
+              hasValue ? trackingNumber : "운송장번호 없음 (클릭 불가)",
+              rect.left + rect.width / 2,
+              rect.top - 10
+            );
+          }}
+          onMouseLeave={handleTooltipHide}
+          onClick={handleClick}
+        >
+          {carrierName || "택배사"}
+        </div>
+      );
+    }
+  );
+
   // 운송장 입력 필드 컴포넌트 메모이제이션
   const TableDeliveryInputCell = memo(
     ({
@@ -1137,6 +1230,7 @@ const SavedDataTable = memo(function SavedDataTable({
   TableInternalCodeCell.displayName = "TableInternalCodeCell";
   TableDeliveryMessageCell.displayName = "TableDeliveryMessageCell";
   TableTrackingNumberCell.displayName = "TableTrackingNumberCell";
+  TableCarrierTrackingButton.displayName = "TableCarrierTrackingButton";
   TableDeliveryInputCell.displayName = "TableDeliveryInputCell";
   TableRow.displayName = "TableRow";
   const orderStatusIdx = useMemo(
@@ -1521,6 +1615,7 @@ const SavedDataTable = memo(function SavedDataTable({
           {tooltip.content}
         </div>
       )}
+
     </>
   );
 });

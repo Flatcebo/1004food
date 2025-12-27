@@ -156,7 +156,11 @@ export function useUploadData() {
         등록일: formattedDate,
         ...(row.row_data || {}),
         // 쇼핑몰명을 별도 컬럼에서 가져오기 (없으면 row_data에서 찾기)
-        쇼핑몰명: row.shop_name || row.row_data?.["쇼핑몰명"] || row.row_data?.["쇼핑몰명(1)"] || "",
+        쇼핑몰명:
+          row.shop_name ||
+          row.row_data?.["쇼핑몰명"] ||
+          row.row_data?.["쇼핑몰명(1)"] ||
+          "",
       };
 
       // 우편번호를 우편으로 통일

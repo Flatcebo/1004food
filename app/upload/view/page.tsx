@@ -1,12 +1,20 @@
 "use client";
 
-import {useEffect, useState, useRef, useMemo, Suspense} from "react";
+import {
+  useEffect,
+  useState,
+  useRef,
+  useMemo,
+  useCallback,
+  Suspense,
+} from "react";
 import {useSearchParams} from "next/navigation";
 import {useUploadStore} from "@/stores/uploadStore";
 import RecommendModal from "@/components/RecommendModal";
 import DirectInputModal from "@/components/DirectInputModal";
 import CodeEditWindow from "@/components/CodeEditWindow";
 import {fieldNameMap} from "@/constants/fieldMappings";
+import {PRODUCT_FIELD_ORDER} from "@/constants/productFields";
 import {useAutoMapping} from "@/hooks/useAutoMapping";
 import {generateAutoDeliveryMessage} from "@/utils/vendorMessageUtils";
 
@@ -69,6 +77,15 @@ function FileViewContent() {
   // 일괄 적용 인풋 상태
   const [bulkProductName, setBulkProductName] = useState("");
   const [bulkQuantity, setBulkQuantity] = useState("");
+
+  // 상품 수정 모달 상태
+  const [productEditModal, setProductEditModal] = useState({
+    open: false,
+    fields: [] as string[],
+    values: {} as {[key: string]: string},
+    productCode: "" as string,
+  });
+  const [savingProduct, setSavingProduct] = useState(false);
 
   // 테이블 정렬 함수 (상품명 오름차순, 동일 시 수취인명/이름 오름차순)
   const sortTableData = (data: any[][]): any[][] => {
@@ -663,6 +680,124 @@ function FileViewContent() {
   }, [tableData, headerIndex, productCodeMap, codes]);
 
   const isConfirmed = fileId ? confirmedFiles.has(fileId) : false;
+
+  // 매핑코드 클릭 핸들러 (상품 수정 모달 열기)
+  const handleMappingCodeClick = useCallback(
+    async (mappingCode: string, uploadedProductName?: string) => {
+      if (!mappingCode || !mappingCode.trim()) {
+        return;
+      }
+
+      try {
+        const {fetchProducts} = await import("@/utils/api");
+        const result = await fetchProducts();
+
+        if (result.success && result.data) {
+          const product = result.data.find(
+            (p: any) =>
+              String(p.code || "").trim() === String(mappingCode).trim()
+          );
+
+          if (product) {
+            // Product 데이터를 DirectInputModal 형식으로 변환
+            const values: {[key: string]: string} = {};
+            const fieldOrder = [...PRODUCT_FIELD_ORDER];
+
+            fieldOrder.forEach((field) => {
+              const value = (product as any)[field];
+              if (value !== null && value !== undefined) {
+                values[field] = String(value);
+              } else {
+                values[field] = "";
+              }
+            });
+
+            // 상품명 우선순위: 업로드한 데이터의 상품명 > 상품 정보의 상품명
+            if (uploadedProductName && uploadedProductName.trim()) {
+              values.name = uploadedProductName.trim();
+            }
+
+            setProductEditModal({
+              open: true,
+              fields: fieldOrder,
+              values,
+              productCode: String(mappingCode).trim(),
+            });
+          } else {
+            alert(
+              `매핑코드 "${mappingCode}"에 해당하는 상품을 찾을 수 없습니다.`
+            );
+          }
+        } else {
+          throw new Error(result.error || "상품 정보를 가져올 수 없습니다.");
+        }
+      } catch (error) {
+        console.error("상품 정보 조회 실패:", error);
+        alert("상품 정보를 가져오는 중 오류가 발생했습니다.");
+      }
+    },
+    []
+  );
+
+  // 상품 수정 모달 닫기
+  const handleCloseProductEditModal = useCallback(() => {
+    setProductEditModal({
+      open: false,
+      fields: [],
+      values: {},
+      productCode: "",
+    });
+  }, []);
+
+  // 상품 수정 모달 값 변경
+  const handleProductEditValueChange = useCallback(
+    (key: string, value: string) => {
+      setProductEditModal((prev) => ({
+        ...prev,
+        values: {...prev.values, [key]: value},
+      }));
+    },
+    []
+  );
+
+  // 상품 수정 저장
+  const handleSaveProductEdit = useCallback(async () => {
+    const {transformProductData} = await import("@/utils/product");
+    const {createProduct} = await import("@/utils/api");
+    const values = productEditModal.values;
+
+    // 필수값: name, code는 필수
+    if (!values.name || !values.code) {
+      alert("상품명과 매핑코드는 필수입니다.");
+      return;
+    }
+
+    setSavingProduct(true);
+    try {
+      const requestBody = transformProductData(values);
+      const result = await createProduct(requestBody);
+
+      if (result.success) {
+        alert("상품이 성공적으로 수정되었습니다.");
+        handleCloseProductEditModal();
+
+        // codes 새로고침
+        const {fetchProducts} = await import("@/utils/api");
+        const productsResult = await fetchProducts();
+        if (productsResult.success && productsResult.data) {
+          setCodes(productsResult.data);
+        }
+      } else {
+        throw new Error(result.error || "저장 실패");
+      }
+    } catch (error) {
+      console.error("저장 실패:", error);
+      const errorMessage = error instanceof Error ? error.message : "저장 실패";
+      alert(`저장 실패: ${errorMessage}`);
+    } finally {
+      setSavingProduct(false);
+    }
+  }, [productEditModal.values, handleCloseProductEditModal, setCodes]);
 
   const handleConfirm = async () => {
     if (fileId && isAllMappingCodesFilled) {
@@ -1740,7 +1875,16 @@ function FileViewContent() {
                         <td className="border px-2 py-1 border-gray-300 text-xs text-center">
                           {name ? (
                             <div className="flex items-center justify-center gap-1">
-                              {mappingCode && <span>{mappingCode}</span>}
+                              {mappingCode && (
+                                <span
+                                  className="text-blue-600 underline cursor-pointer hover:text-blue-800"
+                                  onClick={() =>
+                                    handleMappingCodeClick(mappingCode, name)
+                                  }
+                                >
+                                  {mappingCode}
+                                </span>
+                              )}
                               {/* 편집모드일 때는 항상 버튼 표시, 아닐 때는 매핑코드 없을 때만 표시 */}
                               {(isEditMode || !mappingCode) && (
                                 <>
@@ -2288,6 +2432,18 @@ function FileViewContent() {
           확인
         </button>
       </div>
+
+      {/* 상품 수정 모달 */}
+      <DirectInputModal
+        open={productEditModal.open}
+        fields={productEditModal.fields}
+        values={productEditModal.values}
+        fieldNameMap={fieldNameMap}
+        onClose={handleCloseProductEditModal}
+        onSave={handleSaveProductEdit}
+        onValueChange={handleProductEditValueChange}
+        nameReadOnly={true}
+      />
     </div>
   );
 }

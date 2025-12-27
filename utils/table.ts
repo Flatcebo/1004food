@@ -33,7 +33,7 @@ export function getColumnWidth(header: string): string {
     전화번호: "120px",
     이름: "80px",
     사방넷명: "150px",
-    택배사: "80px",
+    택배사: "100px",
     매입처: "120px",
     세금구분: "80px",
     카테고리: "100px",

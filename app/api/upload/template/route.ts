@@ -6,8 +6,8 @@ import * as XLSX from "xlsx";
 function getKoreaTime(): Date {
   const now = new Date();
   // UTC 시간에 9시간을 더해서 한국 시간으로 변환
-  const utcTime = now.getTime() + (now.getTimezoneOffset() * 60000);
-  const koreaTime = new Date(utcTime + (9 * 3600000));
+  const utcTime = now.getTime() + now.getTimezoneOffset() * 60000;
+  const koreaTime = new Date(utcTime + 9 * 3600000);
   return koreaTime;
 }
 
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const data = new Uint8Array(arrayBuffer);
     const workbook = XLSX.read(data, {type: "array", cellStyles: true});
-    
+
     if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
       return NextResponse.json(
         {success: false, error: "워크시트가 없습니다."},
@@ -53,7 +53,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const headers = raw[0].filter((h: any) => h !== null && h !== undefined && String(h).trim() !== "") as string[];
+    const headers = raw[0].filter(
+      (h: any) => h !== null && h !== undefined && String(h).trim() !== ""
+    ) as string[];
 
     if (headers.length === 0) {
       return NextResponse.json(
@@ -96,7 +98,9 @@ export async function POST(request: NextRequest) {
     // 임시로 JSON으로 저장
     const result = await sql`
       INSERT INTO upload_templates (name, template_data, created_at)
-      VALUES (${templateData.name}, ${JSON.stringify(templateData)}, ${koreaTime.toISOString()}::timestamp)
+      VALUES (${templateData.name}, ${JSON.stringify(
+      templateData
+    )}, ${koreaTime.toISOString()}::timestamp)
       RETURNING id, created_at
     `.catch(async (err) => {
       // 테이블이 없으면 생성
@@ -112,7 +116,9 @@ export async function POST(request: NextRequest) {
         // 다시 삽입
         return await sql`
           INSERT INTO upload_templates (name, template_data, created_at)
-          VALUES (${templateData.name}, ${JSON.stringify(templateData)}, ${koreaTime.toISOString()}::timestamp)
+          VALUES (${templateData.name}, ${JSON.stringify(
+          templateData
+        )}, ${koreaTime.toISOString()}::timestamp)
           RETURNING id, created_at
         `;
       }
@@ -206,4 +212,3 @@ export async function DELETE(request: NextRequest) {
     );
   }
 }
-

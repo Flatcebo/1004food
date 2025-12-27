@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
 
     // 통계만 요청한 경우
     if (statsOnly) {
-      const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD 형식
+      const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD 형식
 
       // 총 주문 수
       const totalResult = await sql`
@@ -144,12 +144,14 @@ export async function GET(request: NextRequest) {
         : 0;
 
     // 필터 목록 조회
-    const [typeList, postTypeList, vendorList, companyList] = await Promise.all([
-      sql`SELECT DISTINCT row_data->>'내외주' as type FROM upload_rows WHERE row_data->>'내외주' IS NOT NULL ORDER BY type`,
-      sql`SELECT DISTINCT row_data->>'택배사' as post_type FROM upload_rows WHERE row_data->>'택배사' IS NOT NULL ORDER BY post_type`,
-      sql`SELECT DISTINCT name as vendor FROM purchase WHERE name IS NOT NULL ORDER BY name`,
-      sql`SELECT DISTINCT row_data->>'업체명' as company FROM upload_rows WHERE row_data->>'업체명' IS NOT NULL ORDER BY company`,
-    ]);
+    const [typeList, postTypeList, vendorList, companyList] = await Promise.all(
+      [
+        sql`SELECT DISTINCT row_data->>'내외주' as type FROM upload_rows WHERE row_data->>'내외주' IS NOT NULL ORDER BY type`,
+        sql`SELECT DISTINCT row_data->>'택배사' as post_type FROM upload_rows WHERE row_data->>'택배사' IS NOT NULL ORDER BY post_type`,
+        sql`SELECT DISTINCT name as vendor FROM purchase WHERE name IS NOT NULL ORDER BY name`,
+        sql`SELECT DISTINCT row_data->>'업체명' as company FROM upload_rows WHERE row_data->>'업체명' IS NOT NULL ORDER BY company`,
+      ]
+    );
 
     return NextResponse.json({
       success: true,
