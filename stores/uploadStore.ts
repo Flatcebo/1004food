@@ -16,6 +16,8 @@ import {
   detectHeaderRowByColumnAliases,
   normalizeHeader,
 } from "@/utils/excelHeaderDetection";
+import {fetchHeaderAliases} from "@/utils/headerAliases";
+import {useLoadingStore} from "@/stores/loadingStore";
 
 type ColumnDef = {
   key: string;
@@ -23,157 +25,176 @@ type ColumnDef = {
   aliases: string[];
 };
 
-// 내부 절대 컬럼 순서 정의
-const INTERNAL_COLUMNS: ColumnDef[] = [
-  {
-    key: "vendor",
-    label: "업체명",
-    aliases: ["업체명", "업체", "거래처명", "고객주문처명", "매입처명"],
-  },
-  {
-    key: "shopName",
-    label: "쇼핑몰명",
-    aliases: ["쇼핑몰명(1)", "쇼핑몰명", "쇼핑몰", "몰명"],
-  },
-  {key: "inout", label: "내외주", aliases: ["내외주"]},
-  {
-    key: "carrier",
-    label: "택배사",
-    aliases: ["택배사", "택배사명", "택배", "배송사"],
-  },
+// 내부 절대 컬럼 순서 정의 (DB에서 가져옴)
+const getInternalColumns = async (): Promise<ColumnDef[]> => {
+  try {
+    const columnAliases = await fetchHeaderAliases();
 
-  {
-    key: "receiverName",
-    label: "수취인명",
-    aliases: [
-      "수취인명",
-      "수취인",
-      "받는분",
-      "받는 사람",
-      "수령인",
-      "받는분",
-      "받는분성명",
-    ],
-  },
-  {
-    key: "receiverPhone",
-    label: "수취인 전화번호",
-    aliases: [
-      "수취인 연락처",
-      "수취인 전화",
-      "수취인 전화번호",
-      "수취인전화번호",
-      "받는분연락처",
-      "받는사람전화",
-      "수령인전화번호",
-      "수령인 전화번호",
-      "수령인 전화번호1",
-      "수취인 전화번호1",
-      "받는분전화번호",
-    ],
-  },
-  {
-    key: "zip",
-    label: "우편",
-    aliases: [
-      "우편",
-      "우편번호",
-      "우편번호(수취인)",
-      "우편번호(배송지)",
-      "수취인우편번호(1)",
-    ],
-  },
-  {
-    key: "address",
-    label: "주소",
-    aliases: [
-      "주소",
-      "배송지주소",
-      "수취인주소",
-      "수령인주소",
-      "수령인 주소",
-      "받는분주소",
-      "받는분 주소",
-      "통합배송지",
-      "통합 배송지",
-      "수취인주소(4)",
-    ],
-  },
-  {key: "qty", label: "수량", aliases: ["수량", "주문수량", "총수량"]},
-  {
-    key: "productName",
-    label: "상품명",
-    aliases: [
-      "상품명",
-      "아이템명",
-      "품목명",
-      "상품",
-      "품목명",
-      "주문상품명",
-      "상품명(확정)",
-    ],
-  },
+    // DB에서 가져온 데이터와 기존의 주석 처리된 필드들을 합침
+    const dbColumns = columnAliases.map((alias) => ({
+      key: alias.key,
+      label: alias.label,
+      aliases: alias.aliases,
+    }));
 
-  {
-    key: "ordererName",
-    label: "주문자명",
-    aliases: ["주문자명", "주문자", "주문자 이름", "보내는분성명"],
-  },
-  {
-    key: "ordererPhone",
-    label: "주문자 전화번호",
-    aliases: [
-      "주문자 연락처",
-      "주문자 전화번화",
-      "주문자전화번호",
-      "주문자전화번호1",
-      "보내는분전화번호",
-    ],
-  },
-  {
-    key: "message",
-    label: "배송메시지",
-    aliases: [
-      "배송메시지",
-      "배송메세지",
-      "배송요청",
-      "요청사항",
-      "배송요청사항",
-    ],
-  },
-  {
-    key: "orderCode",
-    label: "주문번호",
-    aliases: [
-      "주문번호",
-      "주문번호(사방넷)",
-      "주문번호(쇼핑몰)",
-      "주문 번호",
-      "order_code",
-      "orderCode",
-    ],
-  },
-  // {
-  //   key: "supplyPrice",
-  //   label: "공급가",
-  //   aliases: ["공급가", "공급가격", "상품공급가"],
-  // },
-  // {
-  //   key: "box",
-  //   label: "박스",
-  //   aliases: ["박스", "박스정보", "박스크기"],
-  // },
-  // {
-  //   key: "volume",
-  //   label: "부피",
-  //   aliases: ["부피", "용량", "중량", "무게"],
-  // },
-  // {
-  //   key: "packageMat",
-  //   label: "포장재",
-  //   aliases: ["포장재", "포장자재", "포장방법", "포장"],
-  // },
-];
+    // 주석 처리된 필드들 추가 (필요시 활성화 가능)
+    const additionalColumns: ColumnDef[] = [
+      // {
+      //   key: "supplyPrice",
+      //   label: "공급가",
+      //   aliases: ["공급가", "공급가격", "상품공급가"],
+      // },
+      // {
+      //   key: "box",
+      //   label: "박스",
+      //   aliases: ["박스", "박스정보", "박스크기"],
+      // },
+      // {
+      //   key: "volume",
+      //   label: "부피",
+      //   aliases: ["부피", "용량", "중량", "무게"],
+      // },
+      // {
+      //   key: "packageMat",
+      //   label: "포장재",
+      //   aliases: ["포장재", "포장자재", "포장방법", "포장"],
+      // },
+    ];
+
+    return [...dbColumns, ...additionalColumns];
+  } catch (error) {
+    console.error("헤더 alias 조회 실패, 기본값 사용:", error);
+    // DB 조회 실패시 기본 값들 반환
+    return [
+      {
+        key: "vendor",
+        label: "업체명",
+        aliases: ["업체명", "업체", "거래처명", "고객주문처명", "매입처명"],
+      },
+      {
+        key: "shopName",
+        label: "쇼핑몰명",
+        aliases: ["쇼핑몰명(1)", "쇼핑몰명", "쇼핑몰", "몰명"],
+      },
+      {key: "inout", label: "내외주", aliases: ["내외주"]},
+      {
+        key: "carrier",
+        label: "택배사",
+        aliases: ["택배사", "택배사명", "택배", "배송사"],
+      },
+      {
+        key: "receiverName",
+        label: "수취인명",
+        aliases: [
+          "수취인명",
+          "수취인",
+          "받는분",
+          "받는 사람",
+          "수령인",
+          "받는분",
+          "받는분성명",
+        ],
+      },
+      {
+        key: "receiverPhone",
+        label: "수취인 전화번호",
+        aliases: [
+          "수취인 연락처",
+          "수취인 전화",
+          "수취인 전화번호",
+          "수취인전화번호",
+          "받는분연락처",
+          "받는사람전화",
+          "수령인전화번호",
+          "수령인 전화번호",
+          "수령인 전화번호1",
+          "수취인 전화번호1",
+          "받는분전화번호",
+        ],
+      },
+      {
+        key: "zip",
+        label: "우편",
+        aliases: [
+          "우편",
+          "우편번호",
+          "우편번호(수취인)",
+          "우편번호(배송지)",
+          "수취인우편번호(1)",
+        ],
+      },
+      {
+        key: "address",
+        label: "주소",
+        aliases: [
+          "주소",
+          "배송지주소",
+          "수취인주소",
+          "수령인주소",
+          "수령인 주소",
+          "받는분주소",
+          "받는분 주소",
+          "통합배송지",
+          "통합 배송지",
+          "수취인주소(4)",
+        ],
+      },
+      {key: "qty", label: "수량", aliases: ["수량", "주문수량", "총수량"]},
+      {
+        key: "productName",
+        label: "상품명",
+        aliases: [
+          "상품명",
+          "아이템명",
+          "품목명",
+          "상품",
+          "품목명",
+          "주문상품명",
+          "상품명(확정)",
+        ],
+      },
+      {
+        key: "ordererName",
+        label: "주문자명",
+        aliases: ["주문자명", "주문자", "주문자 이름", "보내는분성명"],
+      },
+      {
+        key: "ordererPhone",
+        label: "주문자 전화번호",
+        aliases: [
+          "주문자 연락처",
+          "주문자 전화번화",
+          "주문자전화번호",
+          "주문자전화번호1",
+          "보내는분전화번호",
+        ],
+      },
+      {
+        key: "message",
+        label: "배송메시지",
+        aliases: [
+          "배송메시지",
+          "배송메세지",
+          "배송요청",
+          "요청사항",
+          "배송요청사항",
+        ],
+      },
+      {
+        key: "orderCode",
+        label: "주문번호",
+        aliases: [
+          "주문번호",
+          "주문번호(사방넷)",
+          "주문번호(쇼핑몰)",
+          "주문 번호",
+          "order_code",
+          "orderCode",
+        ],
+      },
+    ];
+  }
+};
 
 export interface UploadedFile {
   id: string;
@@ -182,9 +203,15 @@ export interface UploadedFile {
   tableData: any[][];
   headerIndex: {nameIdx?: number} | null;
   productCodeMap: {[name: string]: string};
+  userId?: string;
+  uploadTime?: string;
 }
 
 export interface UploadStoreState {
+  // 파일 ID 카운터
+  fileCounter: number;
+  setFileCounter: (counter: number) => void;
+
   // 세션 관리
   currentSession: UploadSession | null;
   availableSessions: UploadSession[];
@@ -287,6 +314,10 @@ export interface UploadStoreState {
 }
 
 export const useUploadStore = create<UploadStoreState>((set, get) => ({
+  // 파일 ID 카운터 초기 상태
+  fileCounter: 0,
+  setFileCounter: (counter) => set({fileCounter: counter}),
+
   // 세션 관리 초기 상태
   currentSession: null,
   availableSessions: [],
@@ -501,10 +532,16 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       const result = await response.json();
 
       if (result.success && result.data) {
-        setUploadedFiles(result.data);
+        // uploadTime이 없는 파일들에 대해 현재 시간 설정
+        const updatedFiles = result.data.map((file: any) => ({
+          ...file,
+          uploadTime: file.uploadTime || new Date().toISOString(),
+        }));
+
+        setUploadedFiles(updatedFiles);
 
         // 확인된 파일들 상태 복원
-        result.data.forEach((file: any) => {
+        updatedFiles.forEach((file: any) => {
           if (file.isConfirmed) {
             confirmFile(file.id);
           }
@@ -566,42 +603,117 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     setProductCodeMap({...productCodeMap, [name]: code});
     setRecommendIdx(null);
   },
-  processFile: (file: File): Promise<UploadedFile> => {
+  processFile: async (file: File): Promise<UploadedFile> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         try {
+          // 파일 크기 검증 (50MB 제한)
+          const maxFileSize = 50 * 1024 * 1024; // 50MB
+          if (file.size > maxFileSize) {
+            throw new Error(
+              `파일 크기가 너무 큽니다. 50MB 이하의 파일만 업로드 가능합니다. (현재: ${(
+                file.size /
+                1024 /
+                1024
+              ).toFixed(1)}MB)`
+            );
+          }
+
           const data = new Uint8Array(e.target?.result as ArrayBuffer);
 
+          // 파일 형식 기본 검증
+          if (data.length < 4) {
+            throw new Error(
+              "파일이 너무 작습니다. 유효한 Excel 파일인지 확인해주세요."
+            );
+          }
+
+          // Excel 파일 시그니처 검증 (ZIP 기반 Excel 파일)
+          const signature = Array.from(data.slice(0, 4));
+          const xlsxSignature = [0x50, 0x4b, 0x03, 0x04]; // ZIP 파일 시그니처
+          const xlsSignature = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]; // OLE2 시그니처
+
+          const isXlsx = signature.every(
+            (byte, i) => byte === xlsxSignature[i]
+          );
+          const isXls = signature
+            .slice(0, 8)
+            .every((byte, i) => byte === xlsSignature[i]);
+
+          if (!isXlsx && !isXls) {
+            throw new Error(
+              "지원되지 않는 파일 형식입니다. .xlsx 또는 .xls 파일만 업로드 가능합니다."
+            );
+          }
+
           // 파일 형식 확인 및 읽기 옵션 설정
-          let workbook;
+          let workbook: XLSX.WorkBook | null = null;
+
+          // ExcelJS로 먼저 시도 (XLSX의 압축 문제 회피)
           try {
-            // Google Sheets에서 다운로드한 파일을 위한 옵션 추가
-            workbook = XLSX.read(data, {
-              type: "array",
-              cellStyles: false,
-              cellDates: false,
-              cellNF: false,
-              cellText: false,
-              raw: false,
-              dense: false,
+            const ExcelJS = (await import("exceljs")).default;
+            const buffer = data.buffer.slice(
+              data.byteOffset,
+              data.byteOffset + data.byteLength
+            );
+            const excelWorkbook = new ExcelJS.Workbook();
+            await excelWorkbook.xlsx.load(buffer);
+
+            // ExcelJS 결과를 XLSX 형식으로 변환
+            const sheetNames: string[] = excelWorkbook.worksheets.map(
+              (ws) => ws.name
+            );
+            const sheets: {[key: string]: XLSX.WorkSheet} = {};
+
+            excelWorkbook.worksheets.forEach((worksheet, index) => {
+              const sheetName = sheetNames[index];
+              const sheetData = worksheet.getSheetValues().map(
+                (row: any) => (row ? row.slice(1) : []) // ExcelJS는 1부터 시작하므로 첫 번째 요소 제거
+              );
+              sheets[sheetName] = XLSX.utils.aoa_to_sheet(sheetData);
             });
-          } catch (readError: any) {
-            // 첫 번째 시도 실패 시 다른 옵션으로 재시도
+
+            workbook = {
+              SheetNames: sheetNames,
+              Sheets: sheets,
+            };
+          } catch (excelJSError: any) {
+            console.warn(
+              "ExcelJS 읽기 실패, XLSX로 재시도:",
+              excelJSError.message
+            );
+
+            // ExcelJS 실패 시 XLSX로 시도
             try {
               workbook = XLSX.read(data, {
                 type: "array",
-                raw: true,
+                cellStyles: false,
+                cellDates: false,
+                cellNF: false,
+                cellText: false,
+                raw: false,
+                dense: false,
               });
-            } catch (retryError: any) {
-              reject(
-                new Error(
-                  `파일을 읽을 수 없습니다. 파일 형식을 확인해주세요. (${
-                    readError.message || "알 수 없는 오류"
-                  })`
-                )
+            } catch (readError: any) {
+              // 압축 관련 에러 특별 처리
+              if (
+                readError.message &&
+                (readError.message.includes("Bad uncompressed size") ||
+                  readError.message.includes("uncompressed size") ||
+                  readError.message.includes("ZIP") ||
+                  readError.message.includes("corrupt"))
+              ) {
+                throw new Error(
+                  "Excel 파일이 손상되었거나 비표준 형식입니다. Excel에서 파일을 열어 '다른 이름으로 저장'(Excel 통합 문서 .xlsx) 후 다시 시도해주세요."
+                );
+              }
+
+              throw new Error(
+                `파일을 읽을 수 없습니다. 다른 Excel 파일로 시도해주세요. (${
+                  readError.message || "알 수 없는 오류"
+                })`
               );
-              return;
             }
           }
 
@@ -610,16 +722,14 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             !workbook.SheetNames ||
             workbook.SheetNames.length === 0
           ) {
-            reject(new Error("파일에 워크시트가 없습니다."));
-            return;
+            throw new Error("파일에 워크시트가 없습니다.");
           }
 
           const firstSheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[firstSheetName];
 
           if (!worksheet) {
-            reject(new Error("워크시트를 찾을 수 없습니다."));
-            return;
+            throw new Error("워크시트를 찾을 수 없습니다.");
           }
 
           // Google Sheets 파일을 위한 옵션 추가
@@ -631,14 +741,16 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
           }) as any[][];
 
           if (!raw.length) {
-            reject(new Error("파일이 비어있습니다."));
-            return;
+            throw new Error("파일이 비어있습니다.");
           }
+
+          // DB에서 헤더 alias들을 가져옴
+          const internalColumns = await getInternalColumns();
 
           // 헤더 행 자동 감지 (1~6행 사이에서 찾기, 공통 유틸리티 사용)
           const headerRowIndex = detectHeaderRowByColumnAliases(
             raw,
-            INTERNAL_COLUMNS.map((col) => ({
+            internalColumns.map((col) => ({
               key: col.key,
               aliases: col.aliases,
             })),
@@ -649,7 +761,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
 
           // 각 내부 컬럼에 대응하는 원본 인덱스 계산
           const indexMap: {[key: string]: number} = {};
-          INTERNAL_COLUMNS.forEach((col) => {
+          internalColumns.forEach((col) => {
             const idx = rawHeader.findIndex((h) =>
               col.aliases.some(
                 (al) => normalizeHeader(String(h)) === normalizeHeader(al)
@@ -660,9 +772,9 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
 
           // 내부 절대 순서로 헤더/데이터 재구성
           // 헤더 행 다음부터 데이터로 사용
-          const canonicalHeader = INTERNAL_COLUMNS.map((c) => c.label);
+          const canonicalHeader = internalColumns.map((c) => c.label);
           const canonicalRows = raw.slice(headerRowIndex + 1).map((row) =>
-            INTERNAL_COLUMNS.map((c) => {
+            internalColumns.map((c) => {
               const idx = indexMap[c.key];
               let value = idx >= 0 ? row[idx] ?? "" : "";
 
@@ -817,13 +929,20 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             (h: any) => h && typeof h === "string" && h.includes("상품명")
           );
 
+          // 파일 ID 카운터 증가 및 ID 생성
+          const {fileCounter, setFileCounter} = get();
+          const newFileId = (fileCounter + 1).toString().padStart(6, "0"); // 6자리 숫자로 포맷팅
+          setFileCounter(fileCounter + 1);
+
           const uploadedFile: UploadedFile = {
-            id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            id: newFileId,
             fileName: file.name,
             rowCount: jsonData.length - 1,
             tableData: jsonData as any[][],
             headerIndex: nameIdx !== -1 ? {nameIdx} : null,
             productCodeMap: {},
+            userId: useAuthStore.getState().user?.id || "temp-user-001", // 임시: 로그인 기능 미구현 시 임시 사용자 ID 사용
+            uploadTime: new Date().toISOString(),
           };
 
           resolve(uploadedFile);
@@ -866,6 +985,11 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
 
   handleFile: async (file) => {
     try {
+      // 로딩 시작
+      useLoadingStore
+        .getState()
+        .startLoading("파일 업로드", "엑셀 파일을 분석하고 있습니다...");
+
       // 중복 파일명 체크
       const isDuplicate = await get().checkForDuplicateFileName(file.name);
 
@@ -881,17 +1005,33 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       get().setFileName(file.name);
       get().setTableData(uploadedFile.tableData);
 
+      // 로딩 메시지 업데이트
+      useLoadingStore
+        .getState()
+        .updateLoadingMessage("서버에 저장하고 있습니다...");
+
       // 서버에 저장
       await get().saveFilesToServer();
     } catch (error: any) {
       console.error("파일 처리 실패:", error);
       // alert(`파일 처리 실패: ${error.message}`);
+    } finally {
+      // 로딩 종료
+      useLoadingStore.getState().stopLoading();
     }
   },
   handleFiles: async (files: File[]) => {
     const {addUploadedFile, checkForDuplicateFileName} = get();
 
     try {
+      // 로딩 시작
+      useLoadingStore
+        .getState()
+        .startLoading(
+          "파일 업로드",
+          `${files.length}개의 파일을 처리하고 있습니다...`
+        );
+
       // 중복 파일명 체크
       const duplicateFiles: string[] = [];
       const validFiles: File[] = [];
@@ -925,9 +1065,21 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       }
 
       if (validFiles.length > 0) {
+        // 로딩 메시지 업데이트
+        useLoadingStore
+          .getState()
+          .updateLoadingMessage(
+            `${validFiles.length}개의 파일을 분석하고 있습니다...`
+          );
+
         const promises = validFiles.map((file) => get().processFile(file));
         const uploadedFiles = await Promise.all(promises);
         uploadedFiles.forEach((file) => addUploadedFile(file));
+
+        // 로딩 메시지 업데이트
+        useLoadingStore
+          .getState()
+          .updateLoadingMessage("서버에 저장하고 있습니다...");
 
         // 서버에 저장
         await get().saveFilesToServer();
@@ -935,6 +1087,9 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     } catch (error: any) {
       console.error("파일 처리 실패:", error);
       alert(`일부 파일 처리 실패: ${error}`);
+    } finally {
+      // 로딩 종료
+      useLoadingStore.getState().stopLoading();
     }
   },
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => {

@@ -81,12 +81,13 @@ export function checkFileValidation(file: UploadedFile | any): {
     // 업체명 확인
     const vendorName =
       vendorIdx !== -1 ? String(row[vendorIdx] || "").trim() : "";
-    
+
     // 내외주 확인
     const type = typeIdx !== -1 ? String(row[typeIdx] || "").trim() : "";
-    
+
     // 택배사 확인
-    const postType = postTypeIdx !== -1 ? String(row[postTypeIdx] || "").trim() : "";
+    const postType =
+      postTypeIdx !== -1 ? String(row[postTypeIdx] || "").trim() : "";
 
     console.log(`행 ${i} 검증:`, {
       productName,
@@ -121,16 +122,16 @@ export function checkFileValidation(file: UploadedFile | any): {
     }
 
     // 택배사 컬럼이 있는 경우: 택배사가 공란이 아니어야 함
-    if (postTypeIdx !== -1 && !postType) {
-      const errorMsg = `행 ${i}: 택배사가 공란입니다. 상품명: "${productName}"`;
-      console.log(errorMsg);
-      errors.push(errorMsg);
-    }
+    // if (postTypeIdx !== -1 && !postType) {
+    //   const errorMsg = `행 ${i}: 택배사가 공란입니다. 상품명: "${productName}"`;
+    //   console.log(errorMsg);
+    //   errors.push(errorMsg);
+    // }
   }
 
-  console.log("파일 검증 완료:", file.fileName, {
-    isValid: errors.length === 0,
-    errorCount: errors.length,
-  });
+  // console.log("파일 검증 완료:", file.fileName, {
+  //   isValid: errors.length === 0,
+  //   errorCount: errors.length,
+  // });
   return {isValid: errors.length === 0, errors}; // 모든 row의 매핑코드와 업체명이 공란이 아니면 true
 }

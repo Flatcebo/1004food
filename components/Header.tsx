@@ -26,14 +26,18 @@ export default function Header({
   // 현재 경로에 맞는 메뉴명 가져오기
   const currentMenuName =
     menuNames[pathname || ""] ||
-    (pathname?.startsWith("/upload")
+    (pathname === "/upload"
       ? "발주서 업로드"
-      : pathname?.startsWith("/order")
+      : pathname === "/order"
       ? "주문 리스트"
-      : pathname?.startsWith("/products")
-      ? "상품 관리"
-      : pathname?.startsWith("/upload/templates")
+      : pathname === "/products"
+      ? "상품 리스트"
+      : pathname === "/upload/templates"
       ? "양식 템플릿 관리"
+      : pathname === "/products/upload"
+      ? "상품 데이터 업로드"
+      : pathname === "/header-aliases"
+      ? "헤더 Alias 관리"
       : "홈");
 
   const handleLogout = () => {

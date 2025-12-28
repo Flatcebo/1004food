@@ -9,9 +9,13 @@ const menuNames: {path: string; name: string}[] = [
     path: "/order",
     name: "주문 리스트",
   },
+  // {
+  //   path: "/order/upload",
+  //   name: "발주서 업로드",
+  // },
   {
     path: "/products",
-    name: "상품 관리",
+    name: "상품 리스트",
   },
   {
     path: "/upload/templates",
@@ -20,6 +24,25 @@ const menuNames: {path: string; name: string}[] = [
   {
     path: "/products/upload",
     name: "상품 데이터 업로드",
+  },
+  {
+    path: "/header-aliases",
+    name: "헤더 Alias 관리",
+  },
+];
+
+const adminMenuNames: {path: string; name: string}[] = [
+  {
+    path: "/upload/templates",
+    name: "양식 템플릿 관리",
+  },
+  {
+    path: "/products/upload",
+    name: "상품 데이터 업로드",
+  },
+  {
+    path: "/header-aliases",
+    name: "헤더 Alias 관리",
   },
 ];
 
@@ -31,9 +54,11 @@ export default function SideBar() {
     pathname?.startsWith("/upload/view") ||
     pathname?.startsWith("/upload/preview");
   const isOrderActive = pathname === "/order";
+  const isOrderUploadActive = pathname === "/order/upload";
   const isProductsActive = pathname === "/products";
   const isProductUploadActive = pathname === "/products/upload";
   const isTemplatesActive = pathname === "/upload/templates";
+  const isHeaderAliasesActive = pathname === "/header-aliases";
 
   return (
     <div className="w-60 h-full bg-[#25323c] shrink-0">
@@ -61,10 +86,14 @@ export default function SideBar() {
                   ? isProductUploadActive
                   : menu.path === "/order"
                   ? isOrderActive
+                  : menu.path === "/order/upload"
+                  ? isOrderUploadActive
                   : menu.path === "/products"
                   ? isProductsActive
                   : menu.path === "/upload/templates"
                   ? isTemplatesActive
+                  : menu.path === "/header-aliases"
+                  ? isHeaderAliasesActive
                   : false;
 
               return (
