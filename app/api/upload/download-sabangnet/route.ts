@@ -88,30 +88,50 @@ export async function POST(request: NextRequest) {
       const searchPattern = searchValue ? `%${searchValue}%` : null;
 
       const conditions: any[] = [];
+      const updateConditions: any[] = []; // UPDATE 쿼리용 조건 (별도 생성)
+
       if (type) {
         conditions.push(sql`ur.row_data->>'내외주' = ${type}`);
+        updateConditions.push(sql`upload_rows.row_data->>'내외주' = ${type}`);
       }
       if (postType) {
         conditions.push(sql`ur.row_data->>'택배사' = ${postType}`);
+        updateConditions.push(
+          sql`upload_rows.row_data->>'택배사' = ${postType}`
+        );
       }
       if (vendor) {
         conditions.push(sql`ur.row_data->>'업체명' = ${vendor}`);
+        updateConditions.push(sql`upload_rows.row_data->>'업체명' = ${vendor}`);
       }
       if (filters.company) {
         conditions.push(sql`ur.row_data->>'업체명' = ${filters.company}`);
+        updateConditions.push(
+          sql`upload_rows.row_data->>'업체명' = ${filters.company}`
+        );
       }
       if (orderStatus) {
         conditions.push(sql`ur.row_data->>'주문상태' = ${orderStatus}`);
+        updateConditions.push(
+          sql`upload_rows.row_data->>'주문상태' = ${orderStatus}`
+        );
       }
 
       if (dbField && searchPattern) {
         conditions.push(sql`ur.row_data->>${dbField} ILIKE ${searchPattern}`);
+        updateConditions.push(
+          sql`upload_rows.row_data->>${dbField} ILIKE ${searchPattern}`
+        );
       }
       if (uploadTimeFrom) {
         conditions.push(sql`u.created_at >= ${uploadTimeFrom}::date`);
+        updateConditions.push(sql`u.created_at >= ${uploadTimeFrom}::date`);
       }
       if (uploadTimeTo) {
         conditions.push(
+          sql`u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')`
+        );
+        updateConditions.push(
           sql`u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')`
         );
       }
@@ -146,43 +166,37 @@ export async function POST(request: NextRequest) {
 
       // 전체 다운로드 시 주문상태 업데이트 (rowIds가 없을 때)
       if (!rowIds || rowIds.length === 0) {
-        // 주문상태 업데이트를 비동기로 처리하여 다운로드 속도 향상
-        setImmediate(async () => {
-          try {
-            if (conditions.length === 0) {
-              // 조건이 없으면 전체 업데이트
-              await sql`
-                UPDATE upload_rows
-                SET row_data = jsonb_set(row_data, '{주문상태}', '"사방넷 다운"', true)
-                WHERE EXISTS (
-                  SELECT 1 FROM uploads u WHERE u.id = upload_rows.upload_id
-                )
-              `;
-            } else {
-              // 기존 조건을 재사용하여 직접 UPDATE
-              let updateQuery = sql`
-                UPDATE upload_rows
-                SET row_data = jsonb_set(row_data, '{주문상태}', '"사방넷 다운"', true)
-                FROM uploads u
-                WHERE upload_rows.upload_id = u.id
-              `;
+        try {
+          if (conditions.length === 0) {
+            // 조건이 없으면 전체 업데이트
+            const updateResult = await sql`
+              UPDATE upload_rows
+              SET row_data = jsonb_set(row_data, '{주문상태}', '"사방넷 다운"', true)
+              WHERE EXISTS (
+                SELECT 1 FROM uploads u WHERE u.id = upload_rows.upload_id
+              )
+            `;
+          } else {
+            // 기존 조건을 재사용하여 직접 UPDATE
+            let updateQuery = sql`
+              UPDATE upload_rows
+              SET row_data = jsonb_set(row_data, '{주문상태}', '"사방넷 다운"', true)
+              FROM uploads u
+              WHERE upload_rows.upload_id = u.id
+            `;
 
-              // 기존 조건들을 AND로 연결
-              for (let i = 0; i < conditions.length; i++) {
-                const condition = conditions[i];
-                // ur. -> upload_rows., u. -> u. 로 변경
-                const modifiedCondition = condition
-                  .replace(/ur\.row_data/g, 'upload_rows.row_data')
-                  .replace(/u\.created_at/g, 'u.created_at');
-                updateQuery = sql`${updateQuery} AND ${modifiedCondition}`;
-              }
-
-              await updateQuery;
+            // 기존 조건들을 AND로 연결
+            for (let i = 0; i < updateConditions.length; i++) {
+              const condition = updateConditions[i];
+              updateQuery = sql`${updateQuery} AND ${condition}`;
             }
-          } catch (updateError) {
-            console.error("주문상태 업데이트 실패:", updateError);
+
+            // const updateResult = await updateQuery;
           }
-        });
+        } catch (updateError) {
+          console.error("주문상태 업데이트 실패:", updateError);
+          // 주문상태 업데이트 실패해도 다운로드는 계속 진행
+        }
       }
     } else {
       // 조건 없으면 모든 데이터 조회
@@ -198,23 +212,22 @@ export async function POST(request: NextRequest) {
 
       // 전체 다운로드 시 주문상태 업데이트 (rowIds가 없을 때)
       if (!rowIds || rowIds.length === 0) {
-        // 주문상태 업데이트를 비동기로 처리하여 다운로드 속도 향상
-        setImmediate(async () => {
-          try {
-            const idsToUpdate = allData.map((r: any) => r.id);
+        // console.log("사방넷 다운로드: 전체 데이터 주문상태 업데이트 시작");
+        try {
+          const idsToUpdate = allData.map((r: any) => r.id);
 
-            if (idsToUpdate.length > 0) {
-              // 효율적인 단일 쿼리로 모든 row의 주문상태를 "사방넷 다운"으로 업데이트
-              await sql`
-                UPDATE upload_rows
-                SET row_data = jsonb_set(row_data, '{주문상태}', '"사방넷 다운"', true)
-                WHERE id = ANY(${idsToUpdate})
-              `;
-            }
-          } catch (updateError) {
-            console.error("주문상태 업데이트 실패:", updateError);
+          if (idsToUpdate.length > 0) {
+            // 효율적인 단일 쿼리로 모든 row의 주문상태를 "사방넷 다운"으로 업데이트
+            const updateResult = await sql`
+              UPDATE upload_rows
+              SET row_data = jsonb_set(row_data, '{주문상태}', '"사방넷 다운"', true)
+              WHERE id = ANY(${idsToUpdate})
+            `;
           }
-        });
+        } catch (updateError) {
+          console.error("주문상태 업데이트 실패:", updateError);
+          // 주문상태 업데이트 실패해도 다운로드는 계속 진행
+        }
       }
     }
 
@@ -442,24 +455,23 @@ export async function POST(request: NextRequest) {
         zip.file(fileName, buffer);
       }
 
-      // ZIP 파일 생성
-      const zipBuffer = await zip.generateAsync({type: "nodebuffer"});
       // 사방넷 다운로드가 성공하면 주문상태 업데이트
       if (rowIds && rowIds.length > 0) {
-        // 주문상태 업데이트를 비동기로 처리하여 다운로드 속도 향상
-        setImmediate(async () => {
-          try {
-            // 효율적인 단일 쿼리로 모든 row의 주문상태를 "사방넷 다운"으로 업데이트
-            await sql`
-              UPDATE upload_rows
-              SET row_data = jsonb_set(row_data, '{주문상태}', '"사방넷 다운"', true)
-              WHERE id = ANY(${rowIds})
-            `;
-          } catch (updateError) {
-            console.error("주문상태 업데이트 실패:", updateError);
-          }
-        });
+        try {
+          // 효율적인 단일 쿼리로 모든 row의 주문상태를 "사방넷 다운"으로 업데이트
+          const updateResult = await sql`
+            UPDATE upload_rows
+            SET row_data = jsonb_set(row_data, '{주문상태}', '"사방넷 다운"', true)
+            WHERE id = ANY(${rowIds})
+          `;
+        } catch (updateError) {
+          console.error("주문상태 업데이트 실패:", updateError);
+          // 주문상태 업데이트 실패해도 다운로드는 계속 진행
+        }
       }
+
+      // ZIP 파일 생성
+      const zipBuffer = await zip.generateAsync({type: "nodebuffer"});
 
       const zipFileName = `${dateStr}_사방넷등록.zip`;
       const encodedZipFileName = encodeURIComponent(zipFileName);
