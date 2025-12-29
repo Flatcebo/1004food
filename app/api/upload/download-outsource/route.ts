@@ -336,12 +336,333 @@ export async function POST(request: NextRequest) {
     // 템플릿명 확인 (외주 발주서인지 체크)
     const templateName = (templateData.name || "").normalize("NFC").trim();
     const isOutsource = templateName.includes("외주");
+    const isCJOutsource = templateName.includes("CJ");
 
-    // 외주 발주서인 경우: 매입처별로 그룹화하여 ZIP 생성
-    if (isOutsource) {
+    // CJ외주 발주서인 경우: ZIP 없이 단일 엑셀 파일로 다운로드
+    if (isCJOutsource) {
       // 내외주가 "외주"인 것들만 필터링 + 매핑코드 106464 제외
       dataRows = dataRows.filter(
         (row: any) => row.내외주 === "외주" && row.매핑코드 !== "106464"
+      );
+
+      // 전화번호 필드들에 하이픈 추가 가공
+      dataRows = dataRows.map((row: any) => {
+        const processedRow = {...row};
+
+        // 수취인 전화번호 가공
+        if (processedRow["수취인 전화번호"]) {
+          processedRow["수취인 전화번호"] = formatPhoneNumber(
+            processedRow["수취인 전화번호"]
+          );
+        }
+
+        // 주문자 전화번호 가공
+        if (processedRow["주문자 전화번호"]) {
+          processedRow["주문자 전화번호"] = formatPhoneNumber(
+            processedRow["주문자 전화번호"]
+          );
+        }
+
+        // 전화번호1 가공
+        if (processedRow["전화번호1"]) {
+          processedRow["전화번호1"] = formatPhoneNumber(
+            processedRow["전화번호1"]
+          );
+        }
+
+        // 전화번호2 가공
+        if (processedRow["전화번호2"]) {
+          processedRow["전화번호2"] = formatPhoneNumber(
+            processedRow["전화번호2"]
+          );
+        }
+
+        // 전화번호 가공
+        if (processedRow["전화번호"]) {
+          processedRow["전화번호"] = formatPhoneNumber(
+            processedRow["전화번호"]
+          );
+        }
+
+        return processedRow;
+      });
+
+      if (dataRows.length === 0) {
+        return NextResponse.json(
+          {success: false, error: "CJ외주 데이터가 없습니다."},
+          {status: 404}
+        );
+      }
+
+      // 매핑코드별 가격, 사방넷명, 업체명 정보 조회
+      const productCodes = [
+        ...new Set(dataRows.map((row: any) => row.매핑코드).filter(Boolean)),
+      ];
+      const productSalePriceMap: {[code: string]: number | null} = {};
+      const productSabangNameMap: {[code: string]: string | null} = {};
+      const productVendorNameMap: {[code: string]: string | null} = {};
+
+      if (productCodes.length > 0) {
+        const products = await sql`
+          SELECT code, sale_price, sabang_name as "sabangName", purchase as "vendorName"
+          FROM products
+          WHERE code = ANY(${productCodes})
+        `;
+
+        products.forEach((p: any) => {
+          if (p.code) {
+            if (p.sale_price !== null && p.sale_price !== undefined) {
+              productSalePriceMap[p.code] = p.sale_price;
+            }
+            if (p.sabangName !== undefined) {
+              productSabangNameMap[p.code] = p.sabangName;
+            }
+            if (p.vendorName !== undefined) {
+              productVendorNameMap[p.code] = p.vendorName;
+            }
+          }
+        });
+      }
+
+      // 매핑코드를 통해 매입처로 업체명 업데이트
+      dataRows.forEach((row: any) => {
+        // 내주는 제외 (외주만 처리)
+        if (row.내외주 !== "외주") {
+          return;
+        }
+
+        if (row.매핑코드 && productVendorNameMap[row.매핑코드]) {
+          row.업체명 = productVendorNameMap[row.매핑코드];
+        } else {
+          row.업체명 = "매입처미지정";
+        }
+
+        // 공급가와 사방넷명 주입
+        if (row.매핑코드) {
+          if (productSalePriceMap[row.매핑코드] !== undefined) {
+            const salePrice = productSalePriceMap[row.매핑코드];
+            if (salePrice !== null) {
+              row["공급가"] = salePrice;
+            }
+          }
+          if (productSabangNameMap[row.매핑코드] !== undefined) {
+            const sabangName = productSabangNameMap[row.매핑코드];
+            if (
+              sabangName !== null &&
+              sabangName !== undefined &&
+              String(sabangName).trim() !== ""
+            ) {
+              row["사방넷명"] = sabangName;
+            }
+          }
+        }
+      });
+
+      // 데이터를 2차원 배열로 변환
+      let excelData = dataRows.map((row: any) => {
+        return headers.map((header: any) => {
+          // header를 문자열로 변환
+          const headerStr =
+            typeof header === "string" ? header : String(header || "");
+
+          let value = mapDataToTemplate(row, headerStr, {
+            templateName: templateData.name,
+            formatPhone: true, // CJ외주 발주서에서도 전화번호에 하이픈 추가
+          });
+
+          // 모든 값을 문자열로 변환 (0 유지)
+          let stringValue = value != null ? String(value) : "";
+
+          // 수취인명인 경우 앞에 ★ 붙이기
+          if (
+            headerStr === "수취인명" ||
+            headerStr === "수취인" ||
+            headerStr === "받는사람"
+          ) {
+            stringValue = "★" + stringValue;
+          }
+
+          // 주문번호인 경우 내부코드 사용
+          if (headerStr === "주문번호" || headerStr.includes("주문번호")) {
+            stringValue = row["내부코드"] || stringValue;
+          }
+
+          // 전화번호가 10-11자리 숫자이고 0으로 시작하지 않으면 앞에 0 추가 및 하이픈 추가
+          if (headerStr.includes("전화") || headerStr.includes("연락")) {
+            // 이미 하이픈이 있는 경우는 건너뜀 (mapDataToTemplate에서 이미 처리됨)
+            if (!stringValue.includes("-")) {
+              const numOnly = stringValue.replace(/\D/g, ""); // 숫자만 추출
+              if (
+                (numOnly.length === 10 || numOnly.length === 11) &&
+                !numOnly.startsWith("0")
+              ) {
+                stringValue = "0" + numOnly; // 숫자만 사용하고 0 추가
+              } else if (numOnly.length > 0) {
+                stringValue = numOnly; // 하이픈 등 제거하고 숫자만
+              }
+
+              // 하이픈 추가하여 전화번호 형식 맞춤
+              stringValue = formatPhoneNumber(stringValue);
+            }
+          }
+
+          // 우편번호가 4-5자리 숫자면 5자리로 맞춤 (앞에 0 추가)
+          if (headerStr.includes("우편")) {
+            const numOnly = stringValue.replace(/\D/g, "");
+            if (numOnly.length >= 4 && numOnly.length <= 5) {
+              stringValue = numOnly.padStart(5, "0");
+            }
+          }
+
+          return stringValue;
+        });
+      });
+
+      // 정렬: 상품명 오름차순 후 수취인명 오름차순
+      excelData = sortExcelData(excelData, columnOrder);
+
+      // 헤더 추가 (외주 발주서 스타일 적용)
+      const headerRow = sheet.addRow(headers);
+      headerRow.height = 30.75;
+
+      // 헤더 스타일 (외주 발주서 스타일)
+      headerRow.eachCell((cell, colNum) => {
+        let bgColor = "ffffffff";
+        if (
+          [
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+            24, 25, 26,
+          ].includes(colNum)
+        ) {
+          bgColor = "ffdaeef3"; // #daeef3
+        } else if (colNum === 10 || colNum === 11) {
+          bgColor = "ffffff00"; // #ffff00 (노란색)
+        }
+
+        let fontColor = "ff000000";
+
+        if ([9, 11].includes(colNum)) {
+          fontColor = "ffff0000"; // 빨간색
+        } else if (colNum === 10) {
+          fontColor = "ff0070c0"; // 파란색
+        }
+
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: {argb: bgColor},
+        };
+
+        cell.border = {
+          top: {style: "thin", color: {argb: "ff000000"}},
+          left: {style: "thin", color: {argb: "ff000000"}},
+          bottom: {style: "thin", color: {argb: "ff000000"}},
+          right: {style: "thin", color: {argb: "ff000000"}},
+        };
+
+        cell.font = {
+          name: "Arial",
+          size: 12,
+          bold: true,
+          color: {argb: fontColor},
+        };
+
+        cell.alignment = {
+          vertical: "middle",
+          horizontal: "center",
+          wrapText: true,
+        };
+      });
+
+      // 열 너비 설정
+      headers.forEach((headerName: string, index: number) => {
+        const colNum = index + 1;
+        const width =
+          typeof columnWidths === "object" && columnWidths[headerName]
+            ? columnWidths[headerName]
+            : 15;
+        sheet.getColumn(colNum).width = width;
+      });
+
+      // 정렬된 데이터를 엑셀에 추가
+      excelData.forEach((rowDatas) => {
+        const appendRow = sheet.addRow(rowDatas);
+
+        // 전화번호, 우편번호, 코드 관련 필드는 텍스트 형식으로 설정 (앞자리 0 유지)
+        appendRow.eachCell((cell: any, colNum: any) => {
+          const headerName = headers[colNum - 1];
+          // headerName을 문자열로 변환
+          const headerStr =
+            typeof headerName === "string"
+              ? headerName
+              : String(headerName || "");
+          const normalizedHeader = headerStr.replace(/\s+/g, "").toLowerCase();
+
+          const isTextColumn =
+            normalizedHeader.includes("전화") ||
+            normalizedHeader.includes("연락") ||
+            normalizedHeader.includes("우편") ||
+            normalizedHeader.includes("코드");
+
+          if (isTextColumn) {
+            cell.numFmt = "@"; // 텍스트 형식
+          }
+        });
+      });
+
+      // 엑셀 파일 생성
+      const buffer = await wb.xlsx.writeBuffer();
+
+      // 파일명 생성
+      const dateStr = new Date().toISOString().split("T")[0];
+      const fileName = `${dateStr}_CJ외주발주.xlsx`;
+
+      // Windows에서 한글 파일명 깨짐 방지를 위한 RFC 5987 형식 인코딩
+      const asciiFallbackBase =
+        `${dateStr}_CJ_Outsource_Order`
+          .replace(/[^\x00-\x7F]/g, "")
+          .replace(/\s+/g, "_") || "download";
+      const safeFileName = `${asciiFallbackBase}.xlsx`; // ASCII fallback
+      const encodedFileName = encodeURIComponent(fileName); // UTF-8 인코딩
+      const contentDisposition = `attachment; filename="${safeFileName}"; filename*=UTF-8''${encodedFileName}`;
+
+      // CJ외주 발주서 다운로드가 성공하면 주문상태 업데이트
+      if (rowIds && rowIds.length > 0) {
+        // 주문상태 업데이트를 비동기로 처리하여 다운로드 속도 향상
+        setImmediate(async () => {
+          try {
+            // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
+            await sql`
+              UPDATE upload_rows
+              SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
+              WHERE id = ANY(${rowIds})
+            `;
+          } catch (updateError) {
+            console.error("주문상태 업데이트 실패:", updateError);
+          }
+        });
+      }
+
+      const responseHeaders = new Headers();
+      responseHeaders.set(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      responseHeaders.set("Content-Disposition", contentDisposition);
+
+      return new Response(buffer, {
+        headers: responseHeaders,
+      });
+    }
+
+    // 외주 발주서인 경우: 매입처별로 그룹화하여 ZIP 생성
+    if (isOutsource && !isCJOutsource) {
+      // 내외주가 "외주"이고 CJ외주가 아닌 것들만 필터링 + 매핑코드 106464 제외
+      dataRows = dataRows.filter(
+        (row: any) =>
+          row.내외주 === "외주" &&
+          row.매핑코드 !== "106464" &&
+          !row.업체명?.includes("CJ")
       );
 
       // 전화번호 필드들에 하이픈 추가 가공
