@@ -86,11 +86,6 @@ export default function Page() {
     loadFilesFromServer,
   } = useUploadStore();
 
-  // console.log("uploadedFiles >>>", uploadedFiles);
-  // console.log("confirmedFiles >>>", confirmedFiles);
-  // console.log("codes >>>", codes);
-  // console.log("productCodeMap >>>", productCodeMap);
-
   // 로딩 상태
   const {isLoading, title, message, subMessage, startLoading} =
     useLoadingStore();

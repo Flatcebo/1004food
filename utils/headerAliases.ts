@@ -22,11 +22,11 @@ export interface ColumnAlias {
  */
 export async function fetchHeaderAliases(): Promise<ColumnAlias[]> {
   try {
-    const response = await fetch('/api/header-aliases');
+    const response = await fetch("/api/header-aliases");
     const result = await response.json();
 
     if (!result.success) {
-      throw new Error(result.error || '헤더 alias 조회 실패');
+      throw new Error(result.error || "헤더 alias 조회 실패");
     }
 
     return result.data.map((item: HeaderAlias) => ({
@@ -35,7 +35,7 @@ export async function fetchHeaderAliases(): Promise<ColumnAlias[]> {
       aliases: item.aliases,
     }));
   } catch (error) {
-    console.error('헤더 alias 조회 실패:', error);
+    console.error("헤더 alias 조회 실패:", error);
     // 폴백: 기본 alias들 반환
     return getDefaultHeaderAliases();
   }
@@ -70,7 +70,14 @@ function getDefaultHeaderAliases(): ColumnAlias[] {
     {
       key: "receiverPhone",
       label: "수령인연락처",
-      aliases: ["수령인연락처", "수령인전화", "받는사람전화", "연락처", "전화번호", "휴대폰"],
+      aliases: [
+        "수령인연락처",
+        "수령인전화",
+        "받는사람전화",
+        "연락처",
+        "전화번호",
+        "휴대폰",
+      ],
     },
     {
       key: "receiverAddr",
@@ -113,12 +120,15 @@ function getDefaultHeaderAliases(): ColumnAlias[] {
 /**
  * 헤더 alias 업데이트
  */
-export async function updateHeaderAlias(id: number, data: Partial<HeaderAlias>): Promise<HeaderAlias> {
+export async function updateHeaderAlias(
+  id: number,
+  data: Partial<HeaderAlias>
+): Promise<HeaderAlias> {
   try {
-    const response = await fetch('/api/header-aliases', {
-      method: 'PUT',
+    const response = await fetch("/api/header-aliases", {
+      method: "PUT",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({id, ...data}),
     });
@@ -126,12 +136,12 @@ export async function updateHeaderAlias(id: number, data: Partial<HeaderAlias>):
     const result = await response.json();
 
     if (!result.success) {
-      throw new Error(result.error || '헤더 alias 업데이트 실패');
+      throw new Error(result.error || "헤더 alias 업데이트 실패");
     }
 
     return result.data;
   } catch (error) {
-    console.error('헤더 alias 업데이트 실패:', error);
+    console.error("헤더 alias 업데이트 실패:", error);
     throw error;
   }
 }
@@ -139,12 +149,14 @@ export async function updateHeaderAlias(id: number, data: Partial<HeaderAlias>):
 /**
  * 새로운 헤더 alias 생성
  */
-export async function createHeaderAlias(data: Omit<HeaderAlias, 'id' | 'created_at' | 'updated_at'>): Promise<HeaderAlias> {
+export async function createHeaderAlias(
+  data: Omit<HeaderAlias, "id" | "created_at" | "updated_at">
+): Promise<HeaderAlias> {
   try {
-    const response = await fetch('/api/header-aliases', {
-      method: 'POST',
+    const response = await fetch("/api/header-aliases", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify(data),
     });
@@ -152,12 +164,12 @@ export async function createHeaderAlias(data: Omit<HeaderAlias, 'id' | 'created_
     const result = await response.json();
 
     if (!result.success) {
-      throw new Error(result.error || '헤더 alias 생성 실패');
+      throw new Error(result.error || "헤더 alias 생성 실패");
     }
 
     return result.data;
   } catch (error) {
-    console.error('헤더 alias 생성 실패:', error);
+    console.error("헤더 alias 생성 실패:", error);
     throw error;
   }
 }
@@ -168,18 +180,18 @@ export async function createHeaderAlias(data: Omit<HeaderAlias, 'id' | 'created_
 export async function deleteHeaderAlias(id: number): Promise<HeaderAlias> {
   try {
     const response = await fetch(`/api/header-aliases?id=${id}`, {
-      method: 'DELETE',
+      method: "DELETE",
     });
 
     const result = await response.json();
 
     if (!result.success) {
-      throw new Error(result.error || '헤더 alias 삭제 실패');
+      throw new Error(result.error || "헤더 alias 삭제 실패");
     }
 
     return result.data;
   } catch (error) {
-    console.error('헤더 alias 삭제 실패:', error);
+    console.error("헤더 alias 삭제 실패:", error);
     throw error;
   }
 }

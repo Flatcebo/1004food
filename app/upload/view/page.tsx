@@ -563,7 +563,7 @@ function FileViewContent() {
     }
   };
 
-  // 업체명만 업데이트하는 함수 (배송메시지는 업데이트하지 않음)
+  // 업체명만 업데이트하는 함수 (배송메시지는 원본 메시지로 복원)
   const updateVendorName = (newVendorName: string) => {
     const headerRow = tableData[0];
     const vendorIdx = headerRow.findIndex(
@@ -572,7 +572,7 @@ function FileViewContent() {
 
     if (vendorIdx === -1) return;
 
-    // 배송메시지 컬럼 인덱스 확인 (업체명과 배송메시지가 겹치지 않도록)
+    // 배송메시지 컬럼 인덱스 확인 (업체명 변경 시 배송메시지를 원본으로 복원)
     const messageIdx = headerRow.findIndex(
       (h: any) =>
         h &&
@@ -588,11 +588,16 @@ function FileViewContent() {
     const updatedTable = tableData.map((row, idx) => {
       if (idx === 0) return row;
       const newRow = [...row];
-      // 업체명 컬럼 업데이트
+      // 업체명 컬럼만 업데이트
       newRow[vendorIdx] = vendorStr;
-      // 배송메시지 컬럼이 있는 경우, 현재 배송메시지를 유지 (변경되지 않도록 보호)
-      if (messageIdx !== -1 && row[messageIdx] !== undefined) {
-        newRow[messageIdx] = row[messageIdx];
+      // 배송메시지 컬럼은 원본 메시지로 복원 (업체명 변경 시 변하지 않도록 보호)
+      if (messageIdx !== -1) {
+        const originalMessage = originalMessagesRef.current[idx];
+        if (originalMessage !== undefined) {
+          newRow[messageIdx] = originalMessage;
+        } else {
+          newRow[messageIdx] = row[messageIdx];
+        }
       }
       return newRow;
     });
@@ -1457,7 +1462,7 @@ function FileViewContent() {
                 onChange={(e) => {
                   const newValue = e.target.value;
                   setVendorName(newValue);
-                  // 업체명만 업데이트 (배송메시지는 업데이트하지 않음)
+                  // 업체명 변경 시 배송메시지가 변경되지 않도록 보호
                   updateVendorName(newValue);
                 }}
                 className="border border-gray-300 px-3 py-1 rounded text-sm"
