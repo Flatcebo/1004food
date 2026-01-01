@@ -200,8 +200,8 @@ export default function BaseFilter({
               <option value={40}>40개</option>
               <option value={100}>100개</option>
               <option value={200}>200개</option>
-              {/* <option value={400}>400개</option>
-              <option value={1000}>1000개</option> */}
+              <option value={400}>400개</option>
+              <option value={1000}>1000개</option>
             </select>
           </label>
         )}

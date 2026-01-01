@@ -85,16 +85,11 @@ export async function batchCreateProducts(
 /**
  * 상품 삭제
  */
-export async function deleteProducts(
-  ids: number[]
-): Promise<ApiResponse<any>> {
-  return apiCall<any>(
-    "/api/products/delete",
-    {
-      method: "DELETE",
-      body: JSON.stringify({ids}),
-    }
-  );
+export async function deleteProducts(ids: number[]): Promise<ApiResponse<any>> {
+  return apiCall<any>("/api/products/delete", {
+    method: "DELETE",
+    body: JSON.stringify({ids}),
+  });
 }
 
 /**

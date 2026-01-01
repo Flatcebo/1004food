@@ -273,6 +273,9 @@ const SavedDataTable = memo(function SavedDataTable({
     [key: number]: {carrier: string; trackingNumber: string};
   }>({});
   const [isConfirmingDelivery, setIsConfirmingDelivery] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Set<number>>(
+    new Set()
+  );
   const [tooltip, setTooltip] = useState<{
     visible: boolean;
     content: string;
@@ -504,38 +507,145 @@ const SavedDataTable = memo(function SavedDataTable({
       return;
     }
 
+    // 유효성 검사
+    const validationErrorMessages: string[] = [];
+    const errorRowIds = new Set<number>();
+    const validTargetIds: number[] = [];
+
+    targetIds.forEach((id) => {
+      const carrier = deliveryData[id]?.carrier || "";
+      const trackingNumber = deliveryData[id]?.trackingNumber || "";
+      let hasError = false;
+
+      // 운송장번호가 입력되었는데 택배사가 선택되지 않은 경우
+      if (trackingNumber.trim() && !carrier) {
+        validationErrorMessages.push(`ID ${id}: 택배사를 선택해주세요.`);
+        errorRowIds.add(id);
+        hasError = true;
+      }
+
+      // 택배사가 선택되었는데 운송장번호가 없는 경우
+      if (carrier && !trackingNumber.trim()) {
+        validationErrorMessages.push(`ID ${id}: 운송장번호를 입력해주세요.`);
+        errorRowIds.add(id);
+        hasError = true;
+      }
+
+      // 유효성 검사를 통과한 행만 저장 대상에 포함
+      if (!hasError) {
+        validTargetIds.push(id);
+      }
+    });
+
+    // 유효성 검사 결과를 상태에 저장
+    setValidationErrors(errorRowIds);
+
+    // 유효한 데이터가 없는 경우
+    if (validTargetIds.length === 0) {
+      alert(
+        "저장할 수 있는 유효한 데이터가 없습니다.\n\n유효성 검사 오류:\n" +
+          validationErrorMessages.join("\n")
+      );
+      return;
+    }
+
+    // 유효성 검사 실패가 있는 경우 사용자에게 알림
+    if (validationErrorMessages.length > 0) {
+      const proceed = confirm(
+        `유효성 검사 실패 항목 ${
+          validationErrorMessages.length
+        }건이 제외됩니다.\n\n실패 항목:\n${validationErrorMessages.join(
+          "\n"
+        )}\n\n유효한 ${validTargetIds.length}건을 저장하시겠습니까?`
+      );
+      if (!proceed) {
+        return;
+      }
+    }
+
     setIsConfirmingDelivery(true);
     try {
-      // API 호출로 운송장 정보 저장
-      const response = await fetch("/api/upload/update-delivery", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          deliveryData: targetIds.map((id) => ({
-            id,
-            carrier: deliveryData[id]?.carrier || "",
-            trackingNumber: deliveryData[id]?.trackingNumber || "",
-            orderStatus:
-              deliveryData[id]?.carrier &&
-              deliveryData[id]?.trackingNumber?.trim()
-                ? "배송중"
-                : "공급중", // 입력되지 않은 항목은 공급중 상태 유지
-          })),
-        }),
-      });
+      const deliveryDataList = validTargetIds.map((id) => ({
+        id,
+        carrier: deliveryData[id]?.carrier || "",
+        trackingNumber: deliveryData[id]?.trackingNumber || "",
+        orderStatus:
+          deliveryData[id]?.carrier && deliveryData[id]?.trackingNumber?.trim()
+            ? "배송중"
+            : "공급중",
+      }));
 
-      const result = await response.json();
-      if (result.success) {
-        alert(`${targetIds.length}건의 운송장 정보가 저장되었습니다.`);
+      // 배치 처리로 나누어 저장 (100건씩)
+      const batchSize = 100;
+      const totalBatches = Math.ceil(validTargetIds.length / batchSize);
+      let successCount = 0;
+      let errorMessages: string[] = [];
+
+      for (let i = 0; i < totalBatches; i++) {
+        const start = i * batchSize;
+        const end = Math.min(start + batchSize, validTargetIds.length);
+        const batchIds = validTargetIds.slice(start, end);
+        const batch = batchIds.map((id) => ({
+          id,
+          carrier: deliveryData[id]?.carrier || "",
+          trackingNumber: deliveryData[id]?.trackingNumber || "",
+          orderStatus:
+            deliveryData[id]?.carrier &&
+            deliveryData[id]?.trackingNumber?.trim()
+              ? "배송중"
+              : "공급중",
+        }));
+
+        try {
+          const response = await fetch("/api/upload/update-delivery", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              deliveryData: batch,
+            }),
+          });
+
+          const result = await response.json();
+          if (result.success) {
+            successCount += batch.length;
+          } else {
+            errorMessages.push(`배치 ${i + 1}: ${result.error || "저장 실패"}`);
+          }
+        } catch (error: any) {
+          errorMessages.push(`배치 ${i + 1}: ${error.message}`);
+        }
+      }
+
+      const excludedCount = targetIds.length - validTargetIds.length;
+
+      if (errorMessages.length === 0) {
+        const message =
+          excludedCount > 0
+            ? `${successCount}건의 운송장 정보가 저장되었습니다.\n(유효성 검사 실패 ${excludedCount}건 제외)`
+            : `${successCount}건의 운송장 정보가 저장되었습니다.`;
+
+        alert(message);
         // 데이터 새로고침
         onDataUpdate?.();
         // 선택 초기화
         setSelectedRows(new Set());
         setDeliveryData({});
+        // 유효성 검사 오류 초기화
+        setValidationErrors(new Set());
       } else {
-        throw new Error(result.error || "저장 실패");
+        alert(
+          `일부 저장에 실패했습니다:\n\n${errorMessages.join(
+            "\n"
+          )}\n\n성공: ${successCount}건${
+            excludedCount > 0
+              ? ` (유효성 검사 실패 ${excludedCount}건 제외)`
+              : ""
+          }`
+        );
+        // 성공한 경우에도 데이터 새로고침
+        onDataUpdate?.();
       }
     } catch (error: any) {
       console.error("운송장 정보 저장 실패:", error);
@@ -581,7 +691,7 @@ const SavedDataTable = memo(function SavedDataTable({
     setEditingRow({id: rowId, rowData});
   }, []);
 
-  // 운송장 데이터 변경 핸들러 메모이제이션
+  // 운송장 데이터 변경 핸들러 메모이제이션 (성능 최적화)
   const handleDeliveryDataChange = useCallback(
     (rowId: number, field: string, value: string) => {
       setDeliveryData((prev: any) => ({
@@ -591,6 +701,12 @@ const SavedDataTable = memo(function SavedDataTable({
           [field]: value,
         },
       }));
+      // 입력 변경 시 유효성 검사 오류 초기화
+      setValidationErrors((prev) => {
+        const newErrors = new Set(prev);
+        newErrors.delete(rowId);
+        return newErrors;
+      });
     },
     []
   );
@@ -724,6 +840,7 @@ const SavedDataTable = memo(function SavedDataTable({
       deliveryData,
       handleDeliveryDataChange,
       isDeliveryInputMode,
+      validationErrors,
       handleTooltipShow,
       handleTooltipHide,
     }: {
@@ -745,6 +862,7 @@ const SavedDataTable = memo(function SavedDataTable({
         value: string
       ) => void;
       isDeliveryInputMode: boolean;
+      validationErrors: Set<number>;
       handleTooltipShow: (content: string, x: number, y: number) => void;
       handleTooltipHide: () => void;
     }) => {
@@ -756,10 +874,29 @@ const SavedDataTable = memo(function SavedDataTable({
       const isCancelled = orderStatus === "취소";
       const isSelected = selectedRows.has(row.id);
 
+      // 운송장 입력 모드일 때 배경색 로직
+      let rowBackgroundClass = "";
+      if (isDeliveryInputMode) {
+        const hasValidationError = validationErrors.has(row.id);
+        const carrier = deliveryData[row.id]?.carrier || "";
+        const trackingNumber = deliveryData[row.id]?.trackingNumber || "";
+        const isCompleted = carrier && trackingNumber.trim();
+
+        if (hasValidationError) {
+          rowBackgroundClass = "bg-red-100"; // 유효성 검사 실패
+        } else if (isCompleted) {
+          rowBackgroundClass = "bg-gray-100"; // 입력 완료
+        }
+      }
+
       return (
         <tr
           className={`${
-            isCancelled ? "bg-red-50" : isSelected ? "bg-gray-50" : ""
+            isCancelled
+              ? "bg-red-50"
+              : isSelected
+              ? "bg-gray-50"
+              : rowBackgroundClass
           }`}
           style={{height: "56px"}}
         >
@@ -1180,49 +1317,51 @@ const SavedDataTable = memo(function SavedDataTable({
     }
   );
 
-  // 운송장 입력 필드 컴포넌트 메모이제이션
-  const TableDeliveryInputCell = memo(
-    ({
-      rowId,
-      deliveryData,
-      handleDeliveryDataChange,
-    }: {
-      rowId: number;
-      deliveryData: any;
-      handleDeliveryDataChange: (
-        rowId: number,
-        field: string,
-        value: string
-      ) => void;
-    }) => (
-      <div className="flex flex-col gap-1">
-        <select
-          className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded"
-          value={deliveryData[rowId]?.carrier || ""}
-          onChange={(e) =>
-            handleDeliveryDataChange(rowId, "carrier", e.target.value)
-          }
-        >
-          <option value="">택배사 선택</option>
-          <option value="CJ택배">CJ택배</option>
-          <option value="우체국택배">우체국택배</option>
-          <option value="로젠택배">로젠택배</option>
-          <option value="롯데택배">롯데택배</option>
-          <option value="한진택배">한진택배</option>
-          <option value="천일택배">천일택배</option>
-          <option value="방문수령">방문수령</option>
-        </select>
-        <input
-          type="text"
-          placeholder="운송장번호"
-          className="w-full px-2 py-0.5 text-xs border border-gray-300 rounded"
-          value={deliveryData[rowId]?.trackingNumber || ""}
-          onChange={(e) =>
-            handleDeliveryDataChange(rowId, "trackingNumber", e.target.value)
-          }
-        />
-      </div>
-    )
+  // 운송장 입력 필드 컴포넌트 (uncontrolled input 사용)
+  const TableDeliveryInputCell = ({
+    rowId,
+    deliveryData,
+    handleDeliveryDataChange,
+  }: {
+    rowId: number;
+    deliveryData: any;
+    handleDeliveryDataChange: (
+      rowId: number,
+      field: string,
+      value: string
+    ) => void;
+  }) => (
+    <div className="flex flex-col gap-1">
+      <select
+        key={`carrier-${rowId}`}
+        className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded"
+        value={deliveryData[rowId]?.carrier || ""}
+        onChange={(e) =>
+          handleDeliveryDataChange(rowId, "carrier", e.target.value)
+        }
+      >
+        <option value="" disabled>
+          택배사 선택
+        </option>
+        <option value="CJ택배">CJ택배</option>
+        <option value="우체국택배">우체국택배</option>
+        <option value="로젠택배">로젠택배</option>
+        <option value="롯데택배">롯데택배</option>
+        <option value="한진택배">한진택배</option>
+        <option value="천일택배">천일택배</option>
+        <option value="방문수령">방문수령</option>
+      </select>
+      <input
+        key={`tracking-${rowId}`}
+        type="text"
+        placeholder="운송장번호"
+        className="w-full px-2 py-0.5 text-xs border border-gray-300 rounded"
+        defaultValue={deliveryData[rowId]?.trackingNumber || ""}
+        onBlur={(e) =>
+          handleDeliveryDataChange(rowId, "trackingNumber", e.target.value)
+        }
+      />
+    </div>
   );
 
   TableCheckbox.displayName = "TableCheckbox";
@@ -1555,6 +1694,7 @@ const SavedDataTable = memo(function SavedDataTable({
                                 handleDeliveryDataChange
                               }
                               isDeliveryInputMode={isDeliveryInputMode}
+                              validationErrors={validationErrors}
                               handleTooltipShow={handleTooltipShow}
                               handleTooltipHide={handleTooltipHide}
                             />
@@ -1615,7 +1755,6 @@ const SavedDataTable = memo(function SavedDataTable({
           {tooltip.content}
         </div>
       )}
-
     </>
   );
 });

@@ -6,6 +6,7 @@ import {useRef, useState} from "react";
 
 function ProductUploadPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const batchFileInputRef = useRef<HTMLInputElement>(null);
   const [uploadStatus, setUploadStatus] = useState<{
     message: string;
     type: "success" | "error" | "";
@@ -57,8 +58,57 @@ function ProductUploadPage() {
     }
   };
 
+  const handleBatchUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    setUploadStatus({message: "", type: ""});
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/products/batch-create-excel", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setUploadStatus({
+          message: result.message || "배치 업로드 성공!",
+          type: "success",
+        });
+      } else {
+        setUploadStatus({
+          message: result.error || "배치 업로드 실패",
+          type: "error",
+        });
+      }
+    } catch (error: any) {
+      setUploadStatus({
+        message: error.message || "배치 업로드 중 오류가 발생했습니다.",
+        type: "error",
+      });
+    } finally {
+      setIsUploading(false);
+      // input 초기화
+      if (batchFileInputRef.current) {
+        batchFileInputRef.current.value = "";
+      }
+    }
+  };
+
   const handleUploadClick = () => {
     fileInputRef.current?.click();
+  };
+
+  const handleBatchUploadClick = () => {
+    batchFileInputRef.current?.click();
   };
 
   const downloadProductTemplate = async () => {
@@ -192,10 +242,10 @@ function ProductUploadPage() {
         </p>
       </div>
 
-      {/* 업로드 섹션 */}
+      {/* 기존 상품 업로드 섹션 */}
       <div className="bg-white rounded-lg shadow-md p-6 mb-6">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">
-          📁 파일 업로드
+          📁 기존 상품 업로드
         </h2>
 
         <div className="space-y-4">
@@ -234,23 +284,67 @@ function ProductUploadPage() {
                   : "bg-blue-600 hover:bg-blue-700 text-white"
               }`}
             >
-              {isUploading ? "업로드 중..." : "📁 엑셀 파일 선택"}
+              {isUploading ? "업로드 중..." : "📁 기존 방식 업로드"}
             </button>
           </div>
-
-          {uploadStatus.message && (
-            <div
-              className={`mt-4 p-4 rounded-lg ${
-                uploadStatus.type === "success"
-                  ? "bg-green-50 border border-green-200 text-green-800"
-                  : "bg-red-50 border border-red-200 text-red-800"
-              }`}
-            >
-              {uploadStatus.message}
-            </div>
-          )}
         </div>
       </div>
+
+      {/* 신규 상품 배치 업로드 섹션 */}
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">
+          🚀 신규 상품 배치 업로드
+        </h2>
+
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm text-gray-600 mb-3">
+              지정된 헤더 형식에 따라 상품 데이터를 배치로 저장합니다.
+              <br />
+              <strong>필수 헤더:</strong> 카테고리, 세금구분, 상품명, 품번코드, 매입처, 상품구분, 판매가, 원가, 배송비
+              <br />
+              <strong>특징:</strong> 상품구분이 "위탁"이면 외주, 그 외는 내주로 자동 설정
+              <br />
+              <strong>💡 배치 처리:</strong> 100건씩 배치로 효율적으로 저장됩니다.
+            </p>
+          </div>
+
+          <div className="flex gap-4">
+            <input
+              ref={batchFileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleBatchUpload}
+              className="hidden"
+            />
+
+            <button
+              onClick={handleBatchUploadClick}
+              disabled={isUploading}
+              className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+                isUploading
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-purple-600 hover:bg-purple-700 text-white"
+              }`}
+            >
+              {isUploading ? "업로드 중..." : "📁 배치 업로드"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 공통 상태 표시 */}
+      {uploadStatus.message && (
+        <div
+          className={`mt-4 p-4 rounded-lg ${
+            uploadStatus.type === "success"
+              ? "bg-green-50 border border-green-200 text-green-800"
+              : "bg-red-50 border border-red-200 text-red-800"
+          }`}
+        >
+          {uploadStatus.message}
+        </div>
+      )}
 
       {/* 사용 가이드 */}
       <div className="bg-blue-50 rounded-lg p-6">
