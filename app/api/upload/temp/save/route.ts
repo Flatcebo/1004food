@@ -3,7 +3,10 @@ import sql from "@/lib/db";
 import {checkFileValidation} from "@/utils/fileValidation";
 
 // 중복 파일명 체크 함수 (세션별)
-async function checkDuplicateFileName(fileName: string, sessionId: string): Promise<boolean> {
+async function checkDuplicateFileName(
+  fileName: string,
+  sessionId: string
+): Promise<boolean> {
   try {
     const existingFiles = await sql`
       SELECT file_name FROM temp_files
@@ -13,7 +16,10 @@ async function checkDuplicateFileName(fileName: string, sessionId: string): Prom
     return existingFiles.length > 0;
   } catch (error: any) {
     // session_id 컬럼이 없으면 파일명만으로 체크
-    if (error.message && error.message.includes('column "session_id" does not exist')) {
+    if (
+      error.message &&
+      error.message.includes('column "session_id" does not exist')
+    ) {
       const existingFiles = await sql`
         SELECT file_name FROM temp_files WHERE file_name = ${fileName}
       `;
@@ -136,7 +142,10 @@ export async function POST(request: NextRequest) {
           `;
         } catch (error: any) {
           // validation_status 컬럼이 없으면 다시 시도 (컬럼 추가 후)
-          if (error.message && error.message.includes('column "validation_status" does not exist')) {
+          if (
+            error.message &&
+            error.message.includes('column "validation_status" does not exist')
+          ) {
             // 컬럼 추가 시도
             try {
               await sql`ALTER TABLE temp_files ADD COLUMN validation_status JSONB`;
@@ -174,7 +183,10 @@ export async function POST(request: NextRequest) {
                 updated_at = ${koreaTime.toISOString()}::timestamp
               RETURNING id
             `;
-          } else if (error.message && error.message.includes('column "session_id" does not exist')) {
+          } else if (
+            error.message &&
+            error.message.includes('column "session_id" does not exist')
+          ) {
             // session_id 컬럼이 없으면 session_id 없이 저장
             result = await sql`
               INSERT INTO temp_files (

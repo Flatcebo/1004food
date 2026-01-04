@@ -323,7 +323,19 @@ export default function Page() {
 
         // 코드 우선순위: 파일의 productCodeMap > 전역 productCodeMap > codes 자동 매칭
         let codeVal = fileProductCodeMap[name] || productCodeMap[name];
-        const found = codes.find((c: any) => c.name === name);
+        // 택배사가 있는 상품 우선 선택
+        const productsWithPostType = codes.filter(
+          (c: any) =>
+            c.name === name && c.postType && String(c.postType).trim() !== ""
+        );
+        const productsWithoutPostType = codes.filter(
+          (c: any) =>
+            c.name === name && (!c.postType || String(c.postType).trim() === "")
+        );
+        const found =
+          productsWithPostType.length > 0
+            ? productsWithPostType[0]
+            : productsWithoutPostType[0];
         if (!codeVal && found?.code) {
           codeVal = found.code;
           // 자동 매핑된 코드를 로그로 출력 (첫 번째 매칭만)

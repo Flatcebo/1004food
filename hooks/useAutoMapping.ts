@@ -77,7 +77,19 @@ export function useAutoMapping({
 
       // 코드 우선순위: 직접 입력(productCodeMap) > codes.json 자동 매칭
       let codeVal = newMap[name];
-      const found = codes.find((c: any) => c.name === name);
+      // 택배사가 있는 상품 우선 선택
+      const productsWithPostType = codes.filter(
+        (c: any) =>
+          c.name === name && c.postType && String(c.postType).trim() !== ""
+      );
+      const productsWithoutPostType = codes.filter(
+        (c: any) =>
+          c.name === name && (!c.postType || String(c.postType).trim() === "")
+      );
+      const found =
+        productsWithPostType.length > 0
+          ? productsWithPostType[0]
+          : productsWithoutPostType[0];
       if (!codeVal && found?.code) codeVal = found.code;
 
       if (mappingIdx >= 0 && codeVal && row[mappingIdx] !== codeVal) {

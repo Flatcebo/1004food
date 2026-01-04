@@ -30,6 +30,68 @@ export async function POST(request: NextRequest) {
 
     // 택배사가 null이면 빈 문자열로 변환 (NULL은 UNIQUE 제약조건에서 서로 다른 값으로 취급되므로)
     const normalizedPostType = postType || "";
+    const normalizedSabangName = sabangName || null;
+
+    // 조건부 삭제 로직: 상품명, 사방넷명, 매핑코드가 모두 동일한 경우
+    // 택배사가 공란이 아닌 상품만 남기고, 상품명과 사방넷명이 동일한 상품 중 택배사가 공란인 것만 삭제
+    if (name && code && normalizedSabangName) {
+      try {
+        // 1. 같은 상품명, 사방넷명, 매핑코드를 가진 상품들 찾기
+        const duplicateProducts = await sql`
+          SELECT id, post_type, name, sabang_name, code
+          FROM products
+          WHERE name = ${name}
+            AND sabang_name = ${normalizedSabangName}
+            AND code = ${code}
+        `;
+
+        if (duplicateProducts.length > 0) {
+          // 2. 삭제할 상품 ID 목록 (택배사가 공란인 상품들만)
+          const deleteIds = duplicateProducts
+            .filter((p: any) => !p.post_type || p.post_type.trim() === "")
+            .map((p: any) => p.id);
+
+          // 3. 택배사가 공란인 상품들 삭제
+          if (deleteIds.length > 0) {
+            await sql`
+              DELETE FROM products
+              WHERE id = ANY(${deleteIds}::int[])
+            `;
+            console.log(
+              `✅ 조건부 삭제: ${deleteIds.length}개 상품 삭제 (상품명/사방넷명/매핑코드 동일, 택배사 공란)`
+            );
+          }
+        }
+
+        // 4. 상품명과 사방넷명이 동일한 모든 상품 찾기 (매핑코드 무관)
+        const sameNameSabangProducts = await sql`
+          SELECT id, post_type, code
+          FROM products
+          WHERE name = ${name}
+            AND sabang_name = ${normalizedSabangName}
+            AND code != ${code}
+        `;
+
+        // 5. 삭제할 상품 ID 목록 (상품명, 사방넷명 동일하지만 매핑코드 다른 상품 중 택배사 공란만)
+        const deleteIdsFromSameName = sameNameSabangProducts
+          .filter((p: any) => !p.post_type || p.post_type.trim() === "")
+          .map((p: any) => p.id);
+
+        // 6. 상품명과 사방넷명이 동일한 상품 중 택배사가 공란인 것들 삭제
+        if (deleteIdsFromSameName.length > 0) {
+          await sql`
+            DELETE FROM products
+            WHERE id = ANY(${deleteIdsFromSameName}::int[])
+          `;
+          console.log(
+            `✅ 조건부 삭제: ${deleteIdsFromSameName.length}개 상품 삭제 (상품명/사방넷명 동일, 택배사 공란)`
+          );
+        }
+      } catch (deleteError: any) {
+        console.error("조건부 삭제 중 오류 발생:", deleteError);
+        // 삭제 실패해도 계속 진행 (기존 동작 유지)
+      }
+    }
 
     const result = await sql`
       INSERT INTO products (

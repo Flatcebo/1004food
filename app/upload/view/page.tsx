@@ -694,54 +694,134 @@ function FileViewContent() {
       }
 
       try {
-        const {fetchProducts} = await import("@/utils/api");
-        const result = await fetchProducts();
+        // 먼저 codes 배열에서 매핑코드로 상품 찾기
+        const productFromCodes = codes.find(
+          (p: any) => String(p.code || "").trim() === String(mappingCode).trim()
+        );
 
-        if (result.success && result.data) {
-          const product = result.data.find(
-            (p: any) =>
-              String(p.code || "").trim() === String(mappingCode).trim()
-          );
+        // codes 배열에서 찾은 상품의 ID가 있으면 ID로 조회, 없으면 매핑코드로 조회
+        if (productFromCodes && productFromCodes.id) {
+          const {fetchProducts} = await import("@/utils/api");
+          const result = await fetchProducts();
 
-          if (product) {
-            // Product 데이터를 DirectInputModal 형식으로 변환
-            const values: {[key: string]: string} = {};
-            const fieldOrder = [...PRODUCT_FIELD_ORDER];
-
-            fieldOrder.forEach((field) => {
-              const value = (product as any)[field];
-              if (value !== null && value !== undefined) {
-                values[field] = String(value);
-              } else {
-                values[field] = "";
-              }
-            });
-
-            // 상품명 우선순위: 업로드한 데이터의 상품명 > 상품 정보의 상품명
-            if (uploadedProductName && uploadedProductName.trim()) {
-              values.name = uploadedProductName.trim();
-            }
-
-            setProductEditModal({
-              open: true,
-              fields: fieldOrder,
-              values,
-              productCode: String(mappingCode).trim(),
-            });
-          } else {
-            alert(
-              `매핑코드 "${mappingCode}"에 해당하는 상품을 찾을 수 없습니다.`
+          if (result.success && result.data) {
+            // ID로 상품 찾기
+            const product = result.data.find(
+              (p: any) => p.id === productFromCodes.id
             );
+
+            if (product) {
+              // Product 데이터를 DirectInputModal 형식으로 변환
+              const values: {[key: string]: string} = {};
+              const fieldOrder = [...PRODUCT_FIELD_ORDER];
+
+              fieldOrder.forEach((field) => {
+                // postType 필드는 postType 또는 post_type 둘 다 확인
+                let value = (product as any)[field];
+                if (
+                  field === "postType" &&
+                  (value === null || value === undefined || value === "")
+                ) {
+                  value = (product as any).post_type;
+                }
+
+                if (value !== null && value !== undefined && value !== "") {
+                  values[field] = String(value).trim();
+                } else {
+                  values[field] = "";
+                }
+              });
+
+              // 상품명 우선순위: 업로드한 데이터의 상품명 > 상품 정보의 상품명
+              if (uploadedProductName && uploadedProductName.trim()) {
+                values.name = uploadedProductName.trim();
+              }
+
+              setProductEditModal({
+                open: true,
+                fields: fieldOrder,
+                values,
+                productCode: String(mappingCode).trim(),
+              });
+            } else {
+              alert(
+                `상품 ID "${productFromCodes.id}"에 해당하는 상품을 찾을 수 없습니다.`
+              );
+            }
+          } else {
+            throw new Error(result.error || "상품 정보를 가져올 수 없습니다.");
           }
         } else {
-          throw new Error(result.error || "상품 정보를 가져올 수 없습니다.");
+          // codes 배열에서 ID를 찾을 수 없으면 기존 방식대로 매핑코드로 조회
+          const {fetchProducts} = await import("@/utils/api");
+          const result = await fetchProducts();
+
+          if (result.success && result.data) {
+            // 택배사가 있는 상품 우선 선택
+            const productsWithPostType = result.data.filter(
+              (p: any) =>
+                String(p.code || "").trim() === String(mappingCode).trim() &&
+                p.postType &&
+                String(p.postType).trim() !== ""
+            );
+            const productsWithoutPostType = result.data.filter(
+              (p: any) =>
+                String(p.code || "").trim() === String(mappingCode).trim() &&
+                (!p.postType || String(p.postType).trim() === "")
+            );
+            const product =
+              productsWithPostType.length > 0
+                ? productsWithPostType[0]
+                : productsWithoutPostType[0];
+
+            if (product) {
+              // Product 데이터를 DirectInputModal 형식으로 변환
+              const values: {[key: string]: string} = {};
+              const fieldOrder = [...PRODUCT_FIELD_ORDER];
+
+              fieldOrder.forEach((field) => {
+                // postType 필드는 postType 또는 post_type 둘 다 확인
+                let value = (product as any)[field];
+                if (
+                  field === "postType" &&
+                  (value === null || value === undefined || value === "")
+                ) {
+                  value = (product as any).post_type;
+                }
+
+                if (value !== null && value !== undefined && value !== "") {
+                  values[field] = String(value).trim();
+                } else {
+                  values[field] = "";
+                }
+              });
+
+              // 상품명 우선순위: 업로드한 데이터의 상품명 > 상품 정보의 상품명
+              if (uploadedProductName && uploadedProductName.trim()) {
+                values.name = uploadedProductName.trim();
+              }
+
+              setProductEditModal({
+                open: true,
+                fields: fieldOrder,
+                values,
+                productCode: String(mappingCode).trim(),
+              });
+            } else {
+              alert(
+                `매핑코드 "${mappingCode}"에 해당하는 상품을 찾을 수 없습니다.`
+              );
+            }
+          } else {
+            throw new Error(result.error || "상품 정보를 가져올 수 없습니다.");
+          }
         }
       } catch (error) {
         console.error("상품 정보 조회 실패:", error);
         alert("상품 정보를 가져오는 중 오류가 발생했습니다.");
       }
     },
-    []
+    [codes]
   );
 
   // 상품 수정 모달 닫기
@@ -1537,7 +1617,28 @@ function FileViewContent() {
                           <span>확정상품명</span>
                         </div>
                       </th>
-                    ) : (
+                    ) : header === "업체명" || header === "업체" ? (
+                      <th
+                        key={hidx}
+                        className="border bg-gray-100 px-2 py-1 text-xs"
+                      >
+                        <div className="flex flex-col">
+                          <span>업체명</span>
+                          <span>매입처명</span>
+                        </div>
+                      </th>
+                    ) : header === "내외주" ? (
+                      <th
+                        key={hidx}
+                        className="border bg-gray-100 px-2 py-1 text-xs"
+                      >
+                        <div className="flex flex-col">
+                          <span>내외주</span>
+                          <span>택배사</span>
+                        </div>
+                      </th>
+                    ) : header === "택배사" ? // 택배사 칼럼 숨기기
+                    null : (
                       <th
                         key={hidx}
                         className="border bg-gray-100 px-2 py-1 text-xs"
@@ -1570,27 +1671,30 @@ function FileViewContent() {
                   );
 
                   // 편집 모드가 아닐 때만 정렬, 편집 모드일 때는 원본 순서 유지
+                  // 정렬 시 원본 인덱스를 함께 저장하여 고유 키 생성
                   const sorted = isEditMode
-                    ? [...tableData.slice(1)]
-                    : [...tableData.slice(1)].sort((a, b) => {
-                        const prodA = a[productNameIdx] || "";
-                        const prodB = b[productNameIdx] || "";
-                        const prodCompare = String(prodA).localeCompare(
-                          String(prodB),
-                          "ko-KR"
-                        );
-                        if (prodCompare !== 0) return prodCompare;
-                        // 상품명 동일하면 수취인명 or 이름 기준
-                        if (receiverIdx !== -1) {
-                          const recA = a[receiverIdx] || "";
-                          const recB = b[receiverIdx] || "";
-                          return String(recA).localeCompare(
-                            String(recB),
+                    ? tableData.slice(1).map((row, idx) => ({ row, originalIdx: idx + 1 }))
+                    : tableData.slice(1)
+                        .map((row, idx) => ({ row, originalIdx: idx + 1 }))
+                        .sort((a, b) => {
+                          const prodA = a.row[productNameIdx] || "";
+                          const prodB = b.row[productNameIdx] || "";
+                          const prodCompare = String(prodA).localeCompare(
+                            String(prodB),
                             "ko-KR"
                           );
-                        }
-                        return 0;
-                      });
+                          if (prodCompare !== 0) return prodCompare;
+                          // 상품명 동일하면 수취인명 or 이름 기준
+                          if (receiverIdx !== -1) {
+                            const recA = a.row[receiverIdx] || "";
+                            const recB = b.row[receiverIdx] || "";
+                            return String(recA).localeCompare(
+                              String(recB),
+                              "ko-KR"
+                            );
+                          }
+                          return 0;
+                        });
                   const headerRow = tableData[0];
                   const mappingIdx = headerRow.findIndex(
                     (h: any) => h === "매핑코드"
@@ -1600,6 +1704,9 @@ function FileViewContent() {
                   );
                   const postTypeIdx = headerRow.findIndex(
                     (h: any) => h === "택배사"
+                  );
+                  const vendorIdx = headerRow.findIndex(
+                    (h: any) => h === "업체명" || h === "업체"
                   );
                   const qtyIdx = headerRow.findIndex((h: any) => h === "수량");
                   const receiverNameIdx = headerRow.findIndex(
@@ -1652,7 +1759,9 @@ function FileViewContent() {
                     return set;
                   })();
 
-                  return sorted.map((row, i) => {
+                  return sorted.map((item, i) => {
+                    const row = item.row;
+                    const originalIdx = item.originalIdx;
                     let name = "";
                     if (typeof headerIndex?.nameIdx === "number") {
                       name = row[headerIndex.nameIdx] as string;
@@ -1687,14 +1796,14 @@ function FileViewContent() {
                         "";
                     }
 
-                    // 실제 tableData에서의 행 인덱스 찾기
-                    const actualRowIndex = tableData.indexOf(row);
+                    // 실제 tableData에서의 행 인덱스 (원본 인덱스 사용)
+                    const actualRowIndex = originalIdx;
                     // 선택된 행인지 확인
                     const isRowSelected = selectedRows.has(actualRowIndex);
 
                     return (
                       <tr
-                        key={i}
+                        key={`row-${originalIdx}-${i}`}
                         className={isRowSelected ? "bg-blue-100" : ""}
                       >
                         {isEditMode && (
@@ -1708,6 +1817,11 @@ function FileViewContent() {
                           </td>
                         )}
                         {tableData[0].map((_, j) => {
+                          // 택배사 칼럼은 숨기기
+                          if (j === postTypeIdx) {
+                            return null;
+                          }
+
                           // 클라이언트 맵에 저장된 값이 있으면 우선 사용
                           let cellValue = row[j];
                           if (name) {
@@ -1763,10 +1877,8 @@ function FileViewContent() {
                                           : ""
                                       }
                                       onChange={(e) => {
-                                        const actualRowIndex =
-                                          tableData.indexOf(row);
                                         handleCellChange(
-                                          actualRowIndex,
+                                          originalIdx,
                                           j,
                                           e.target.value
                                         );
@@ -1833,7 +1945,31 @@ function FileViewContent() {
                                 // 상품명 컬럼인 경우 원본 상품명과 사방넷명을 줄바꿈하여 표시
                                 j === productNameIdx ? (
                                   <div className="flex flex-col gap-1">
-                                    <div>{cellValue}</div>
+                                    <div>
+                                      {(() => {
+                                        const productNameStr = String(
+                                          cellValue || ""
+                                        );
+                                        // "|n세트" 패턴 찾기
+                                        const setMatch =
+                                          productNameStr.match(
+                                            /^(.+)\|(\d+)세트$/
+                                          );
+                                        if (setMatch) {
+                                          const [, baseName, setCount] =
+                                            setMatch;
+                                          return (
+                                            <>
+                                              {baseName}
+                                              <span className="font-bold text-red-600">
+                                                |{setCount}세트
+                                              </span>
+                                            </>
+                                          );
+                                        }
+                                        return productNameStr;
+                                      })()}
+                                    </div>
                                     {(() => {
                                       // 매핑코드로 상품 찾기
                                       const productName =
@@ -1862,6 +1998,115 @@ function FileViewContent() {
                                         return (
                                           <div className="text-blue-600 text-xs">
                                             {product.sabangName}
+                                          </div>
+                                        );
+                                      }
+                                      return null;
+                                    })()}
+                                  </div>
+                                ) : j === vendorIdx ? (
+                                  // 업체명 컬럼인 경우 업체명과 매입처명을 줄바꿈하여 표시
+                                  <div className="flex flex-col gap-1">
+                                    <div>{cellValue}</div>
+                                    {(() => {
+                                      // 매핑코드로 상품 찾기
+                                      const productName = name
+                                        ? String(name).trim()
+                                        : "";
+                                      const mappingCode = productName
+                                        ? productCodeMap[productName] ||
+                                          (mappingIdx !== -1 && row[mappingIdx]
+                                            ? String(row[mappingIdx])
+                                            : "") ||
+                                          codes.find(
+                                            (c: any) => c.name === productName
+                                          )?.code ||
+                                          codesOriginRef.current.find(
+                                            (c) => c.name === productName
+                                          )?.code ||
+                                          ""
+                                        : "";
+
+                                      let product = null;
+                                      if (mappingCode) {
+                                        // 매핑코드가 있으면 code로만 찾기
+                                        product = codes.find(
+                                          (c: any) => c.code === mappingCode
+                                        );
+                                      } else if (productName) {
+                                        // 매핑코드가 없으면 name으로 찾기
+                                        product = codes.find(
+                                          (c: any) => c.name === productName
+                                        );
+                                      }
+
+                                      // purchase(매입처명)이 있으면 표시
+                                      if (
+                                        product?.purchase &&
+                                        String(product.purchase).trim() !== ""
+                                      ) {
+                                        return (
+                                          <div className="text-blue-600 text-xs">
+                                            {product.purchase}
+                                          </div>
+                                        );
+                                      }
+                                      return null;
+                                    })()}
+                                  </div>
+                                ) : j === typeIdx ? (
+                                  // 내외주 컬럼인 경우 내외주와 택배사를 줄바꿈하여 표시
+                                  <div className="flex flex-col gap-1">
+                                    <div>{cellValue}</div>
+                                    {(() => {
+                                      // 현재 row의 택배사 값 가져오기
+                                      const currentPostType =
+                                        postTypeIdx !== -1 && row[postTypeIdx]
+                                          ? String(row[postTypeIdx]).trim()
+                                          : "";
+
+                                      // 매핑코드로 상품 찾기
+                                      const productName = name
+                                        ? String(name).trim()
+                                        : "";
+                                      const mappingCode = productName
+                                        ? productCodeMap[productName] ||
+                                          (mappingIdx !== -1 && row[mappingIdx]
+                                            ? String(row[mappingIdx])
+                                            : "") ||
+                                          codes.find(
+                                            (c: any) => c.name === productName
+                                          )?.code ||
+                                          codesOriginRef.current.find(
+                                            (c) => c.name === productName
+                                          )?.code ||
+                                          ""
+                                        : "";
+
+                                      let product = null;
+                                      if (mappingCode) {
+                                        // 매핑코드가 있으면 code로만 찾기
+                                        product = codes.find(
+                                          (c: any) => c.code === mappingCode
+                                        );
+                                      } else if (productName) {
+                                        // 매핑코드가 없으면 name으로 찾기
+                                        product = codes.find(
+                                          (c: any) => c.name === productName
+                                        );
+                                      }
+
+                                      // 택배사 표시: 매핑된 상품의 택배사 우선, 없으면 현재 row의 택배사 값
+                                      const postTypeToShow =
+                                        product?.postType &&
+                                        String(product.postType).trim() !== ""
+                                          ? product.postType
+                                          : currentPostType;
+
+                                      if (postTypeToShow) {
+                                        return (
+                                          <div className="text-blue-600 text-xs">
+                                            {postTypeToShow}
                                           </div>
                                         );
                                       }
@@ -1944,10 +2189,15 @@ function FileViewContent() {
                                     selectedId
                                   ) => {
                                     console.log(selectedId);
-                                    // 먼저 productCodeMap 업데이트
+
+                                    // 원래 상품명 사용 (name prop에서 전달받은 값)
+                                    const originalProductName =
+                                      String(name).trim();
+
+                                    // 먼저 productCodeMap 업데이트 (원래 상품명으로 매핑코드 저장)
                                     const updatedProductCodeMap = {
                                       ...productCodeMap,
-                                      [selectedName]: selectedCode,
+                                      [originalProductName]: selectedCode,
                                     };
                                     setProductCodeMap(updatedProductCodeMap);
 
@@ -1964,14 +2214,15 @@ function FileViewContent() {
                                     if (itemData?.type) {
                                       setProductTypeMap((prev) => ({
                                         ...prev,
-                                        [selectedName]: itemData.type,
+                                        [originalProductName]: itemData.type,
                                       }));
                                     }
 
                                     if (itemData?.postType) {
                                       setProductPostTypeMap((prev) => ({
                                         ...prev,
-                                        [selectedName]: itemData.postType,
+                                        [originalProductName]:
+                                          itemData.postType,
                                       }));
                                     }
 
@@ -1992,16 +2243,25 @@ function FileViewContent() {
                                       typeIdx !== -1 ||
                                       postTypeIdx !== -1
                                     ) {
+                                      // rowIdx를 사용하여 해당 행을 직접 업데이트하고,
+                                      // 같은 상품명을 가진 다른 행들도 함께 업데이트
+                                      // sorted는 tableData.slice(1)에서 생성되므로, tableData에서의 실제 인덱스는 i + 1
+                                      const targetRowIndex = i + 1;
+
                                       const updatedTable = tableData.map(
                                         (row, idx) => {
                                           if (idx === 0) return row;
                                           const rowName =
                                             row[headerIndex.nameIdx!];
-                                          // 같은 상품명을 가진 모든 행 업데이트
+                                          const trimmedRowName =
+                                            String(rowName).trim();
+
+                                          // rowIdx에 해당하는 행이거나 같은 상품명을 가진 모든 행 업데이트
                                           if (
-                                            rowName &&
-                                            String(rowName).trim() ===
-                                              selectedName.trim()
+                                            idx === targetRowIndex ||
+                                            (rowName &&
+                                              trimmedRowName ===
+                                                originalProductName)
                                           ) {
                                             const newRow = [...row];
                                             if (
@@ -2051,8 +2311,9 @@ function FileViewContent() {
                                     }
 
                                     // 모달 닫기
+                                    setRecommendIdx(null);
                                     handleSelectSuggest(
-                                      selectedName,
+                                      originalProductName,
                                       selectedCode,
                                       selectedId
                                     );
@@ -2118,8 +2379,7 @@ function FileViewContent() {
                           <td className="border px-2 py-1 border-gray-300 text-xs text-center">
                             <button
                               onClick={() => {
-                                const actualRowIndex = tableData.indexOf(row);
-                                handleDuplicateRow(actualRowIndex);
+                                handleDuplicateRow(originalIdx);
                               }}
                               className="px-2 py-1 bg-[#04a670] hover:bg-[#04a670]/60 text-white rounded text-xs font-bold"
                               type="button"

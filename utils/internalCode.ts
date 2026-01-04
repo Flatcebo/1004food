@@ -92,25 +92,33 @@ export async function generateUniqueCodesForVendors(
     `[generateUniqueCodesForVendors] 총 ${vendorNames.length}개 코드 생성 시작`
   );
 
-  // 업체명별 현재 increment 추적
-  const vendorIncrements = new Map<string, number>();
+  // prefix별 현재 increment 추적 (업체명 전체가 아닌 prefix 기준)
+  const prefixIncrements = new Map<string, number>();
 
-  // 각 업체명별로 최대 increment 초기화
-  const uniqueVendors = Array.from(new Set(vendorNames));
+  // 각 고유 prefix별로 최대 increment 초기화
+  const uniquePrefixes = Array.from(
+    new Set(vendorNames.map((name) => getVendorPrefix(name)))
+  );
   console.log(
-    `[generateUniqueCodesForVendors] 고유 업체명 ${uniqueVendors.length}개`
+    `[generateUniqueCodesForVendors] 고유 prefix ${uniquePrefixes.length}개`
   );
 
-  for (const vendorName of uniqueVendors) {
-    const maxIncrement = await getMaxIncrement(vendorName, dateStr);
-    vendorIncrements.set(vendorName, maxIncrement);
+  for (const prefix of uniquePrefixes) {
+    // prefix를 가진 임의의 업체명으로 최대 increment 조회
+    // (prefix가 같으면 같은 코드가 생성되므로 어떤 업체명이든 상관없음)
+    const sampleVendorName = vendorNames.find(
+      (name) => getVendorPrefix(name) === prefix
+    ) || "";
+    const maxIncrement = await getMaxIncrement(sampleVendorName, dateStr);
+    prefixIncrements.set(prefix, maxIncrement);
   }
 
   // vendorNames 배열 순서대로 코드 생성
   for (const vendorName of vendorNames) {
-    const currentIncrement = vendorIncrements.get(vendorName) || 0;
+    const prefix = getVendorPrefix(vendorName);
+    const currentIncrement = prefixIncrements.get(prefix) || 0;
     const nextIncrement = currentIncrement + 1;
-    vendorIncrements.set(vendorName, nextIncrement);
+    prefixIncrements.set(prefix, nextIncrement);
 
     const code = generateInternalCode(vendorName, nextIncrement);
     codes.push(code);

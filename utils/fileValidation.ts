@@ -61,10 +61,12 @@ export function checkFileValidation(file: UploadedFile | any): {
     const row = file.tableData[i];
     const productName = String(row[nameIdx] || "").trim();
 
-    // 상품명이 없는 행은 건너뛰기
+    // 상품명이 없는 경우 검증 오류로 처리
     if (!productName) {
-      console.log(`행 ${i}: 상품명이 없어서 건너뜁니다.`);
-      continue;
+      const errorMsg = `행 ${i}: 상품명이 공란입니다.`;
+      console.log(errorMsg);
+      errors.push(errorMsg);
+      continue; // 상품명이 없으면 매핑코드 등 다른 검증은 건너뛰기
     }
 
     // 매핑코드 확인 (우선순위: productCodeMap > 테이블 컬럼)

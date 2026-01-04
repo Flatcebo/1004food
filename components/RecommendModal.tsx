@@ -28,11 +28,27 @@ export default function RecommendModal({
 }: RecommendModalProps) {
   if (!open || recommendList.length === 0) return null;
 
+  // 택배사가 있는 상품을 우선 정렬하여 표시
+  const sortedRecommendList = [...recommendList].sort((a: any, b: any) => {
+    const aHasPostType = a.postType && String(a.postType).trim() !== "";
+    const bHasPostType = b.postType && String(b.postType).trim() !== "";
+    
+    // 택배사가 있는 것을 우선
+    if (aHasPostType && !bHasPostType) return -1;
+    if (!aHasPostType && bHasPostType) return 1;
+    return 0;
+  });
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#00000084] bg-opacity-30">
       <div className="bg-white shadow-lg rounded-lg px-8 py-6 min-w-[420px] max-w-[90vw] max-h-[65vh] overflow-y-auto relative flex flex-col">
         <div className="font-bold text-base mb-4 text-center">
           비슷한 상품명 추천
+          {name && (
+            <div className="text-xs text-gray-500 font-normal mt-1">
+              주문 상품명: {name}
+            </div>
+          )}
         </div>
         <div className="overflow-x-auto">
           <table className="text-xs border border-gray-300 w-full min-w-[1200px]">
@@ -40,7 +56,7 @@ export default function RecommendModal({
               <tr>
                 {fixedRecommendTableHeaders
                   .filter((key) => {
-                    return recommendList.some((item: any) =>
+                    return sortedRecommendList.some((item: any) =>
                       item.hasOwnProperty(key)
                     );
                   })
@@ -55,7 +71,7 @@ export default function RecommendModal({
               </tr>
             </thead>
             <tbody>
-              {recommendList.map((item, ridx) => {
+              {sortedRecommendList.map((item, ridx) => {
                 return (
                   <tr
                     key={ridx}

@@ -10,6 +10,7 @@
 - 주문건 row 대량으로 인해 렉 유발 때문에 가상화 작업
 - 택배사가 공란이여도 운송장 입력하면 자동으로 들어감
 - 발주서 업로드 header aliases 직접 관리
+- /products/edit 상품 일괄 수정 페이지 생성
 
 utils/vendorMessageUtils.ts
 - 배송메시지 맨 앞에 업체명이 자동으로 입력되게 하는 함수

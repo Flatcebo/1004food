@@ -50,10 +50,7 @@ export default function DataTable({
       (h.includes("수취인명") || h.includes("이름"))
   );
   const addressIdx = tableData[0]?.findIndex(
-    (h: any) =>
-      h &&
-      typeof h === "string" &&
-      h.includes("주소")
+    (h: any) => h && typeof h === "string" && h.includes("주소")
   );
   const duplicateReceiverSet = (() => {
     const set = new Set<string>();
@@ -118,9 +115,7 @@ export default function DataTable({
                     {header}
                   </th>
                 ))}
-              <th className="border bg-gray-100 px-2 py-1 text-xs">
-                매핑코드
-              </th>
+              <th className="border bg-gray-100 px-2 py-1 text-xs">매핑코드</th>
             </tr>
           </thead>
           <tbody>
@@ -130,9 +125,7 @@ export default function DataTable({
                 name = row[headerIndex.nameIdx] as string;
               }
               // 파일명 컬럼 인덱스 찾기
-              const fileNameIdx = tableData[0].findIndex(
-                (h) => h === "파일명"
-              );
+              const fileNameIdx = tableData[0].findIndex((h) => h === "파일명");
               const receiverValue =
                 receiverIdx !== -1 ? String(row[receiverIdx] ?? "").trim() : "";
               const addressValue =
@@ -142,9 +135,7 @@ export default function DataTable({
               const isAddressDup =
                 addressValue && duplicateAddressSet.has(addressValue);
               return (
-                <tr
-                  key={i}
-                >
+                <tr key={i}>
                   {tableData[0]
                     .map((_, j) => ({j, idx: j}))
                     .filter(({j}) => j !== fileNameIdx)
@@ -156,10 +147,7 @@ export default function DataTable({
                         isDuplicateCell ? " bg-red-100" : ""
                       }`;
                       return (
-                        <td
-                          key={idx}
-                          className={tdClass}
-                        >
+                        <td key={idx} className={tdClass}>
                           {row[j] !== undefined && row[j] !== null
                             ? row[j]
                             : ""}
@@ -218,4 +206,3 @@ export default function DataTable({
     </>
   );
 }
-

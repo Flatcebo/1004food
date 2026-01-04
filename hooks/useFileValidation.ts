@@ -30,13 +30,13 @@ export function useFileValidation(
     if (currentFiles.length === 0) return;
 
     // 검증할 파일 ID 목록 (지정되지 않으면 모든 파일)
-    const filesToValidate = fileIds 
+    const filesToValidate = fileIds
       ? currentFiles.filter((f: any) => fileIds.includes(f.id))
       : currentFiles;
 
     setFileValidationStatus((prevStatus) => {
       const newValidationStatus = {...prevStatus};
-      
+
       filesToValidate.forEach((file: any) => {
         // DB에서 불러온 검증 상태가 있으면 우선 사용
         if (file.validationStatus) {
@@ -65,7 +65,7 @@ export function useFileValidation(
         }
         newValidationStatus[file.id] = checkFileValidation(fileToCheck);
       });
-      
+
       return newValidationStatus;
     });
   }, []);
@@ -80,7 +80,7 @@ export function useFileValidation(
 
     // 현재 파일 ID 목록
     const currentFileIds = new Set(uploadedFiles.map((f: any) => f.id));
-    
+
     // 새로 추가된 파일 ID 찾기
     const newFileIds = uploadedFiles
       .filter((f: any) => !previousFileIdsRef.current.has(f.id))
@@ -90,7 +90,7 @@ export function useFileValidation(
     const dbValidationStatus: {
       [fileId: string]: {isValid: boolean; errors: string[]};
     } = {};
-    
+
     uploadedFiles.forEach((file: any) => {
       // DB에서 불러온 검증 상태가 있으면 사용
       if (file.validationStatus) {

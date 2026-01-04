@@ -93,6 +93,19 @@ export async function deleteProducts(ids: number[]): Promise<ApiResponse<any>> {
 }
 
 /**
+ * 상품 일괄 수정
+ */
+export async function batchUpdateProducts(
+  ids: number[],
+  updates: Partial<ProductCreateRequest>
+): Promise<ApiResponse<{count: number}>> {
+  return apiCall<{count: number}>("/api/products/batch-update", {
+    method: "PUT",
+    body: JSON.stringify({ids, updates}),
+  });
+}
+
+/**
  * 매입처 검색
  */
 export async function searchPurchase(

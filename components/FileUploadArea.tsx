@@ -24,7 +24,7 @@ export default function FileUploadArea({
   onFileChange,
   multiple = true,
   title = "파일을 드래그하거나 클릭하여 선택",
-  description = "엑셀(.xlsx, .xls) 파일만 가능합니다 (여러 파일 선택 가능)",
+  description = "엑셀(.xlsx, .xls) 또는 CSV(.csv) 파일만 가능합니다 (여러 파일 선택 가능)",
 }: FileUploadAreaProps) {
   return (
     <div
@@ -41,7 +41,7 @@ export default function FileUploadArea({
     >
       <input
         type="file"
-        accept=".xlsx, .xls"
+        accept=".xlsx, .xls, .csv"
         ref={fileInputRef}
         onChange={onFileChange}
         className="hidden"

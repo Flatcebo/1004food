@@ -135,7 +135,14 @@ export default function CodeEditWindow({
       <div className="bg-white rounded-lg shadow-xl w-[90vw] max-w-6xl h-[90vh] flex flex-col">
         {/* 헤더 */}
         <div className="flex items-center justify-between p-4 border-b">
-          <h2 className="text-xl font-bold">매핑코드 수정</h2>
+          <div className="flex flex-col">
+            <h2 className="text-xl font-bold">매핑코드 수정</h2>
+            {currentProductName && (
+              <span className="text-xs text-gray-500 mt-1">
+                주문 상품명: {currentProductName}
+              </span>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
@@ -191,10 +198,10 @@ export default function CodeEditWindow({
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">
-                  합포수량
+                  업체명
                 </label>
-                <div className="text-sm text-gray-900">
-                  {currentCodeData.pkg || "-"}
+                <div className="text-sm text-gray-900 wrap-break-word">
+                  {currentCodeData.purchase || "-"}
                 </div>
               </div>
               <div>
@@ -289,6 +296,9 @@ export default function CodeEditWindow({
                     택배사
                   </th>
                   <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
+                    업체명
+                  </th>
+                  <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
                     상품명
                   </th>
                   <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
@@ -296,9 +306,6 @@ export default function CodeEditWindow({
                   </th>
                   <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
                     매핑코드
-                  </th>
-                  <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
-                    합포수량
                   </th>
                   <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
                     공급가
@@ -334,6 +341,9 @@ export default function CodeEditWindow({
                         {item.postType}
                       </td>
                       <td className="border border-gray-300 px-4 py-2 text-xs">
+                        {item.purchase || "-"}
+                      </td>
+                      <td className="border border-gray-300 px-4 py-2 text-xs">
                         {item.name}
                       </td>
                       <td className="border border-gray-300 px-4 py-2 text-xs">
@@ -341,9 +351,6 @@ export default function CodeEditWindow({
                       </td>
                       <td className="border border-gray-300 px-4 py-2 text-xs font-mono">
                         {item.code}
-                      </td>
-                      <td className="border border-gray-300 px-4 py-2 text-xs">
-                        {item.pkg}
                       </td>
                       <td className="border border-gray-300 px-4 py-2 text-xs">
                         {item.salePrice !== undefined && item.salePrice !== null

@@ -448,10 +448,17 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
   setFileName: (v) => set({fileName: v}),
   uploadedFiles: [],
   setUploadedFiles: (files) => set({uploadedFiles: files}),
-  addUploadedFile: (file) =>
+  addUploadedFile: (file) => {
+    // sessionStorage에 자동 저장 (upload/view 페이지를 열지 않아도 저장 가능하도록)
+    try {
+      sessionStorage.setItem(`uploadedFile_${file.id}`, JSON.stringify(file));
+    } catch (error) {
+      console.error("sessionStorage 저장 실패:", error);
+    }
     set((state) => ({
       uploadedFiles: [...state.uploadedFiles, file],
-    })),
+    }));
+  },
   removeUploadedFile: (id) =>
     set((state) => ({
       uploadedFiles: state.uploadedFiles.filter((f) => f.id !== id),
@@ -529,6 +536,26 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       const response = await fetch(
         `/api/upload/temp/list?sessionId=${sessionId}`
       );
+
+      // 응답 상태 확인
+      if (!response.ok) {
+        // 404 또는 다른 에러 상태
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          const errorResult = await response.json();
+          console.error("서버에서 파일 불러오기 실패:", errorResult);
+        } else {
+          // HTML 에러 페이지인 경우
+          const text = await response.text();
+          console.error(
+            `서버에서 파일 불러오기 실패: ${response.status} ${response.statusText}`,
+            text.substring(0, 200)
+          );
+        }
+        return;
+      }
+
+      // JSON 응답 파싱
       const result = await response.json();
 
       if (result.success && result.data) {
@@ -595,8 +622,20 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       get().openDirectInputModal(value, rowIdx);
       return;
     }
+
+    // 택배사가 있는 상품을 우선 정렬
+    const sortedSuggestions = [...suggestions].sort((a: any, b: any) => {
+      const aHasPostType = a.postType && String(a.postType).trim() !== "";
+      const bHasPostType = b.postType && String(b.postType).trim() !== "";
+
+      // 택배사가 있는 것을 우선
+      if (aHasPostType && !bHasPostType) return -1;
+      if (!aHasPostType && bHasPostType) return 1;
+      return 0;
+    });
+
     get().setRecommendIdx(rowIdx);
-    get().setRecommendList(suggestions as {name: string; code: string}[]);
+    get().setRecommendList(sortedSuggestions as {name: string; code: string}[]);
   },
   handleSelectSuggest: (name, code) => {
     const {productCodeMap, setProductCodeMap, setRecommendIdx} = get();
@@ -620,71 +659,74 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             );
           }
 
-          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          // 파일 확장자 확인
+          const fileName = file.name.toLowerCase();
+          const fileExtension = fileName.substring(fileName.lastIndexOf("."));
+          const allowedExtensions = [".xlsx", ".xls", ".csv"];
 
-          // 파일 형식 기본 검증
-          if (data.length < 4) {
+          if (!allowedExtensions.includes(fileExtension)) {
             throw new Error(
-              "파일이 너무 작습니다. 유효한 Excel 파일인지 확인해주세요."
+              "지원되지 않는 파일 형식입니다. .xlsx, .xls 또는 .csv 파일만 업로드 가능합니다."
             );
           }
 
-          // Excel 파일 시그니처 검증 (ZIP 기반 Excel 파일)
-          const signature = Array.from(data.slice(0, 4));
-          const xlsxSignature = [0x50, 0x4b, 0x03, 0x04]; // ZIP 파일 시그니처
-          const xlsSignature = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]; // OLE2 시그니처
+          const isCsv = fileExtension === ".csv";
+          const isXls = fileExtension === ".xls";
+          const isXlsx = fileExtension === ".xlsx";
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
 
-          const isXlsx = signature.every(
-            (byte, i) => byte === xlsxSignature[i]
-          );
-          const isXls = signature
-            .slice(0, 8)
-            .every((byte, i) => byte === xlsSignature[i]);
-
-          if (!isXlsx && !isXls) {
+          // 파일 형식 기본 검증
+          if (data.length < 4 && !isCsv) {
             throw new Error(
-              "지원되지 않는 파일 형식입니다. .xlsx 또는 .xls 파일만 업로드 가능합니다."
+              "파일이 너무 작습니다. 유효한 파일인지 확인해주세요."
             );
+          }
+
+          // CSV 파일이 아닌 경우에만 시그니처 검증
+          if (!isCsv) {
+            // Excel 파일 시그니처 검증 (ZIP 기반 Excel 파일)
+            const signature = Array.from(data.slice(0, 4));
+            const xlsxSignature = [0x50, 0x4b, 0x03, 0x04]; // ZIP 파일 시그니처
+            const xlsSignature = [
+              0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1,
+            ]; // OLE2 시그니처
+
+            const hasXlsxSignature = signature.every(
+              (byte, i) => byte === xlsxSignature[i]
+            );
+            const hasXlsSignature = signature
+              .slice(0, 8)
+              .every((byte, i) => byte === xlsSignature[i]);
+
+            if (!hasXlsxSignature && !hasXlsSignature) {
+              throw new Error(
+                "지원되지 않는 파일 형식입니다. .xlsx, .xls 또는 .csv 파일만 업로드 가능합니다."
+              );
+            }
           }
 
           // 파일 형식 확인 및 읽기 옵션 설정
           let workbook: XLSX.WorkBook | null = null;
 
-          // ExcelJS로 먼저 시도 (XLSX의 압축 문제 회피)
-          try {
-            const ExcelJS = (await import("exceljs")).default;
-            const buffer = data.buffer.slice(
-              data.byteOffset,
-              data.byteOffset + data.byteLength
-            );
-            const excelWorkbook = new ExcelJS.Workbook();
-            await excelWorkbook.xlsx.load(buffer);
-
-            // ExcelJS 결과를 XLSX 형식으로 변환
-            const sheetNames: string[] = excelWorkbook.worksheets.map(
-              (ws) => ws.name
-            );
-            const sheets: {[key: string]: XLSX.WorkSheet} = {};
-
-            excelWorkbook.worksheets.forEach((worksheet, index) => {
-              const sheetName = sheetNames[index];
-              const sheetData = worksheet.getSheetValues().map(
-                (row: any) => (row ? row.slice(1) : []) // ExcelJS는 1부터 시작하므로 첫 번째 요소 제거
+          // CSV 파일인 경우 XLSX 라이브러리로 직접 읽기
+          if (isCsv) {
+            try {
+              // CSV 파일을 텍스트로 변환 후 읽기
+              const text = new TextDecoder("utf-8").decode(data);
+              workbook = XLSX.read(text, {
+                type: "string",
+                raw: false,
+                codepage: 65001, // UTF-8
+              });
+            } catch (csvError: any) {
+              throw new Error(
+                `CSV 파일을 읽을 수 없습니다. 파일 인코딩이 UTF-8인지 확인해주세요. (${
+                  csvError.message || "알 수 없는 오류"
+                })`
               );
-              sheets[sheetName] = XLSX.utils.aoa_to_sheet(sheetData);
-            });
-
-            workbook = {
-              SheetNames: sheetNames,
-              Sheets: sheets,
-            };
-          } catch (excelJSError: any) {
-            console.warn(
-              "ExcelJS 읽기 실패, XLSX로 재시도:",
-              excelJSError.message
-            );
-
-            // ExcelJS 실패 시 XLSX로 시도
+            }
+          } else if (isXls) {
+            // .xls 파일인 경우 XLSX 라이브러리로 직접 읽기 (ExcelJS는 .xls를 지원하지 않음)
             try {
               workbook = XLSX.read(data, {
                 type: "array",
@@ -695,25 +737,144 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
                 raw: false,
                 dense: false,
               });
-            } catch (readError: any) {
-              // 압축 관련 에러 특별 처리
-              if (
-                readError.message &&
-                (readError.message.includes("Bad uncompressed size") ||
-                  readError.message.includes("uncompressed size") ||
-                  readError.message.includes("ZIP") ||
-                  readError.message.includes("corrupt"))
-              ) {
-                throw new Error(
-                  "Excel 파일이 손상되었거나 비표준 형식입니다. Excel에서 파일을 열어 '다른 이름으로 저장'(Excel 통합 문서 .xlsx) 후 다시 시도해주세요."
-                );
-              }
-
+            } catch (xlsError: any) {
               throw new Error(
-                `파일을 읽을 수 없습니다. 다른 Excel 파일로 시도해주세요. (${
-                  readError.message || "알 수 없는 오류"
+                `.xls 파일을 읽을 수 없습니다. 파일이 손상되었거나 비표준 형식일 수 있습니다. (${
+                  xlsError.message || "알 수 없는 오류"
                 })`
               );
+            }
+          } else {
+            // .xlsx 파일인 경우 ExcelJS로 먼저 시도 (XLSX의 압축 문제 회피)
+            try {
+              const ExcelJS = (await import("exceljs")).default;
+              const buffer = data.buffer.slice(
+                data.byteOffset,
+                data.byteOffset + data.byteLength
+              );
+              const excelWorkbook = new ExcelJS.Workbook();
+              await excelWorkbook.xlsx.load(buffer);
+
+              // ExcelJS 결과를 XLSX 형식으로 변환
+              const sheetNames: string[] = excelWorkbook.worksheets.map(
+                (ws) => ws.name
+              );
+              const sheets: {[key: string]: XLSX.WorkSheet} = {};
+
+              excelWorkbook.worksheets.forEach((worksheet, index) => {
+                const sheetName = sheetNames[index];
+                // 서식을 무시하고 실제 값만 추출
+                const sheetData: any[][] = [];
+                const maxRow = worksheet.rowCount || 0;
+                const maxCol = worksheet.columnCount || 0;
+
+                // 각 행을 순회하면서 실제 값만 추출
+                worksheet.eachRow((row, rowNumber) => {
+                  const rowData: any[] = [];
+                  // 열을 순회하면서 셀 값 추출 (빈 셀도 포함하여 행 구조 유지)
+                  row.eachCell({includeEmpty: true}, (cell, colNumber) => {
+                    // 셀의 실제 값만 추출 (서식 무시)
+                    let cellValue: string = "";
+
+                    if (cell.value !== null && cell.value !== undefined) {
+                      // ExcelJS의 셀 값 타입에 따라 처리
+                      if (cell.value instanceof Date) {
+                        cellValue = cell.value.toISOString().split("T")[0]; // 날짜를 YYYY-MM-DD 형식으로
+                      } else if (typeof cell.value === "object") {
+                        // RichText 객체인 경우
+                        if (
+                          "richText" in cell.value &&
+                          Array.isArray((cell.value as any).richText)
+                        ) {
+                          cellValue = (cell.value as any).richText
+                            .map((rt: any) => rt.text || "")
+                            .join("");
+                        }
+                        // text 속성이 있는 경우
+                        else if ("text" in cell.value) {
+                          cellValue = String((cell.value as any).text);
+                        }
+                        // result 속성이 있는 경우 (수식 결과)
+                        else if ("result" in cell.value) {
+                          const result = (cell.value as any).result;
+                          if (result instanceof Date) {
+                            cellValue = result.toISOString().split("T")[0];
+                          } else {
+                            cellValue = String(result);
+                          }
+                        }
+                        // 그 외 객체는 빈 문자열로 처리
+                        else {
+                          cellValue = "";
+                        }
+                      } else {
+                        // 일반 값 (문자열, 숫자 등)
+                        cellValue = String(cell.value);
+                      }
+
+                      // 값이 있으면 trim
+                      if (cellValue) {
+                        cellValue = cellValue.trim();
+                      }
+                    }
+
+                    // 행 구조를 유지하기 위해 빈 문자열로 채움
+                    while (rowData.length < colNumber - 1) {
+                      rowData.push("");
+                    }
+                    rowData.push(cellValue);
+                  });
+
+                  // 행이 비어있지 않으면 추가
+                  if (rowData.length > 0) {
+                    sheetData.push(rowData);
+                  }
+                });
+
+                sheets[sheetName] = XLSX.utils.aoa_to_sheet(sheetData);
+              });
+
+              workbook = {
+                SheetNames: sheetNames,
+                Sheets: sheets,
+              };
+            } catch (excelJSError: any) {
+              console.warn(
+                "ExcelJS 읽기 실패, XLSX로 재시도:",
+                excelJSError.message
+              );
+
+              // ExcelJS 실패 시 XLSX로 시도
+              try {
+                workbook = XLSX.read(data, {
+                  type: "array",
+                  cellStyles: false, // 셀 스타일 무시
+                  cellDates: false, // 날짜 셀 무시
+                  cellNF: false, // 숫자 포맷 무시
+                  cellText: false, // 텍스트 무시
+                  raw: true, // 원시 값 사용 (서식 무시)
+                  dense: false,
+                });
+              } catch (readError: any) {
+                // 압축 관련 에러 특별 처리
+                if (
+                  readError.message &&
+                  (readError.message.includes("Bad uncompressed size") ||
+                    readError.message.includes("uncompressed size") ||
+                    readError.message.includes("ZIP") ||
+                    readError.message.includes("corrupt"))
+                ) {
+                  throw new Error(
+                    "Excel 파일이 손상되었거나 비표준 형식입니다. Excel에서 파일을 열어 '다른 이름으로 저장'(Excel 통합 문서 .xlsx) 후 다시 시도해주세요."
+                  );
+                }
+
+                throw new Error(
+                  `파일을 읽을 수 없습니다. 다른 Excel 파일로 시도해주세요. (${
+                    readError.message || "알 수 없는 오류"
+                  })`
+                );
+              }
             }
           }
 
@@ -733,12 +894,70 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
           }
 
           // Google Sheets 파일을 위한 옵션 추가
-          const raw = XLSX.utils.sheet_to_json(worksheet, {
+          // 서식을 무시하고 실제 값만 추출
+          const rawData = XLSX.utils.sheet_to_json(worksheet, {
             header: 1,
             defval: "", // 빈 셀을 빈 문자열로 처리
-            raw: false, // 포맷된 값 사용
+            raw: true, // 원시 값 사용 (서식 무시)
             dateNF: "yyyy-mm-dd", // 날짜 형식
+            blankrows: false, // 빈 행 제거
           }) as any[][];
+
+          // 서식만 있고 값이 없는 셀을 빈 문자열로 처리
+          const raw = rawData.map((row: any[]) =>
+            row.map((cell: any) => {
+              // null 또는 undefined 처리
+              if (cell === null || cell === undefined) {
+                return "";
+              }
+
+              // 객체인 경우
+              if (typeof cell === "object") {
+                // 빈 객체면 빈 문자열로 처리
+                if (Object.keys(cell).length === 0) {
+                  return "";
+                }
+
+                // XLSX 셀 객체 구조: { t: 타입, v: 값, w: 포맷된 텍스트, ... }
+                // w 속성(포맷된 텍스트)이 있으면 우선 사용
+                if (cell.w !== undefined && cell.w !== null) {
+                  return String(cell.w).trim();
+                }
+
+                // v 속성(값)이 있으면 사용
+                if (cell.v !== undefined && cell.v !== null) {
+                  // 날짜 객체인 경우
+                  if (cell.v instanceof Date) {
+                    return cell.v.toISOString().split("T")[0];
+                  }
+                  // 숫자인 경우
+                  if (typeof cell.v === "number") {
+                    return String(cell.v);
+                  }
+                  // 문자열인 경우
+                  if (typeof cell.v === "string") {
+                    return cell.v.trim();
+                  }
+                  // 객체인 경우 (중첩된 객체) - 빈 문자열로 처리
+                  if (typeof cell.v === "object") {
+                    return "";
+                  }
+                  return String(cell.v).trim();
+                }
+
+                // t, v, w 속성이 모두 없으면 빈 문자열로 처리 (서식만 있는 셀)
+                if (!cell.t && !cell.v && !cell.w) {
+                  return "";
+                }
+
+                // 그 외 객체는 빈 문자열로 처리
+                return "";
+              }
+
+              // 일반 값 (문자열, 숫자 등)은 그대로 반환
+              return String(cell).trim();
+            })
+          );
 
           if (!raw.length) {
             throw new Error("파일이 비어있습니다.");
@@ -773,27 +992,86 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
           // 내부 절대 순서로 헤더/데이터 재구성
           // 헤더 행 다음부터 데이터로 사용
           const canonicalHeader = internalColumns.map((c) => c.label);
-          const canonicalRows = raw.slice(headerRowIndex + 1).map((row) =>
-            internalColumns.map((c) => {
-              const idx = indexMap[c.key];
-              let value = idx >= 0 ? row[idx] ?? "" : "";
+          const canonicalRows: string[][] = raw
+            .slice(headerRowIndex + 1)
+            .map((row) =>
+              internalColumns.map((c) => {
+                const idx = indexMap[c.key];
+                let value: string =
+                  idx >= 0 ? String(row[idx] ?? "").trim() : "";
 
-              // 박스, 부피 기본값 자동 세팅
+                // 수량 필드 처리
+                if (c.key === "qty") {
+                  // 공란이면 1로 자동 입력
+                  if (
+                    value === undefined ||
+                    value === null ||
+                    String(value).trim() === ""
+                  ) {
+                    value = "1";
+                  } else {
+                    // 값이 있으면 앞의 0 제거 (예: "01" -> "1")
+                    const strValue = String(value).trim();
+                    // 숫자로 변환 가능하고 앞에 0이 있는 경우 제거
+                    if (strValue && !isNaN(Number(strValue))) {
+                      value = String(Number(strValue));
+                    }
+                  }
+                }
+
+                // 박스, 부피 기본값 자동 세팅
+                if (
+                  value === undefined ||
+                  value === null ||
+                  String(value).trim() === ""
+                ) {
+                  if (c.key === "box") {
+                    value = "2";
+                  } else if (c.key === "volume") {
+                    value = "60";
+                  }
+                }
+
+                return value;
+              })
+            );
+
+          // 수량이 2 이상인 경우 상품명에 "|n세트" 추가
+          const productNameIdx = internalColumns.findIndex(
+            (c) => c.key === "productName"
+          );
+          const qtyIdx = internalColumns.findIndex((c) => c.key === "qty");
+
+          if (productNameIdx !== -1 && qtyIdx !== -1) {
+            canonicalRows.forEach((row) => {
+              const qtyValue = row[qtyIdx];
+              const productNameValue = row[productNameIdx];
+
+              // 수량이 2 이상이고 상품명이 있는 경우
               if (
-                value === undefined ||
-                value === null ||
-                String(value).trim() === ""
+                qtyValue !== undefined &&
+                qtyValue !== null &&
+                productNameValue !== undefined &&
+                productNameValue !== null
               ) {
-                if (c.key === "box") {
-                  value = 2;
-                } else if (c.key === "volume") {
-                  value = 60;
+                const qtyNum = Number(String(qtyValue).trim());
+                const productName = String(productNameValue).trim();
+
+                // 수량이 2 이상이고 숫자로 변환 가능한 경우
+                if (!isNaN(qtyNum) && qtyNum >= 2 && productName) {
+                  // 이미 "|n세트"가 붙어있지 않은 경우에만 추가
+                  if (
+                    !productName.includes("|") ||
+                    !productName.includes("세트")
+                  ) {
+                    row[productNameIdx] = `${productName}|${qtyNum}세트`;
+                  }
+                  // 상품명에 세트 정보를 추가한 후 수량을 1로 변경
+                  row[qtyIdx] = "1";
                 }
               }
-
-              return value;
-            })
-          );
+            });
+          }
 
           let jsonData = [canonicalHeader, ...canonicalRows];
 
@@ -930,8 +1208,24 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
           );
 
           // 파일 ID 카운터 증가 및 ID 생성
-          const {fileCounter, setFileCounter} = get();
-          const newFileId = (fileCounter + 1).toString().padStart(6, "0"); // 6자리 숫자로 포맷팅
+          const {fileCounter, setFileCounter, uploadedFiles} = get();
+
+          // 기존 업로드된 파일들의 ID를 확인하여 중복 방지
+          const existingIds = new Set(uploadedFiles.map((f) => f.id));
+
+          // 고유 ID 생성: 타임스탬프 + 랜덤 문자열을 조합하여 중복 방지
+          let newFileId: string;
+          let attempts = 0;
+          do {
+            const timestamp = Date.now().toString(36); // 타임스탬프를 36진수로 변환
+            const random = Math.random().toString(36).substring(2, 8); // 랜덤 문자열
+            const counter = (fileCounter + 1 + attempts)
+              .toString()
+              .padStart(6, "0");
+            newFileId = `${counter}-${timestamp}-${random}`; // 예: "000003-k2j3h4-abc123"
+            attempts++;
+          } while (existingIds.has(newFileId) && attempts < 100); // 최대 100번 시도
+
           setFileCounter(fileCounter + 1);
 
           const uploadedFile: UploadedFile = {
@@ -1074,7 +1368,18 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
 
         const promises = validFiles.map((file) => get().processFile(file));
         const uploadedFiles = await Promise.all(promises);
-        uploadedFiles.forEach((file) => addUploadedFile(file));
+        uploadedFiles.forEach((file) => {
+          addUploadedFile(file);
+          // sessionStorage에 자동 저장 (upload/view 페이지를 열지 않아도 저장 가능하도록)
+          try {
+            sessionStorage.setItem(
+              `uploadedFile_${file.id}`,
+              JSON.stringify(file)
+            );
+          } catch (error) {
+            console.error("sessionStorage 저장 실패:", error);
+          }
+        });
 
         // 로딩 메시지 업데이트
         useLoadingStore

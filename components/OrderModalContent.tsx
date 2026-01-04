@@ -4,7 +4,12 @@ import UploadedFilesList from "@/components/UploadedFilesList";
 import DirectInputModal from "@/components/DirectInputModal";
 import DataTable from "@/components/DataTable";
 import SessionSelectorModal from "@/components/SessionSelectorModal";
-import {IoTime, IoCheckmarkCircle, IoCloseCircle, IoFolderOpen} from "react-icons/io5";
+import {
+  IoTime,
+  IoCheckmarkCircle,
+  IoCloseCircle,
+  IoFolderOpen,
+} from "react-icons/io5";
 import {useUploadStore} from "@/stores/uploadStore";
 import {fieldNameMap} from "@/constants/fieldMappings";
 
@@ -102,7 +107,8 @@ export default function OrderModalContent({
   deliveryError,
 }: OrderModalContentProps) {
   const [sessionModalOpen, setSessionModalOpen] = useState(false);
-  const {uploadedFiles, currentSession, selectedSessionId, selectSession} = useUploadStore();
+  const {uploadedFiles, currentSession, selectedSessionId, selectSession} =
+    useUploadStore();
 
   // 운송장 업로드 실시간 통계 계산
   const deliveryStats = useMemo(() => {
@@ -137,7 +143,9 @@ export default function OrderModalContent({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <IoFolderOpen className="w-5 h-5 text-gray-600" />
-                <span className="text-sm font-medium text-gray-700">현재 세션:</span>
+                <span className="text-sm font-medium text-gray-700">
+                  현재 세션:
+                </span>
                 <span className="text-sm font-semibold text-blue-600">
                   {selectedSessionId === null
                     ? "모든 세션"
@@ -168,7 +176,7 @@ export default function OrderModalContent({
             onFileChange={handleFileChange}
             multiple={true}
             title="파일을 드래그하거나 클릭하여 선택"
-            description="엑셀(.xlsx, .xls) 파일만 가능합니다 (여러 파일 선택 가능)"
+            description="엑셀(.xlsx, .xls) 또는 CSV(.csv) 파일만 가능합니다 (여러 파일 선택 가능)"
           />
 
           <UploadedFilesList

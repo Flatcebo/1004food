@@ -95,7 +95,7 @@ export function updateVendorAndMessage(
 
 /**
  * 배송메시지를 자동으로 생성하는 함수
- * 형식: #{주문자명}{기존 배송메시지}★{주문번호}
+ * 형식: {기존 배송메시지}★{주문번호}
  * 
  * @param tableData - 테이블 데이터 (헤더 포함)
  * @param originalMessagesRef - 원본 배송메시지 저장 ref (rowIdx -> 원본 메시지)
@@ -152,8 +152,8 @@ export function generateAutoDeliveryMessage(
       ? String(currentMessage).trim()
       : "";
     
-    // 이미 자동 생성된 메시지 형식인지 확인 (#로 시작하면 스킵 - 주문번호 유무와 관계없이)
-    if (currentMessageStr.startsWith('#')) {
+    // 이미 자동 생성된 메시지 형식인지 확인 (★로 끝나면 스킵)
+    if (currentMessageStr.includes('★')) {
       return newRow; // 이미 처리된 메시지는 그대로 유지
     }
     
@@ -182,13 +182,8 @@ export function generateAutoDeliveryMessage(
         : "";
     }
     
-    // 배송메시지 자동 생성: #{주문자명}{기존 배송메시지}★{주문번호}
+    // 배송메시지 자동 생성: {기존 배송메시지}★{주문번호}
     let autoMessage = "";
-    
-    // 주문자명 추가 (있는 경우에만)
-    if (ordererName) {
-      autoMessage += `#${ordererName}`;
-    }
     
     // 기존 배송메시지 추가 (있는 경우에만)
     if (originalMessage) {

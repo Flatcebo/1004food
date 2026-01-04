@@ -539,6 +539,53 @@ export function useFileSave({
         // 임시 저장된 데이터를 정식으로 저장하고 임시 데이터 삭제
         updateLoadingMessage("임시 저장 데이터를 정식 저장 중...");
 
+        // 저장할 파일들을 서버에서 확인 상태로 업데이트
+        const fileIdsToConfirm = confirmedFileIds.length > 0 
+          ? confirmedFileIds 
+          : filesToUpload.map((f) => f.id);
+
+        // 각 파일을 서버에서 is_confirmed = true로 업데이트
+        const updatePromises = fileIdsToConfirm.map(async (fileId) => {
+          const file = filesToUpload.find((f) => f.id === fileId);
+          if (!file) return null;
+
+          // 최신 파일 데이터 가져오기
+          let fileData = file;
+          const storedFile = sessionStorage.getItem(`uploadedFile_${fileId}`);
+          if (storedFile) {
+            try {
+              fileData = JSON.parse(storedFile);
+            } catch (error) {
+              console.error("파일 데이터 파싱 실패:", error);
+            }
+          }
+
+          // 서버에 파일 업데이트 및 확인 상태 설정
+          const updateResponse = await fetch("/api/upload/temp/update", {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              fileId: fileData.id,
+              tableData: fileData.tableData,
+              headerIndex: fileData.headerIndex,
+              productCodeMap: fileData.productCodeMap || {},
+              isConfirmed: true,
+            }),
+          });
+
+          const updateResult = await updateResponse.json();
+          if (!updateResult.success) {
+            console.error(`파일 ${fileData.fileName} 확인 상태 업데이트 실패:`, updateResult.error);
+            return null;
+          }
+          return fileId;
+        });
+
+        await Promise.all(updatePromises);
+
+        // 확인된 파일들을 정식으로 저장
         const response = await fetch("/api/upload/temp/confirm", {
           method: "POST",
           headers: {
