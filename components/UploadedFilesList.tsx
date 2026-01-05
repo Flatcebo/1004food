@@ -2,7 +2,7 @@
 
 import {useLoadingStore} from "@/stores/loadingStore";
 import {UploadedFile, useUploadStore} from "@/stores/uploadStore";
-import {useCallback} from "react";
+import {useCallback, useMemo} from "react";
 
 interface UploadedFilesListProps {
   uploadedFiles: UploadedFile[];
@@ -23,7 +23,45 @@ export default function UploadedFilesList({
   onResetData,
 }: UploadedFilesListProps) {
   const {isLoading} = useLoadingStore();
-  //
+  const {confirmedFiles, confirmFile, unconfirmFile} = useUploadStore();
+
+  // 전체 체크 상태 계산
+  const isAllChecked = useMemo(() => {
+    if (uploadedFiles.length === 0) return false;
+    return uploadedFiles.every((file) => confirmedFiles.has(file.id));
+  }, [uploadedFiles, confirmedFiles]);
+
+  // 일부만 체크된 상태 계산
+  const isIndeterminate = useMemo(() => {
+    const checkedCount = uploadedFiles.filter((file) =>
+      confirmedFiles.has(file.id)
+    ).length;
+    return checkedCount > 0 && checkedCount < uploadedFiles.length;
+  }, [uploadedFiles, confirmedFiles]);
+
+  // 전체 체크/해제 핸들러
+  const handleSelectAll = useCallback(() => {
+    if (isAllChecked) {
+      // 전체 해제
+      uploadedFiles.forEach((file) => unconfirmFile(file.id));
+    } else {
+      // 전체 체크
+      uploadedFiles.forEach((file) => confirmFile(file.id));
+    }
+  }, [isAllChecked, uploadedFiles, confirmFile, unconfirmFile]);
+
+  // 개별 체크/해제 핸들러
+  const handleToggleFile = useCallback(
+    (fileId: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (confirmedFiles.has(fileId)) {
+        unconfirmFile(fileId);
+      } else {
+        confirmFile(fileId);
+      }
+    },
+    [confirmedFiles, confirmFile, unconfirmFile]
+  );
 
   if (isLoading) return <div>Loading...</div>;
 
@@ -39,6 +77,17 @@ export default function UploadedFilesList({
         <table className="w-full text-sm border-collapse">
           <thead className="sticky top-0 z-10">
             <tr className="bg-gray-100">
+              <th className="border border-gray-300 px-4 py-2 text-center w-[50px]">
+                <input
+                  type="checkbox"
+                  checked={isAllChecked}
+                  ref={(input) => {
+                    if (input) input.indeterminate = isIndeterminate;
+                  }}
+                  onChange={handleSelectAll}
+                  className="w-4 h-4 cursor-pointer"
+                />
+              </th>
               <th className="border border-gray-300 px-4 py-2 text-center w-[200px]">
                 업체명
               </th>
@@ -66,6 +115,7 @@ export default function UploadedFilesList({
                 errors: [],
               };
               const isValid = validationResult.isValid;
+              const isChecked = confirmedFiles.has(file.id);
               return (
                 <tr
                   key={file.id}
@@ -82,6 +132,18 @@ export default function UploadedFilesList({
                     }
                   }}
                 >
+                  <td
+                    className="border border-gray-300 px-4 py-2 text-center"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => {}}
+                      onClick={(e) => handleToggleFile(file.id, e)}
+                      className="w-4 h-4 cursor-pointer"
+                    />
+                  </td>
                   <td className="border border-gray-300 px-4 py-2">
                     {/* {file.venderName} */}
                   </td>

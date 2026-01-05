@@ -1,6 +1,6 @@
 "use client";
 
-import {useEffect, useState, useRef, useCallback} from "react";
+import {useEffect, useState, useRef, useCallback, useMemo} from "react";
 import {useUploadStore} from "@/stores/uploadStore";
 import {useLoadingStore} from "@/stores/loadingStore";
 import ModalTable from "@/components/ModalTable";
@@ -575,10 +575,16 @@ export default function Page() {
     setHeaderIndex(null);
   };
 
-  // 유효하지 않은 파일이 있는지 체크 (빨간 배경이 있는 파일)
-  const hasInvalidFiles = uploadedFiles.some(
-    (file) => !getValidationStatus(file.id)
-  );
+  // 체크박스가 체크된 파일들 중에서 검증 실패가 있는지 체크
+  const hasInvalidFiles = useMemo(() => {
+    const checkedFileIds = Array.from(confirmedFiles);
+    if (checkedFileIds.length === 0) {
+      // 체크박스가 하나도 체크되지 않았으면 disabled 처리
+      return true;
+    }
+    // 체크된 파일들 중에서 검증 실패가 있는지 확인
+    return checkedFileIds.some((fileId) => !getValidationStatus(fileId));
+  }, [confirmedFiles, fileValidationStatus]);
 
   return (
     <div className="w-full h-full flex flex-col items-start justify-start px-4">

@@ -59,7 +59,7 @@ export function useFileSave({
       // console.log("confirmedFileIds", confirmedFileIds);
       // console.log("uploadedFiles", uploadedFiles);
 
-      // 확인된 파일이 있으면 확인된 파일 사용, 없으면 일반 업로드된 파일 사용
+      // 체크박스가 체크된 파일만 업로드 (체크박스가 하나도 체크되지 않으면 업로드 불가)
       if (confirmedFileIds.length > 0) {
         filesToUpload = confirmedFileIds
           .map((fileId) => {
@@ -76,18 +76,10 @@ export function useFileSave({
           })
           .filter((f) => f != null);
       } else {
-        filesToUpload = uploadedFiles.map((file) => {
-          const storedFile = sessionStorage.getItem(`uploadedFile_${file.id}`);
-          if (storedFile) {
-            try {
-              return JSON.parse(storedFile);
-            } catch (error) {
-              console.error("파일 데이터 파싱 실패:", error);
-              return file;
-            }
-          }
-          return file;
-        });
+        // 체크박스가 하나도 체크되지 않으면 업로드 불가
+        alert("업로드할 파일을 선택해주세요.");
+        stopLoading();
+        return false;
       }
 
       if (filesToUpload.length === 0) {
