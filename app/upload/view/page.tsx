@@ -1637,8 +1637,7 @@ function FileViewContent() {
                           <span>택배사</span>
                         </div>
                       </th>
-                    ) : header === "택배사" ? // 택배사 칼럼 숨기기
-                    null : (
+                    ) : header === "택배사" ? null : ( // 택배사 칼럼 숨기기
                       <th
                         key={hidx}
                         className="border bg-gray-100 px-2 py-1 text-xs"
@@ -1673,9 +1672,12 @@ function FileViewContent() {
                   // 편집 모드가 아닐 때만 정렬, 편집 모드일 때는 원본 순서 유지
                   // 정렬 시 원본 인덱스를 함께 저장하여 고유 키 생성
                   const sorted = isEditMode
-                    ? tableData.slice(1).map((row, idx) => ({ row, originalIdx: idx + 1 }))
-                    : tableData.slice(1)
-                        .map((row, idx) => ({ row, originalIdx: idx + 1 }))
+                    ? tableData
+                        .slice(1)
+                        .map((row, idx) => ({row, originalIdx: idx + 1}))
+                    : tableData
+                        .slice(1)
+                        .map((row, idx) => ({row, originalIdx: idx + 1}))
                         .sort((a, b) => {
                           const prodA = a.row[productNameIdx] || "";
                           const prodB = b.row[productNameIdx] || "";

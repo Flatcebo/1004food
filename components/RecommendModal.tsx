@@ -32,7 +32,7 @@ export default function RecommendModal({
   const sortedRecommendList = [...recommendList].sort((a: any, b: any) => {
     const aHasPostType = a.postType && String(a.postType).trim() !== "";
     const bHasPostType = b.postType && String(b.postType).trim() !== "";
-    
+
     // 택배사가 있는 것을 우선
     if (aHasPostType && !bHasPostType) return -1;
     if (!aHasPostType && bHasPostType) return 1;
@@ -127,7 +127,11 @@ export default function RecommendModal({
                                 className="px-2 py-1 bg-red-500 hover:bg-red-600 text-white text-xs rounded"
                                 onClick={(e) => {
                                   e.stopPropagation(); // 행 클릭 이벤트 방지
-                                  if (confirm(`"${item.name}" 상품을 삭제하시겠습니까?`)) {
+                                  if (
+                                    confirm(
+                                      `"${item.name}" 상품을 삭제하시겠습니까?`
+                                    )
+                                  ) {
                                     onDelete(item);
                                   }
                                 }}

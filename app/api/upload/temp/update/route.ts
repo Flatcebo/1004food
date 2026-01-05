@@ -76,7 +76,10 @@ export async function PUT(request: NextRequest) {
       `;
     } catch (error: any) {
       // validation_status 컬럼이 없으면 컬럼 추가 후 다시 시도
-      if (error.message && error.message.includes('column "validation_status" does not exist')) {
+      if (
+        error.message &&
+        error.message.includes('column "validation_status" does not exist')
+      ) {
         try {
           await sql`ALTER TABLE temp_files ADD COLUMN validation_status JSONB`;
         } catch (addError: any) {
@@ -134,4 +137,3 @@ export async function PUT(request: NextRequest) {
     );
   }
 }
-

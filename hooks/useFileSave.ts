@@ -532,9 +532,10 @@ export function useFileSave({
         updateLoadingMessage("임시 저장 데이터를 정식 저장 중...");
 
         // 저장할 파일들을 서버에서 확인 상태로 업데이트
-        const fileIdsToConfirm = confirmedFileIds.length > 0 
-          ? confirmedFileIds 
-          : filesToUpload.map((f) => f.id);
+        const fileIdsToConfirm =
+          confirmedFileIds.length > 0
+            ? confirmedFileIds
+            : filesToUpload.map((f) => f.id);
 
         // 각 파일을 서버에서 is_confirmed = true로 업데이트
         const updatePromises = fileIdsToConfirm.map(async (fileId) => {
@@ -569,7 +570,10 @@ export function useFileSave({
 
           const updateResult = await updateResponse.json();
           if (!updateResult.success) {
-            console.error(`파일 ${fileData.fileName} 확인 상태 업데이트 실패:`, updateResult.error);
+            console.error(
+              `파일 ${fileData.fileName} 확인 상태 업데이트 실패:`,
+              updateResult.error
+            );
             return null;
           }
           return fileId;
