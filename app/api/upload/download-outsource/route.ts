@@ -60,7 +60,7 @@ function formatPhoneNumber(phoneNumber: string): string {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const {templateId, rowIds, filters, rows} = body;
+    const {templateId, rowIds, filters, rows, preferSabangName} = body;
 
     if (!templateId) {
       return NextResponse.json(
@@ -468,6 +468,7 @@ export async function POST(request: NextRequest) {
           let value = mapDataToTemplate(row, headerStr, {
             templateName: templateData.name,
             formatPhone: true, // CJ외주 발주서에서도 전화번호에 하이픈 추가
+            preferSabangName: preferSabangName !== undefined ? preferSabangName : true,
           });
 
           // 모든 값을 문자열로 변환 (0 유지)
@@ -1113,6 +1114,7 @@ export async function POST(request: NextRequest) {
         let value = mapDataToTemplate(row, headerStr, {
           templateName: templateData.name,
           formatPhone: true, // 외주 발주서에서는 전화번호에 하이픈 추가
+          preferSabangName: preferSabangName !== undefined ? preferSabangName : true,
         });
 
         // 모든 값을 문자열로 변환 (0 유지)

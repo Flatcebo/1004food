@@ -269,6 +269,7 @@ const SavedDataTable = memo(function SavedDataTable({
   const [templates, setTemplates] = useState<any[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<number | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [useSabangName, setUseSabangName] = useState<boolean>(true);
   const [deliveryData, setDeliveryData] = useState<{
     [key: number]: {carrier: string; trackingNumber: string};
   }>({});
@@ -434,6 +435,7 @@ const SavedDataTable = memo(function SavedDataTable({
           templateId: selectedTemplate,
           rowIds: rowIdsToDownload,
           filters: rowIdsToDownload ? undefined : filters, // 선택된 행이 있으면 필터 무시, 없으면 필터 적용
+          preferSabangName: useSabangName,
         }),
       });
 
@@ -492,6 +494,14 @@ const SavedDataTable = memo(function SavedDataTable({
     templates,
     tableRows,
     onDataUpdate,
+    useSabangName,
+    appliedType,
+    appliedPostType,
+    appliedCompany,
+    appliedVendor,
+    appliedOrderStatus,
+    appliedUploadTimeFrom,
+    appliedUploadTimeTo,
   ]);
 
   // 운송장 입력 확정
@@ -1548,17 +1558,30 @@ const SavedDataTable = memo(function SavedDataTable({
           ) : (
             <>
               {templates.length > 0 && (
-                <select
-                  value={selectedTemplate || ""}
-                  onChange={(e) => setSelectedTemplate(Number(e.target.value))}
-                  className="px-3 py-1.5 border border-gray-300 rounded text-sm "
-                >
-                  {templates.map((template) => (
-                    <option key={template.id} value={template.id}>
-                      {template.name.replace(/\.(xlsx|xls)$/i, "")}
-                    </option>
-                  ))}
-                </select>
+                <>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={useSabangName}
+                      onChange={(e) => setUseSabangName(e.target.checked)}
+                      className="w-4 h-4"
+                    />
+                    <span>사방넷명 사용</span>
+                  </label>
+                  <select
+                    value={selectedTemplate || ""}
+                    onChange={(e) =>
+                      setSelectedTemplate(Number(e.target.value))
+                    }
+                    className="px-3 py-1.5 border border-gray-300 rounded text-sm "
+                  >
+                    {templates.map((template) => (
+                      <option key={template.id} value={template.id}>
+                        {template.name.replace(/\.(xlsx|xls)$/i, "")}
+                      </option>
+                    ))}
+                  </select>
+                </>
               )}
               <button
                 onClick={handleDownload}

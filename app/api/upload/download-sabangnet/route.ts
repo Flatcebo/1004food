@@ -7,7 +7,7 @@ import JSZip from "jszip";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const {templateId, rowIds, filters, rows} = body;
+    const {templateId, rowIds, filters, rows, preferSabangName} = body;
 
     if (!templateId) {
       return NextResponse.json(
@@ -370,6 +370,7 @@ export async function POST(request: NextRequest) {
 
             let value = mapDataToTemplate(row, headerStr, {
               templateName: templateData.name,
+              preferSabangName: preferSabangName !== undefined ? preferSabangName : true,
             });
 
             let stringValue = value != null ? String(value) : "";

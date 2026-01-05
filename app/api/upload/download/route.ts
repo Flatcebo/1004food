@@ -13,7 +13,7 @@ import {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const {templateId, rowIds, filters, isInhouse} = body;
+    const {templateId, rowIds, filters, isInhouse, preferSabangName} = body;
 
     if (!templateId) {
       return NextResponse.json(
@@ -381,9 +381,10 @@ export async function POST(request: NextRequest) {
         const headerStr =
           typeof header === "string" ? header : String(header || "");
 
-        // 모든 템플릿에서 사방넷명 사용 (preferSabangName 옵션 불필요)
+        // preferSabangName 옵션에 따라 사방넷명 또는 상품명 사용
         return mapDataToTemplate(row, headerStr, {
           templateName: templateData.name,
+          preferSabangName: preferSabangName !== undefined ? preferSabangName : true,
         });
       });
     });

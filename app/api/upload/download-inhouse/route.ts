@@ -6,7 +6,7 @@ import {mapDataToTemplate, sortExcelData} from "@/utils/excelDataMapping";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const {templateId, rowIds, filters, rows} = body;
+    const {templateId, rowIds, filters, rows, preferSabangName} = body;
 
     if (!templateId) {
       return NextResponse.json(
@@ -357,6 +357,7 @@ export async function POST(request: NextRequest) {
         let value = mapDataToTemplate(row, header, {
           templateName: templateData.name,
           isInhouse: isInhouse, // 내주 발주서임을 명시적으로 전달
+          preferSabangName: preferSabangName !== undefined ? preferSabangName : true,
         });
 
         // 모든 값을 문자열로 변환 (0 유지)

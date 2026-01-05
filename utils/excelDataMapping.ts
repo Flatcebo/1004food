@@ -223,43 +223,30 @@ export function mapDataToTemplate(
     return numValue === "" ? "" : prepareExcelCellValue(numValue, true);
   }
 
-  // 상품명 컬럼: 사방넷명이 있으면 무조건 사방넷명 우선 사용 (문자열로 정규화)
+  // 상품명 컬럼: preferSabangName 옵션에 따라 사방넷명 또는 상품명 사용 (문자열로 정규화)
   if (
     normalizedHeader.includes("상품명") ||
     header === "상품명" ||
     header.includes("상품명")
   ) {
-    // 디버깅 로그 (처음 3개만)
-    if (!row._logged) {
-      // console.log(`\n[mapDataToTemplate] 상품명 매핑`);
-      // console.log(`- 템플릿명: ${options?.templateName}`);
-      // console.log(`- row["사방넷명"]: ${row["사방넷명"]}`);
-      // console.log(`- row["sabangName"]: ${row["sabangName"]}`);
-      // console.log(`- row["상품명"]: ${row["상품명"]}`);
-      row._logged = true;
-    }
-
-    // 사방넷명이 있으면 무조건 사방넷명 우선 사용
-    const sabangValue =
-      row["사방넷명"] || row["sabangName"] || row["sabang_name"] || "";
-    if (sabangValue !== null && sabangValue !== undefined) {
-      const sabangStr = normalizeStringValue(sabangValue);
-      if (sabangStr) {
-        if (!row._logged2) {
-          console.log(`✓ 사방넷명 사용: ${sabangStr}`);
-          row._logged2 = true;
+    // preferSabangName이 true이고 사방넷명이 있으면 사방넷명 사용
+    const shouldUseSabangName = options?.preferSabangName !== false; // 기본값은 true
+    
+    if (shouldUseSabangName) {
+      // 사방넷명이 있으면 사방넷명 사용
+      const sabangValue =
+        row["사방넷명"] || row["sabangName"] || row["sabang_name"] || "";
+      if (sabangValue !== null && sabangValue !== undefined) {
+        const sabangStr = normalizeStringValue(sabangValue);
+        if (sabangStr) {
+          return prepareExcelCellValue(sabangStr, false);
         }
-        return prepareExcelCellValue(sabangStr, false);
       }
     }
 
-    // 사방넷명이 없으면 원래 상품명 사용
+    // preferSabangName이 false이거나 사방넷명이 없으면 원래 상품명 사용
     const productName =
       row["상품명"] || row[header] || row[header.replace(/\s+/g, "")] || "";
-    if (!row._logged2) {
-      console.log(`→ 원본 상품명 사용 (사방넷명 없음): ${productName}`);
-      row._logged2 = true;
-    }
     return prepareExcelCellValue(productName, false);
   }
 
