@@ -1061,9 +1061,13 @@ function FileViewContent() {
     );
 
     // 최종 텍스트: 최상단에 월/일, 중간에 상품 목록, 최하단에 총 n건
-    const finalText = [dateStr, ...productLines, `총 ${totalCount}건`].join(
-      "\n"
-    );
+    const finalText = [
+      dateStr,
+      "\n",
+      ...productLines,
+      "\n",
+      `총 ${totalCount}건`,
+    ].join("\n");
 
     // 클립보드에 복사
     navigator.clipboard
