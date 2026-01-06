@@ -260,8 +260,8 @@ export interface UploadStoreState {
 
   productCodeMap: {[name: string]: string};
   setProductCodeMap: (map: {[name: string]: string}) => void;
-  productIdMap: {[name: string]: number};
-  setProductIdMap: (map: {[name: string]: number}) => void;
+  productIdMap: {[name: string]: number | string};
+  setProductIdMap: (map: {[name: string]: number | string}) => void;
 
   headerIndex: {nameIdx?: number} | null;
   setHeaderIndex: (v: {nameIdx?: number} | null) => void;
@@ -614,6 +614,8 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
   setCodes: (codes) => set({codes}),
   productCodeMap: {},
   setProductCodeMap: (map) => set({productCodeMap: map}),
+  productIdMap: {},
+  setProductIdMap: (map) => set({productIdMap: map}),
   headerIndex: null,
   setHeaderIndex: (v) => set({headerIndex: v}),
   recommendIdx: null,
