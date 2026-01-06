@@ -203,6 +203,7 @@ export interface UploadedFile {
   tableData: any[][];
   headerIndex: {nameIdx?: number} | null;
   productCodeMap: {[name: string]: string};
+  productIdMap?: {[name: string]: number | string};
   userId?: string;
   uploadTime?: string;
   createdAt?: string; // 업로드 일시 (임시 저장 시 생성)
@@ -259,6 +260,8 @@ export interface UploadStoreState {
 
   productCodeMap: {[name: string]: string};
   setProductCodeMap: (map: {[name: string]: string}) => void;
+  productIdMap: {[name: string]: number};
+  setProductIdMap: (map: {[name: string]: number}) => void;
 
   headerIndex: {nameIdx?: number} | null;
   setHeaderIndex: (v: {nameIdx?: number} | null) => void;
@@ -656,9 +659,19 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     get().setRecommendIdx(rowIdx);
     get().setRecommendList(sortedSuggestions as {name: string; code: string}[]);
   },
-  handleSelectSuggest: (name, code) => {
-    const {productCodeMap, setProductCodeMap, setRecommendIdx} = get();
+  handleSelectSuggest: (name, code, id) => {
+    const {
+      productCodeMap,
+      setProductCodeMap,
+      productIdMap,
+      setProductIdMap,
+      setRecommendIdx,
+    } = get();
     setProductCodeMap({...productCodeMap, [name]: code});
+    // productId가 있으면 productIdMap에도 저장
+    if (id !== undefined && id !== null) {
+      setProductIdMap({...productIdMap, [name]: id});
+    }
     setRecommendIdx(null);
   },
   processFile: async (file: File): Promise<UploadedFile> => {

@@ -398,6 +398,7 @@ export default function Page() {
           ...file,
           tableData: autoMessageTableData,
           productCodeMap: fileProductCodeMap,
+          productIdMap: fileProductIdMap,
         };
 
         // sessionStorage 업데이트

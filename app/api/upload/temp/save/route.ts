@@ -61,6 +61,7 @@ export async function POST(request: NextRequest) {
         tableData,
         headerIndex,
         productCodeMap,
+        productIdMap,
         vendorName,
       } = file;
 
@@ -112,6 +113,10 @@ export async function POST(request: NextRequest) {
                             WHERE table_name = 'temp_files' AND column_name = 'vendor_name') THEN
                 ALTER TABLE temp_files ADD COLUMN vendor_name VARCHAR(500);
               END IF;
+              IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                            WHERE table_name = 'temp_files' AND column_name = 'product_id_map') THEN
+                ALTER TABLE temp_files ADD COLUMN product_id_map JSONB;
+              END IF;
             END
             $$;
           `;
@@ -126,7 +131,7 @@ export async function POST(request: NextRequest) {
           result = await sql`
             INSERT INTO temp_files (
               file_id, file_name, session_id, row_count,
-              table_data, header_index, product_code_map,
+              table_data, header_index, product_code_map, product_id_map,
               validation_status, vendor_name, created_at, updated_at
             )
             VALUES (
@@ -137,6 +142,7 @@ export async function POST(request: NextRequest) {
               ${JSON.stringify(tableData)},
               ${JSON.stringify(headerIndex || {})},
               ${JSON.stringify(productCodeMap || {})},
+              ${JSON.stringify(productIdMap || {})},
               ${JSON.stringify(validationResult)},
               ${vendorName || null},
               ${now.toISOString()}::timestamp,
@@ -149,6 +155,7 @@ export async function POST(request: NextRequest) {
               table_data = EXCLUDED.table_data,
               header_index = EXCLUDED.header_index,
               product_code_map = EXCLUDED.product_code_map,
+              product_id_map = EXCLUDED.product_id_map,
               validation_status = EXCLUDED.validation_status,
               vendor_name = EXCLUDED.vendor_name,
               updated_at = ${now.toISOString()}::timestamp
@@ -171,7 +178,7 @@ export async function POST(request: NextRequest) {
             result = await sql`
               INSERT INTO temp_files (
                 file_id, file_name, session_id, row_count,
-                table_data, header_index, product_code_map,
+                table_data, header_index, product_code_map, product_id_map,
                 validation_status, vendor_name, created_at, updated_at
               )
               VALUES (
@@ -182,6 +189,7 @@ export async function POST(request: NextRequest) {
                 ${JSON.stringify(tableData)},
                 ${JSON.stringify(headerIndex || {})},
                 ${JSON.stringify(productCodeMap || {})},
+                ${JSON.stringify(productIdMap || {})},
                 ${JSON.stringify(validationResult)},
                 ${vendorName || null},
                 ${now.toISOString()}::timestamp,
@@ -194,6 +202,7 @@ export async function POST(request: NextRequest) {
                 table_data = EXCLUDED.table_data,
                 header_index = EXCLUDED.header_index,
                 product_code_map = EXCLUDED.product_code_map,
+                product_id_map = EXCLUDED.product_id_map,
                 validation_status = EXCLUDED.validation_status,
                 vendor_name = EXCLUDED.vendor_name,
                 updated_at = ${now.toISOString()}::timestamp
@@ -207,7 +216,7 @@ export async function POST(request: NextRequest) {
             result = await sql`
               INSERT INTO temp_files (
                 file_id, file_name, row_count,
-                table_data, header_index, product_code_map,
+                table_data, header_index, product_code_map, product_id_map,
                 validation_status, vendor_name, created_at, updated_at
               )
               VALUES (
@@ -217,6 +226,7 @@ export async function POST(request: NextRequest) {
                 ${JSON.stringify(tableData)},
                 ${JSON.stringify(headerIndex || {})},
                 ${JSON.stringify(productCodeMap || {})},
+                ${JSON.stringify(productIdMap || {})},
                 ${JSON.stringify(validationResult)},
                 ${vendorName || null},
                 ${now.toISOString()}::timestamp,
@@ -228,6 +238,7 @@ export async function POST(request: NextRequest) {
                 table_data = EXCLUDED.table_data,
                 header_index = EXCLUDED.header_index,
                 product_code_map = EXCLUDED.product_code_map,
+                product_id_map = EXCLUDED.product_id_map,
                 validation_status = EXCLUDED.validation_status,
                 vendor_name = EXCLUDED.vendor_name,
                 updated_at = ${now.toISOString()}::timestamp

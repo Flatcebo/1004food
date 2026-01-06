@@ -2381,6 +2381,18 @@ function FileViewContent() {
                                     };
                                     setProductCodeMap(updatedProductCodeMap);
 
+                                    // productIdMap 업데이트 (선택한 상품 ID 저장)
+                                    if (
+                                      selectedId !== undefined &&
+                                      selectedId !== null
+                                    ) {
+                                      const updatedProductIdMap = {
+                                        ...productIdMap,
+                                        [originalProductName]: selectedId,
+                                      };
+                                      setProductIdMap(updatedProductIdMap);
+                                    }
+
                                     // 선택한 항목의 데이터 사용 (없으면 codes에서 찾기)
                                     const itemData =
                                       selectedItem ||
@@ -2476,6 +2488,16 @@ function FileViewContent() {
                                           ...file,
                                           tableData: updatedTable,
                                           productCodeMap: updatedProductCodeMap,
+                                          productIdMap:
+                                            selectedId !== undefined &&
+                                            selectedId !== null
+                                              ? {
+                                                  ...productIdMap,
+                                                  [originalProductName]:
+                                                    selectedId,
+                                                }
+                                              : file.productIdMap ||
+                                                productIdMap,
                                         };
                                         setFile(updatedFile);
                                         sessionStorage.setItem(

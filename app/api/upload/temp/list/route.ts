@@ -19,6 +19,10 @@ export async function GET(request: NextRequest) {
                         WHERE table_name = 'temp_files' AND column_name = 'vendor_name') THEN
             ALTER TABLE temp_files ADD COLUMN vendor_name VARCHAR(500);
           END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'temp_files' AND column_name = 'product_id_map') THEN
+            ALTER TABLE temp_files ADD COLUMN product_id_map JSONB;
+          END IF;
         END
         $$;
       `;
@@ -59,6 +63,7 @@ export async function GET(request: NextRequest) {
             table_data as "tableData",
             header_index as "headerIndex",
             product_code_map as "productCodeMap",
+            product_id_map as "productIdMap",
             validation_status as "validationStatus",
             is_confirmed as "isConfirmed",
             vendor_name as "vendorName",
@@ -84,6 +89,7 @@ export async function GET(request: NextRequest) {
               table_data as "tableData",
               header_index as "headerIndex",
               product_code_map as "productCodeMap",
+              product_id_map as "productIdMap",
               NULL as "validationStatus",
               is_confirmed as "isConfirmed",
               vendor_name as "vendorName",
@@ -102,6 +108,7 @@ export async function GET(request: NextRequest) {
               table_data as "tableData",
               header_index as "headerIndex",
               product_code_map as "productCodeMap",
+              product_id_map as "productIdMap",
               NULL as "validationStatus",
               is_confirmed as "isConfirmed",
               vendor_name as "vendorName",

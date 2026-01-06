@@ -125,6 +125,10 @@ export async function POST(request: NextRequest) {
           if (productName && productCodeMap[productName]) {
             rowObj["매핑코드"] = productCodeMap[productName];
           }
+          // productId 추가 (productIdMap에서 가져오기)
+          if (productName && productIdMap[productName]) {
+            rowObj["productId"] = productIdMap[productName];
+          }
         }
 
         // 내부코드 추가
