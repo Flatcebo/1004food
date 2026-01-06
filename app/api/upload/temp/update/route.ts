@@ -5,7 +5,14 @@ import {checkFileValidation} from "@/utils/fileValidation";
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const {fileId, tableData, headerIndex, productCodeMap, isConfirmed} = body;
+    const {
+      fileId,
+      tableData,
+      headerIndex,
+      productCodeMap,
+      vendorName,
+      isConfirmed,
+    } = body;
 
     console.log("📝 API 업데이트 요청 받음:", {
       fileId,
@@ -31,7 +38,7 @@ export async function PUT(request: NextRequest) {
       tableDataRows: tableData?.length,
     });
 
-    // validation_status 컬럼이 없으면 추가
+    // validation_status, vendor_name 컬럼이 없으면 추가
     try {
       await sql`
         DO $$
@@ -40,12 +47,16 @@ export async function PUT(request: NextRequest) {
                         WHERE table_name = 'temp_files' AND column_name = 'validation_status') THEN
             ALTER TABLE temp_files ADD COLUMN validation_status JSONB;
           END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'temp_files' AND column_name = 'vendor_name') THEN
+            ALTER TABLE temp_files ADD COLUMN vendor_name VARCHAR(500);
+          END IF;
         END
         $$;
       `;
     } catch (error: any) {
       // 컬럼 추가 실패는 무시 (이미 존재할 수 있음)
-      console.log("validation_status 컬럼 확인:", error.message);
+      console.log("컬럼 확인:", error.message);
     }
 
     // 파일 검증 수행
@@ -95,6 +106,7 @@ export async function PUT(request: NextRequest) {
             header_index = ${JSON.stringify(headerIndex)},
             product_code_map = ${JSON.stringify(productCodeMap)},
             validation_status = ${JSON.stringify(validationResult)},
+            vendor_name = ${vendorName || null},
             is_confirmed = ${isConfirmed ?? false},
             updated_at = ${koreaTime.toISOString()}
           WHERE file_id = ${fileId}
