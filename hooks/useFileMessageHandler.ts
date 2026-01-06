@@ -72,27 +72,8 @@ export function useFileMessageHandler({
             
             await loadFilesFromServer();
             
-            // loadFilesFromServer 후에도 vendorName이 유지되도록 확인
-            // 서버에서 불러온 데이터에 vendorName이 없을 수 있으므로 다시 확인
-            if (vendorNameFromMessage) {
-              setTimeout(() => {
-                // 현재 상태에서 해당 파일의 vendorName 확인
-                // uploadedFiles는 클로저로 인해 최신 상태가 아닐 수 있으므로
-                // setUploadedFiles의 함수형 업데이트 사용
-                setUploadedFiles((currentFiles) => {
-                  const file = currentFiles.find((f) => f.id === fileId);
-                  if (file && !file.vendorName) {
-                    // vendorName이 없으면 메시지에서 받은 값으로 설정
-                    return currentFiles.map((f) =>
-                      f.id === fileId
-                        ? {...f, vendorName: vendorNameFromMessage}
-                        : f
-                    );
-                  }
-                  return currentFiles;
-                });
-              }, 100);
-            }
+            // loadFilesFromServer 내부에서 이미 vendorName을 보존하도록 수정했으므로
+            // 추가 확인은 불필요 (서버에서 vendorName이 없으면 기존 값 유지)
             
             console.log("서버에서 최신 데이터를 불러왔습니다.", {
               fileId,
