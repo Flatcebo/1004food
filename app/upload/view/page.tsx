@@ -2046,13 +2046,13 @@ function FileViewContent() {
                           // 컬럼별 너비 설정
                           let minWidth = "60px";
                           if (j === productNameIdx) {
-                            minWidth = "300px"; // 상품명은 넓게
+                            minWidth = isEditMode ? "360px" : "300px"; // 상품명은 넓게 (편집 모드일 때 60px 더 넓게)
                           } else if (j === qtyIdx) {
                             minWidth = "40px"; // 수량은 좁게
                           } else if (j === receiverNameIdx) {
                             minWidth = "70px"; // 수취인명은 좁게
                           } else if (j === addressIdx) {
-                            minWidth = "250px"; // 주소는 넓게
+                            minWidth = isEditMode ? "190px" : "250px"; // 주소는 넓게 (편집 모드일 때 60px 더 좁게)
                           }
 
                           const tdClass = `border px-2 py-1 border-gray-300 text-xs${

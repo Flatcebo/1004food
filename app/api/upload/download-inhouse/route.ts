@@ -331,8 +331,7 @@ export async function POST(request: NextRequest) {
       // ID와 함께 필터링하여 실제 다운로드된 행의 ID 추적
       const filteredRowsWithIds = dataRowsWithIds.filter(
         (item: any) =>
-          item.row_data.내외주 === "내주" &&
-          item.row_data.매핑코드 !== "106464"
+          item.row_data.내외주 === "내주" && item.row_data.매핑코드 !== "106464"
       );
       dataRows = filteredRowsWithIds.map((item: any) => item.row_data);
       downloadedRowIds = filteredRowsWithIds.map((item: any) => item.id);
@@ -429,11 +428,17 @@ export async function POST(request: NextRequest) {
         let value = mapDataToTemplate(row, header, {
           templateName: templateData.name,
           isInhouse: isInhouse, // 내주 발주서임을 명시적으로 전달
-          preferSabangName: preferSabangName !== undefined ? preferSabangName : true,
+          preferSabangName:
+            preferSabangName !== undefined ? preferSabangName : true,
         });
 
         // 모든 값을 문자열로 변환 (0 유지)
         let stringValue = value != null ? String(value) : "";
+
+        // 주문번호인 경우 내부코드 사용
+        if (header === "주문번호" || header.includes("주문번호")) {
+          stringValue = row["내부코드"] || stringValue;
+        }
 
         // 전화번호가 10-11자리 숫자이고 0으로 시작하지 않으면 앞에 0 추가
         if (header.includes("전화") || header.includes("연락")) {
