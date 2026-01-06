@@ -25,6 +25,7 @@ export default function CodeEditWindow({
   // 현재 row 데이터에서 주요 필드 추출
   const currentCode = String(currentRowData?.매핑코드 || "");
   const currentProductName = String(currentRowData?.상품명 || "");
+  const currentProductId = currentRowData?.productId || currentRowData?.["productId"];
   const [codes, setCodes] = useState<CodeItem[]>([]);
   const [currentCodeData, setCurrentCodeData] = useState<CodeItem | null>(null);
   const [codeSearch, setCodeSearch] = useState<string>("");
@@ -41,15 +42,21 @@ export default function CodeEditWindow({
         const data = (result.data || []) as CodeItem[];
         setCodes(data);
 
-        // 현재 매핑코드에 해당하는 데이터 찾기
-        if (currentCode) {
-          const found = data.find((item) => item.code === currentCode);
-          setCurrentCodeData(found || null);
+        // 현재 상품 데이터 찾기 (우선순위: productId > 매핑코드)
+        let found: CodeItem | undefined = undefined;
+        if (currentProductId !== undefined && currentProductId !== null) {
+          // productId가 있으면 ID로 먼저 찾기
+          found = data.find((item) => item.id === currentProductId);
         }
+        if (!found && currentCode) {
+          // productId로 찾지 못했으면 매핑코드로 찾기
+          found = data.find((item) => item.code === currentCode);
+        }
+        setCurrentCodeData(found || null);
       }
     };
     loadProducts();
-  }, [currentCode]);
+  }, [currentCode, currentProductId]);
 
   useEffect(() => {
     // 검색어가 있을 때만 필터링 적용

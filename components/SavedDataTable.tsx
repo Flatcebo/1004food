@@ -1743,7 +1743,11 @@ const SavedDataTable = memo(function SavedDataTable({
       {editingRow && (
         <CodeEditWindow
           rowId={editingRow.id}
-          currentRowData={editingRow.rowData}
+          currentRowData={{
+            ...editingRow.rowData,
+            productId:
+              editingRow.rowData.productId || editingRow.rowData["productId"],
+          }}
           onCodeUpdate={(rowId, code) => {
             setEditingRow(null);
             if (onDataUpdate) {
