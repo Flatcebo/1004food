@@ -640,9 +640,8 @@ export async function POST(request: NextRequest) {
       const contentDisposition = `attachment; filename="${safeFileName}"; filename*=UTF-8''${encodedFileName}`;
 
       // CJ외주 발주서 다운로드가 성공하면 주문상태 업데이트
-      // rowIds가 있으면 선택된 행, 없으면 필터링된 데이터의 실제 다운로드된 행들 업데이트
-      const idsToUpdate =
-        rowIds && rowIds.length > 0 ? rowIds : downloadedRowIds;
+      // CJ외주 발주서인 경우 필터링된 데이터의 실제 다운로드된 행들만 업데이트
+      const idsToUpdate = downloadedRowIds;
       if (idsToUpdate && idsToUpdate.length > 0) {
         // 주문상태 업데이트를 비동기로 처리하여 다운로드 속도 향상
         setImmediate(async () => {
@@ -1057,9 +1056,8 @@ export async function POST(request: NextRequest) {
       const contentDisposition = `attachment; filename="outsource.zip"; filename*=UTF-8''${encodedZipFileName}`;
 
       // 외주 발주서 다운로드가 성공하면 주문상태 업데이트
-      // rowIds가 있으면 선택된 행, 없으면 필터링된 데이터의 실제 다운로드된 행들 업데이트
-      const idsToUpdate =
-        rowIds && rowIds.length > 0 ? rowIds : downloadedRowIds;
+      // 외주 발주서인 경우 필터링된 데이터의 실제 다운로드된 행들만 업데이트
+      const idsToUpdate = downloadedRowIds;
       if (idsToUpdate && idsToUpdate.length > 0) {
         // 주문상태 업데이트를 비동기로 처리하여 다운로드 속도 향상
         setImmediate(async () => {

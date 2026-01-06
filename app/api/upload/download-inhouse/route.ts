@@ -216,7 +216,7 @@ export async function POST(request: NextRequest) {
       // 필터링된 데이터 조회 시 ID도 함께 조회 (주문상태 업데이트를 위해)
       const filteredData = await buildQuery(true);
       // ID와 row_data를 함께 저장하여 내주 필터링 후에도 ID 추적 가능하도록 함
-      const dataRowsWithIds = filteredData.map((r: any) => ({
+      dataRowsWithIds = filteredData.map((r: any) => ({
         id: r.id,
         row_data: r.row_data || {},
       }));
@@ -232,7 +232,7 @@ export async function POST(request: NextRequest) {
         ORDER BY u.created_at DESC, ur.id DESC
       `;
       // ID와 row_data를 함께 저장
-      const dataRowsWithIds = allData.map((r: any) => ({
+      dataRowsWithIds = allData.map((r: any) => ({
         id: r.id,
         row_data: r.row_data || {},
       }));
@@ -419,9 +419,13 @@ export async function POST(request: NextRequest) {
 
     const responseHeaders = new Headers();
     // 발주서 다운로드가 성공하면 주문상태 업데이트
-    // rowIds가 있으면 선택된 행, 없으면 필터링된 데이터의 실제 다운로드된 행들 업데이트
-    const idsToUpdate =
-      rowIds && rowIds.length > 0 ? rowIds : downloadedRowIds;
+    // 내주 발주서인 경우 필터링된 데이터의 실제 다운로드된 행들만 업데이트
+    // 내주 발주서가 아닌 경우: rowIds가 있으면 선택된 행, 없으면 필터링된 데이터의 실제 다운로드된 행들 업데이트
+    const idsToUpdate = isInhouse
+      ? downloadedRowIds
+      : rowIds && rowIds.length > 0
+      ? rowIds
+      : downloadedRowIds;
     if (idsToUpdate && idsToUpdate.length > 0) {
       try {
         // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트

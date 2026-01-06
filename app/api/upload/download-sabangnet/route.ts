@@ -53,18 +53,27 @@ export async function POST(request: NextRequest) {
 
     // DB에서 데이터 조회
     let dataRows: any[] = [];
+    let dataRowsWithIds: Array<{id: number; row_data: any}> = [];
+    let downloadedRowIds: number[] = [];
 
     if (rows) {
       // rows가 직접 전달된 경우 (app/page.tsx에서 테스트용)
       dataRows = rows;
+      // rows가 직접 전달된 경우 ID 추적 불가
+      downloadedRowIds = [];
     } else if (rowIds && rowIds.length > 0) {
       // 선택된 행 ID들로 조회
       const rowData = await sql`
-        SELECT row_data
+        SELECT id, row_data
         FROM upload_rows
         WHERE id = ANY(${rowIds})
       `;
-      dataRows = rowData.map((r: any) => r.row_data || {});
+      dataRowsWithIds = rowData.map((r: any) => ({
+        id: r.id,
+        row_data: r.row_data || {},
+      }));
+      dataRows = dataRowsWithIds.map((r: any) => r.row_data);
+      downloadedRowIds = rowIds;
     } else if (filters && Object.keys(filters).length > 0) {
       // 필터 조건으로 조회
       const {
@@ -161,74 +170,29 @@ export async function POST(request: NextRequest) {
         return query;
       };
 
-      const filteredData = await buildQuery();
-      dataRows = filteredData.map((r: any) => r.row_data || {});
-
-      // 전체 다운로드 시 주문상태 업데이트 (rowIds가 없을 때)
-      if (!rowIds || rowIds.length === 0) {
-        try {
-          if (conditions.length === 0) {
-            // 조건이 없으면 전체 업데이트
-            const updateResult = await sql`
-              UPDATE upload_rows
-              SET row_data = jsonb_set(row_data, '{주문상태}', '"사방넷 다운"', true)
-              WHERE EXISTS (
-                SELECT 1 FROM uploads u WHERE u.id = upload_rows.upload_id
-              )
-            `;
-          } else {
-            // 기존 조건을 재사용하여 직접 UPDATE
-            let updateQuery = sql`
-              UPDATE upload_rows
-              SET row_data = jsonb_set(row_data, '{주문상태}', '"사방넷 다운"', true)
-              FROM uploads u
-              WHERE upload_rows.upload_id = u.id
-            `;
-
-            // 기존 조건들을 AND로 연결
-            for (let i = 0; i < updateConditions.length; i++) {
-              const condition = updateConditions[i];
-              updateQuery = sql`${updateQuery} AND ${condition}`;
-            }
-
-            // const updateResult = await updateQuery;
-          }
-        } catch (updateError) {
-          console.error("주문상태 업데이트 실패:", updateError);
-          // 주문상태 업데이트 실패해도 다운로드는 계속 진행
-        }
-      }
+      // 필터링된 데이터 조회 시 ID도 함께 조회 (주문상태 업데이트를 위해)
+      const filteredData = await buildQuery(true);
+      // ID와 row_data를 함께 저장하여 주문상태 업데이트 시 사용
+      dataRowsWithIds = filteredData.map((r: any) => ({
+        id: r.id,
+        row_data: r.row_data || {},
+      }));
+      dataRows = dataRowsWithIds.map((r: any) => r.row_data);
+      downloadedRowIds = dataRowsWithIds.map((r: any) => r.id);
     } else {
       // 조건 없으면 모든 데이터 조회
       const allData = await sql`
-        SELECT ${
-          !rowIds || rowIds.length === 0 ? sql`ur.id,` : sql``
-        } ur.row_data
+        SELECT ur.id, ur.row_data
         FROM upload_rows ur
         INNER JOIN uploads u ON ur.upload_id = u.id
         ORDER BY u.created_at DESC, ur.id DESC
       `;
-      dataRows = allData.map((r: any) => r.row_data || {});
-
-      // 전체 다운로드 시 주문상태 업데이트 (rowIds가 없을 때)
-      if (!rowIds || rowIds.length === 0) {
-        // console.log("사방넷 다운로드: 전체 데이터 주문상태 업데이트 시작");
-        try {
-          const idsToUpdate = allData.map((r: any) => r.id);
-
-          if (idsToUpdate.length > 0) {
-            // 효율적인 단일 쿼리로 모든 row의 주문상태를 "사방넷 다운"으로 업데이트
-            const updateResult = await sql`
-              UPDATE upload_rows
-              SET row_data = jsonb_set(row_data, '{주문상태}', '"사방넷 다운"', true)
-              WHERE id = ANY(${idsToUpdate})
-            `;
-          }
-        } catch (updateError) {
-          console.error("주문상태 업데이트 실패:", updateError);
-          // 주문상태 업데이트 실패해도 다운로드는 계속 진행
-        }
-      }
+      dataRowsWithIds = allData.map((r: any) => ({
+        id: r.id,
+        row_data: r.row_data || {},
+      }));
+      dataRows = dataRowsWithIds.map((r: any) => r.row_data);
+      downloadedRowIds = dataRowsWithIds.map((r: any) => r.id);
     }
 
     // 사방넷 등록 양식인 경우: 업체명별로 그룹화하여 ZIP 생성
@@ -457,13 +421,16 @@ export async function POST(request: NextRequest) {
       }
 
       // 사방넷 다운로드가 성공하면 주문상태 업데이트
-      if (rowIds && rowIds.length > 0) {
+      // rowIds가 있으면 선택된 행, 없으면 필터링된 데이터의 실제 다운로드된 행들 업데이트
+      const idsToUpdate =
+        rowIds && rowIds.length > 0 ? rowIds : downloadedRowIds;
+      if (idsToUpdate && idsToUpdate.length > 0) {
         try {
           // 효율적인 단일 쿼리로 모든 row의 주문상태를 "사방넷 다운"으로 업데이트
           const updateResult = await sql`
             UPDATE upload_rows
             SET row_data = jsonb_set(row_data, '{주문상태}', '"사방넷 다운"', true)
-            WHERE id = ANY(${rowIds})
+            WHERE id = ANY(${idsToUpdate})
           `;
         } catch (updateError) {
           console.error("주문상태 업데이트 실패:", updateError);
