@@ -70,6 +70,11 @@ function FileViewContent() {
   const [productPostTypeMap, setProductPostTypeMap] = useState<{
     [name: string]: string;
   }>({});
+  // 사용자가 수동으로 선택한 상품 ID 맵 (상품명 -> 선택한 상품 ID)
+  // 같은 매핑코드를 가진 여러 상품 중에서 사용자가 선택한 정확한 상품을 추적하기 위함
+  const [productIdMap, setProductIdMap] = useState<{
+    [name: string]: string | number;
+  }>({});
   // Edit 모드 상태
   const [isEditMode, setIsEditMode] = useState(false);
   // 체크박스 선택 상태
@@ -272,8 +277,10 @@ function FileViewContent() {
         const trimmedValue = bulkProductName.trim();
         newTableData[rowIndex][productNameIdx] = trimmedValue;
 
-        // codes에서 매칭되는 상품 찾기
-        const matchedProduct = codes.find((c: any) => c.name === trimmedValue);
+        // codes에서 매칭되는 상품 찾기 (상품명이 정확히 일치하는 경우만)
+        const matchedProduct = codes.find(
+          (c: any) => c.name && String(c.name).trim() === trimmedValue
+        );
 
         console.log("matchedProduct >>>>>>>>>>>>>>>>>>>>>>>", matchedProduct);
 
@@ -465,8 +472,10 @@ function FileViewContent() {
     if (headerIndex && colIndex === headerIndex.nameIdx) {
       const trimmedValue = value.trim();
 
-      // codes에서 매칭되는 상품 찾기
-      const matchedProduct = codes.find((c: any) => c.name === trimmedValue);
+      // codes에서 매칭되는 상품 찾기 (상품명이 정확히 일치하는 경우만)
+      const matchedProduct = codes.find(
+        (c: any) => c.name && String(c.name).trim() === trimmedValue
+      );
 
       const headerRow = newTableData[0];
       const mappingIdx = headerRow.findIndex((h: any) => h === "매핑코드");
@@ -1202,6 +1211,11 @@ function FileViewContent() {
 
         setProductCodeMap(initialProductCodeMap);
 
+        // productIdMap 초기화 (파일에서 불러온 데이터가 있으면 사용)
+        if (parsedFile.productIdMap) {
+          setProductIdMap(parsedFile.productIdMap);
+        }
+
         // 원본 배송메시지 저장 및 자동 배송메시지 생성
         if (parsedFile.tableData && parsedFile.tableData.length > 1) {
           const headerRow = parsedFile.tableData[0];
@@ -1269,21 +1283,43 @@ function FileViewContent() {
                 const mappingCode = initialProductCodeMap[trimmedName];
 
                 // codes에서 상품 정보 찾기
-                const matchedProduct = codesToUse.find(
-                  (c: any) => c.name === trimmedName || c.code === mappingCode
-                );
+                // 우선순위: 1) 사용자가 선택한 상품 ID로 찾기, 2) 상품명이 정확히 일치하는 경우만 자동 매칭
+                let matchedProduct = null;
+                const selectedProductId = productIdMap[trimmedName];
+                if (selectedProductId !== undefined) {
+                  // 사용자가 선택한 상품 ID가 있으면 그것으로 정확히 찾기 (무조건 사용자가 선택한 상품만 사용)
+                  matchedProduct = codesToUse.find(
+                    (c: any) => c.id === selectedProductId
+                  );
+                } else {
+                  // 사용자가 선택하지 않은 경우에만 상품명이 정확히 일치할 때만 자동 매칭
+                  matchedProduct = codesToUse.find(
+                    (c: any) => c.name === trimmedName
+                  );
+                }
+                // 매핑코드로 자동 매칭하는 것은 하지 않음 (사용자가 선택한 상품만 사용)
 
                 let rowChanged = false;
                 const newRow = [...row];
 
                 // 매핑코드 컬럼 업데이트
-                if (
-                  mappingIdx !== -1 &&
-                  mappingCode &&
-                  newRow[mappingIdx] !== mappingCode
-                ) {
-                  newRow[mappingIdx] = mappingCode;
-                  rowChanged = true;
+                // 사용자가 선택한 상품이 있거나 상품명이 정확히 일치하는 경우에만 매핑코드 사용
+                if (mappingIdx !== -1) {
+                  const currentMappingCode = String(
+                    newRow[mappingIdx] || ""
+                  ).trim();
+                  let newMappingCode = null;
+
+                  if (matchedProduct) {
+                    // 사용자가 선택한 상품이거나 상품명이 정확히 일치하는 경우에만 매핑코드 사용
+                    newMappingCode = matchedProduct.code;
+                  }
+                  // productCodeMap에만 있고 상품명이 일치하지 않는 경우는 무시 (자동 매칭 안 함)
+
+                  if (newMappingCode && currentMappingCode !== newMappingCode) {
+                    newRow[mappingIdx] = newMappingCode;
+                    rowChanged = true;
+                  }
                 }
 
                 // 내외주 컬럼 업데이트
@@ -1393,18 +1429,39 @@ function FileViewContent() {
         const mappingCode = productCodeMap[trimmedName];
 
         // codes에서 상품 정보 찾기
-        const matchedProduct = codesRef.current.find(
-          (c: any) => c.name === trimmedName || c.code === mappingCode
-        );
+        // 우선순위: 1) 사용자가 선택한 상품 ID로 찾기, 2) 상품명이 정확히 일치하는 경우만 자동 매칭
+        let matchedProduct = null;
+        const selectedProductId = productIdMap[trimmedName];
+        if (selectedProductId !== undefined) {
+          // 사용자가 선택한 상품 ID가 있으면 그것으로 정확히 찾기 (무조건 사용자가 선택한 상품만 사용)
+          matchedProduct = codesRef.current.find(
+            (c: any) => c.id === selectedProductId
+          );
+        } else {
+          // 사용자가 선택하지 않은 경우에만 상품명이 정확히 일치할 때만 자동 매칭
+          matchedProduct = codesRef.current.find(
+            (c: any) => c.name === trimmedName
+          );
+        }
+        // 매핑코드로 자동 매칭하는 것은 하지 않음 (사용자가 선택한 상품만 사용)
 
         let rowChanged = false;
         const newRow = [...row];
 
-        // 매핑코드 컬럼 업데이트 (productCodeMap에 있지만 테이블에 없는 경우만)
-        if (mappingIdx !== -1 && mappingCode) {
+        // 매핑코드 컬럼 업데이트
+        // 사용자가 선택한 상품이 있거나 상품명이 정확히 일치하는 경우에만 매핑코드 사용
+        if (mappingIdx !== -1) {
           const currentMappingCode = String(newRow[mappingIdx] || "").trim();
-          if (!currentMappingCode && mappingCode) {
-            newRow[mappingIdx] = mappingCode;
+          let newMappingCode = null;
+
+          if (matchedProduct) {
+            // 사용자가 선택한 상품이거나 상품명이 정확히 일치하는 경우에만 매핑코드 사용
+            newMappingCode = matchedProduct.code;
+          }
+          // productCodeMap에만 있고 상품명이 일치하지 않는 경우는 무시 (자동 매칭 안 함)
+
+          if (newMappingCode && !currentMappingCode) {
+            newRow[mappingIdx] = newMappingCode;
             rowChanged = true;
             needsTableUpdate = true;
           }
@@ -1441,6 +1498,7 @@ function FileViewContent() {
           ...file,
           tableData: updatedTableData,
           productCodeMap: {...productCodeMap},
+          productIdMap: {...productIdMap}, // 사용자가 선택한 상품 ID 맵도 함께 저장
         };
         setFile(updatedFile);
         sessionStorage.setItem(
@@ -1458,6 +1516,7 @@ function FileViewContent() {
     tableData.length,
     headerIndex,
     productCodeMap,
+    productIdMap, // 사용자가 선택한 상품 ID 맵도 dependency에 추가
     fileId,
     file,
     uploadedFiles,
@@ -1496,7 +1555,7 @@ function FileViewContent() {
             mappingIdx !== -1 ? String(row[mappingIdx] || "").trim() : "";
           if (!tableMappingCode) {
             const matchedProduct = codesOriginRef.current.find(
-              (c) => c.name === trimmedName
+              (c) => c.name && String(c.name).trim() === trimmedName
             );
             if (matchedProduct?.code) {
               updatedProductCodeMap[trimmedName] = matchedProduct.code;
@@ -1508,22 +1567,42 @@ function FileViewContent() {
         // productCodeMap에 있는 매핑코드를 tableData에 반영
         const mappingCode =
           updatedProductCodeMap[trimmedName] || productCodeMap[trimmedName];
-        const matchedProduct = codesOriginRef.current.find(
-          (c: any) => c.name === trimmedName || c.code === mappingCode
-        );
+        // 우선순위: 1) 사용자가 선택한 상품 ID로 찾기, 2) 상품명이 정확히 일치하는 경우만 자동 매칭
+        let matchedProduct = null;
+        const selectedProductId = productIdMap[trimmedName];
+        if (selectedProductId !== undefined) {
+          // 사용자가 선택한 상품 ID가 있으면 그것으로 정확히 찾기 (무조건 사용자가 선택한 상품만 사용)
+          matchedProduct = codesOriginRef.current.find(
+            (c: any) => c.id === selectedProductId
+          );
+        } else {
+          // 사용자가 선택하지 않은 경우에만 상품명이 정확히 일치할 때만 자동 매칭
+          matchedProduct = codesOriginRef.current.find(
+            (c: any) => c.name === trimmedName
+          );
+        }
+        // 매핑코드로 자동 매칭하는 것은 하지 않음 (사용자가 선택한 상품만 사용)
 
         let rowChanged = false;
         const newRow = [...row];
 
         // 매핑코드 컬럼 업데이트
-        if (
-          mappingIdx !== -1 &&
-          mappingCode &&
-          newRow[mappingIdx] !== mappingCode
-        ) {
-          newRow[mappingIdx] = mappingCode;
-          rowChanged = true;
-          needsTableUpdate = true;
+        // 사용자가 선택한 상품이 있거나 상품명이 정확히 일치하는 경우에만 매핑코드 사용
+        if (mappingIdx !== -1) {
+          const currentMappingCode = String(newRow[mappingIdx] || "").trim();
+          let newMappingCode = null;
+
+          if (matchedProduct) {
+            // 사용자가 선택한 상품이거나 상품명이 정확히 일치하는 경우에만 매핑코드 사용
+            newMappingCode = matchedProduct.code;
+          }
+          // productCodeMap에만 있고 상품명이 일치하지 않는 경우는 무시 (자동 매칭 안 함)
+
+          if (newMappingCode && currentMappingCode !== newMappingCode) {
+            newRow[mappingIdx] = newMappingCode;
+            rowChanged = true;
+            needsTableUpdate = true;
+          }
         }
 
         // 내외주 컬럼 업데이트
@@ -1876,9 +1955,12 @@ function FileViewContent() {
                         (mappingIdx !== -1 && row[mappingIdx]
                           ? String(row[mappingIdx])
                           : "") ||
-                        codes.find((c: any) => c.name === trimmedName)?.code ||
+                        codes.find(
+                          (c: any) =>
+                            c.name && String(c.name).trim() === trimmedName
+                        )?.code ||
                         codesOriginRef.current.find(
-                          (c) => c.name === trimmedName
+                          (c) => c.name && String(c.name).trim() === trimmedName
                         )?.code ||
                         "";
                     }
@@ -1973,24 +2055,27 @@ function FileViewContent() {
                                       className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs"
                                     />
                                     {(() => {
-                                      // 매핑코드로 상품 찾기
+                                      // 상품 찾기 (사용자가 선택한 상품 우선, 없으면 상품명으로만 자동 매칭)
                                       const productName =
                                         String(cellValue).trim();
                                       const mappingCode =
                                         productCodeMap[productName];
 
                                       let product = null;
-                                      if (mappingCode) {
-                                        // 매핑코드가 있으면 code로만 찾기 (추천/검색으로 선택한 경우 대응)
+                                      const selectedProductId =
+                                        productIdMap[productName];
+                                      if (selectedProductId !== undefined) {
+                                        // 사용자가 선택한 상품 ID가 있으면 그것으로 정확히 찾기 (무조건 사용자가 선택한 상품만 사용)
                                         product = codes.find(
-                                          (c: any) => c.code === mappingCode
+                                          (c: any) => c.id === selectedProductId
                                         );
                                       } else {
-                                        // 매핑코드가 없으면 name으로 찾기 (자동 매칭)
+                                        // 사용자가 선택하지 않은 경우에만 상품명이 정확히 일치할 때만 자동 매칭
                                         product = codes.find(
                                           (c: any) => c.name === productName
                                         );
                                       }
+                                      // 매핑코드로 자동 매칭하는 것은 하지 않음 (사용자가 선택한 상품만 사용)
 
                                       // sabangName이 있으면 표시
                                       if (
@@ -2115,17 +2200,20 @@ function FileViewContent() {
                                         : "";
 
                                       let product = null;
-                                      if (mappingCode) {
-                                        // 매핑코드가 있으면 code로만 찾기
+                                      const selectedProductId =
+                                        productIdMap[productName];
+                                      if (selectedProductId !== undefined) {
+                                        // 사용자가 선택한 상품 ID가 있으면 그것으로 정확히 찾기 (무조건 사용자가 선택한 상품만 사용)
                                         product = codes.find(
-                                          (c: any) => c.code === mappingCode
+                                          (c: any) => c.id === selectedProductId
                                         );
                                       } else if (productName) {
-                                        // 매핑코드가 없으면 name으로 찾기
+                                        // 사용자가 선택하지 않은 경우에만 상품명이 정확히 일치할 때만 자동 매칭
                                         product = codes.find(
                                           (c: any) => c.name === productName
                                         );
                                       }
+                                      // 매핑코드로 자동 매칭하는 것은 하지 않음 (사용자가 선택한 상품만 사용)
 
                                       // purchase(매입처명)이 있으면 표시
                                       if (
@@ -2171,17 +2259,20 @@ function FileViewContent() {
                                         : "";
 
                                       let product = null;
-                                      if (mappingCode) {
-                                        // 매핑코드가 있으면 code로만 찾기
+                                      const selectedProductId =
+                                        productIdMap[productName];
+                                      if (selectedProductId !== undefined) {
+                                        // 사용자가 선택한 상품 ID가 있으면 그것으로 정확히 찾기 (무조건 사용자가 선택한 상품만 사용)
                                         product = codes.find(
-                                          (c: any) => c.code === mappingCode
+                                          (c: any) => c.id === selectedProductId
                                         );
                                       } else if (productName) {
-                                        // 매핑코드가 없으면 name으로 찾기
+                                        // 사용자가 선택하지 않은 경우에만 상품명이 정확히 일치할 때만 자동 매칭
                                         product = codes.find(
                                           (c: any) => c.name === productName
                                         );
                                       }
+                                      // 매핑코드로 자동 매칭하는 것은 하지 않음 (사용자가 선택한 상품만 사용)
 
                                       // 택배사 표시: 매핑된 상품의 택배사 우선, 없으면 현재 row의 택배사 값
                                       const postTypeToShow =
@@ -2619,7 +2710,7 @@ function FileViewContent() {
 
             // 3순위: codes에서 name으로 찾기 (자동 매칭)
             const autoMatched = codes.find(
-              (c: any) => c.name === trimmedProductName
+              (c: any) => c.name && String(c.name).trim() === trimmedProductName
             );
             return autoMatched?.code || "";
           })();
@@ -2634,13 +2725,19 @@ function FileViewContent() {
               skipApiCall={true} // API 호출 건너뛰기
               onCodeUpdate={(rowId, code, codeItem) => {
                 // CodeEditWindow에서 선택한 코드를 적용
-                // codeItem이 함께 전달되면 우선 사용하고, 없으면 codes에서 검색
-                const selectedItem =
-                  codeItem || codes.find((c: any) => c.code === code);
-                if (!selectedItem) {
-                  console.error("선택한 상품을 찾을 수 없습니다:", code);
+                // 사용자가 선택한 상품(codeItem)이 필수로 전달되어야 함
+                // codeItem이 없으면 같은 매핑코드를 가진 다른 상품이 선택될 수 있으므로 에러 처리
+                if (!codeItem) {
+                  console.error(
+                    "선택한 상품 정보가 전달되지 않았습니다:",
+                    code
+                  );
+                  alert(
+                    "상품 선택 정보를 찾을 수 없습니다. 다시 시도해주세요."
+                  );
                   return;
                 }
+                const selectedItem = codeItem;
 
                 const selectedName = selectedItem.name;
                 const selectedCode = code;
@@ -2664,6 +2761,14 @@ function FileViewContent() {
                   [originalProductName]: selectedCode, // 원래 상품명으로 매핑코드 저장
                 };
                 setProductCodeMap(updatedProductCodeMap);
+
+                // 사용자가 선택한 상품의 ID 저장 (같은 매핑코드를 가진 다른 상품과 구분하기 위함)
+                if (codeItem?.id !== undefined && codeItem?.id !== null) {
+                  setProductIdMap((prev) => ({
+                    ...prev,
+                    [originalProductName]: codeItem.id,
+                  }));
+                }
 
                 // 매핑코드, 내외주, 택배사 실시간 업데이트
                 const headerRow = tableData[0];
@@ -2734,6 +2839,7 @@ function FileViewContent() {
                       ...file,
                       tableData: updatedTable,
                       productCodeMap: updatedProductCodeMap,
+                      productIdMap: productIdMap, // 사용자가 선택한 상품 ID 맵도 함께 저장
                     };
                     setFile(updatedFile);
                     sessionStorage.setItem(
