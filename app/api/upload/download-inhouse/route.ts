@@ -116,18 +116,27 @@ export async function POST(request: NextRequest) {
 
     // DB에서 데이터 조회
     let dataRows: any[] = [];
+    let dataRowsWithIds: Array<{id: number; row_data: any}> = [];
+    let downloadedRowIds: number[] = [];
 
     if (rows) {
       // rows가 직접 전달된 경우 (app/page.tsx에서 테스트용)
       dataRows = rows;
+      // rows가 직접 전달된 경우 ID 추적 불가
+      downloadedRowIds = [];
     } else if (rowIds && rowIds.length > 0) {
       // 선택된 행 ID들로 조회
       const rowData = await sql`
-        SELECT row_data
+        SELECT id, row_data
         FROM upload_rows
         WHERE id = ANY(${rowIds})
       `;
-      dataRows = rowData.map((r: any) => r.row_data || {});
+      dataRowsWithIds = rowData.map((r: any) => ({
+        id: r.id,
+        row_data: r.row_data || {},
+      }));
+      dataRows = dataRowsWithIds.map((r: any) => r.row_data);
+      downloadedRowIds = rowIds;
     } else if (filters && Object.keys(filters).length > 0) {
       // 필터 조건으로 조회
       const {
@@ -204,49 +213,14 @@ export async function POST(request: NextRequest) {
         return query;
       };
 
-      const filteredData = await buildQuery();
-      dataRows = filteredData.map((r: any) => r.row_data || {});
-
-      // 전체 다운로드 시 주문상태 업데이트 (rowIds가 없을 때)
-      if (!rowIds || rowIds.length === 0) {
-        // 주문상태 업데이트를 비동기로 처리하여 다운로드 속도 향상
-        setImmediate(async () => {
-          try {
-            if (conditions.length === 0) {
-              // 조건이 없으면 전체 업데이트
-              await sql`
-                UPDATE upload_rows
-                SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
-                WHERE EXISTS (
-                  SELECT 1 FROM uploads u WHERE u.id = upload_rows.upload_id
-                )
-              `;
-            } else {
-              // 기존 조건을 재사용하여 직접 UPDATE
-              let updateQuery = sql`
-                UPDATE upload_rows
-                SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
-                FROM uploads u
-                WHERE upload_rows.upload_id = u.id
-              `;
-
-              // 기존 조건들을 AND로 연결
-              for (let i = 0; i < conditions.length; i++) {
-                const condition = conditions[i];
-                // ur. -> upload_rows., u. -> u. 로 변경
-                const modifiedCondition = condition
-                  .replace(/ur\.row_data/g, "upload_rows.row_data")
-                  .replace(/u\.created_at/g, "u.created_at");
-                updateQuery = sql`${updateQuery} AND ${modifiedCondition}`;
-              }
-
-              await updateQuery;
-            }
-          } catch (updateError) {
-            console.error("주문상태 업데이트 실패:", updateError);
-          }
-        });
-      }
+      // 필터링된 데이터 조회 시 ID도 함께 조회 (주문상태 업데이트를 위해)
+      const filteredData = await buildQuery(true);
+      // ID와 row_data를 함께 저장하여 내주 필터링 후에도 ID 추적 가능하도록 함
+      const dataRowsWithIds = filteredData.map((r: any) => ({
+        id: r.id,
+        row_data: r.row_data || {},
+      }));
+      dataRows = dataRowsWithIds.map((r: any) => r.row_data);
     } else {
       // 조건 없으면 모든 데이터 조회
       const allData = await sql`
@@ -257,7 +231,12 @@ export async function POST(request: NextRequest) {
         INNER JOIN uploads u ON ur.upload_id = u.id
         ORDER BY u.created_at DESC, ur.id DESC
       `;
-      dataRows = allData.map((r: any) => r.row_data || {});
+      // ID와 row_data를 함께 저장
+      const dataRowsWithIds = allData.map((r: any) => ({
+        id: r.id,
+        row_data: r.row_data || {},
+      }));
+      dataRows = dataRowsWithIds.map((r: any) => r.row_data);
 
       // 전체 다운로드 시 주문상태 업데이트 (rowIds가 없을 때)
       if (!rowIds || rowIds.length === 0) {
@@ -314,11 +293,15 @@ export async function POST(request: NextRequest) {
     const isInhouse = templateName.includes("내주");
 
     // 내주 발주서인 경우: 내주 데이터만 필터링
-    if (isInhouse) {
-      // 내외주가 "내주"인 것들만 필터링 + 매핑코드 106464 제외
-      dataRows = dataRows.filter(
-        (row: any) => row.내외주 === "내주" && row.매핑코드 !== "106464"
+    if (isInhouse && dataRowsWithIds.length > 0) {
+      // ID와 함께 필터링하여 실제 다운로드된 행의 ID 추적
+      const filteredRowsWithIds = dataRowsWithIds.filter(
+        (item: any) =>
+          item.row_data.내외주 === "내주" &&
+          item.row_data.매핑코드 !== "106464"
       );
+      dataRows = filteredRowsWithIds.map((item: any) => item.row_data);
+      downloadedRowIds = filteredRowsWithIds.map((item: any) => item.id);
 
       if (dataRows.length === 0) {
         return NextResponse.json(
@@ -326,6 +309,9 @@ export async function POST(request: NextRequest) {
           {status: 404}
         );
       }
+    } else if (dataRowsWithIds.length > 0) {
+      // 내주 발주서가 아닌 경우에도 ID 추적
+      downloadedRowIds = dataRowsWithIds.map((item: any) => item.id);
     }
 
     // 데이터에 공급가와 사방넷명 주입
@@ -433,13 +419,16 @@ export async function POST(request: NextRequest) {
 
     const responseHeaders = new Headers();
     // 발주서 다운로드가 성공하면 주문상태 업데이트
-    if (rowIds && rowIds.length > 0) {
+    // rowIds가 있으면 선택된 행, 없으면 필터링된 데이터의 실제 다운로드된 행들 업데이트
+    const idsToUpdate =
+      rowIds && rowIds.length > 0 ? rowIds : downloadedRowIds;
+    if (idsToUpdate && idsToUpdate.length > 0) {
       try {
         // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
         await sql`
           UPDATE upload_rows
           SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
-          WHERE id = ANY(${rowIds})
+          WHERE id = ANY(${idsToUpdate})
         `;
       } catch (updateError) {
         console.error("주문상태 업데이트 실패:", updateError);
