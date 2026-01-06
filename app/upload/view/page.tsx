@@ -966,7 +966,10 @@ function FileViewContent() {
           alert("서버 저장에 실패했습니다. 다시 시도해주세요.");
           return;
         }
-        console.log("서버 업데이트 성공");
+        console.log("서버 업데이트 성공", {
+          vendorName: vendorName.trim() || null,
+          result: result.data,
+        });
       } catch (error) {
         console.error("❌ 서버 업데이트 실패:", error);
         alert("서버 저장에 실패했습니다. 다시 시도해주세요.");
@@ -975,15 +978,18 @@ function FileViewContent() {
 
       confirmFile(fileId);
 
-      // 부모 창에 메시지 전송 (약간의 지연을 두어 메시지가 전송되도록 보장)
+      // 부모 창에 메시지 전송 (서버 업데이트 완료 후 약간의 지연을 두어 DB 반영 시간 확보)
       if (window.opener) {
-        console.log("부모 창에 메시지 전송:", updatedFile.fileName);
-        // 메시지 전송
+        console.log("부모 창에 메시지 전송:", updatedFile.fileName, {
+          vendorName: updatedFile.vendorName,
+        });
+        // 메시지 전송 (vendorName 포함)
         window.opener.postMessage(
           {
             type: "FILE_CONFIRMED",
             fileId: fileId,
             fileData: updatedFile,
+            vendorName: vendorName.trim() || null, // 업체명 명시적으로 전달
           },
           window.location.origin
         );
@@ -991,7 +997,7 @@ function FileViewContent() {
         // 메시지가 전송될 시간을 주고 새창 닫기
         setTimeout(() => {
           window.close();
-        }, 100);
+        }, 200); // 지연 시간을 늘려서 서버 업데이트 반영 시간 확보
       } else {
         // opener가 없으면 바로 닫기
         window.close();

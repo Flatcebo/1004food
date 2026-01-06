@@ -31,11 +31,49 @@ export function useFileMessageHandler({
           productCodeMapSize: Object.keys(fileData?.productCodeMap || {}).length,
         });
 
-        // 서버에서 최신 데이터 불러오기
+        // vendorName을 즉시 반영 (메시지에서 받은 값 우선 사용)
+        const vendorNameFromMessage =
+          event.data.vendorName || fileData?.vendorName;
+
+        // 즉시 파일 목록 업데이트 (vendorName 포함)
+        const fileExists = uploadedFiles.some((f) => f.id === fileId);
+        if (fileExists) {
+          const updatedFiles = uploadedFiles.map((f) =>
+            f.id === fileId
+              ? {
+                  ...f,
+                  ...fileData,
+                  vendorName: vendorNameFromMessage || f.vendorName || undefined,
+                }
+              : f
+          );
+          setUploadedFiles(updatedFiles);
+          console.log("즉시 업데이트 성공:", {
+            fileId,
+            vendorName: vendorNameFromMessage,
+          });
+        } else {
+          // 파일이 없으면 추가
+          console.warn(`파일 ${fileId}가 목록에 없습니다. 추가합니다.`);
+          setUploadedFiles([
+            ...uploadedFiles,
+            {
+              ...fileData,
+              vendorName: vendorNameFromMessage || fileData.vendorName || undefined,
+            },
+          ]);
+        }
+
+        // 서버에서 최신 데이터 불러오기 (약간의 지연을 두어 서버 업데이트 반영 시간 확보)
         if (loadFilesFromServer) {
           try {
+            // 서버 업데이트가 완료될 시간을 확보하기 위해 약간의 지연
+            await new Promise((resolve) => setTimeout(resolve, 300));
             await loadFilesFromServer();
-            console.log("서버에서 최신 데이터를 불러왔습니다.");
+            console.log("서버에서 최신 데이터를 불러왔습니다.", {
+              fileId,
+              vendorName: vendorNameFromMessage,
+            });
           } catch (error) {
             console.error("서버에서 데이터 불러오기 실패:", error);
           }
@@ -48,6 +86,7 @@ export function useFileMessageHandler({
               tableData: [...(fileData.tableData || [])],
               headerIndex: {...(fileData.headerIndex || {})},
               productCodeMap: {...(fileData.productCodeMap || {})},
+              vendorName: vendorNameFromMessage || fileData.vendorName || undefined,
             };
             
             sessionStorage.setItem(
@@ -57,20 +96,6 @@ export function useFileMessageHandler({
             console.log("sessionStorage 업데이트 성공:", fileData.fileName);
           } catch (error) {
             console.error("sessionStorage 업데이트 실패:", error);
-          }
-
-          // 업로드된 파일 목록 업데이트 (해당 파일만 업데이트)
-          const fileExists = uploadedFiles.some((f) => f.id === fileId);
-
-          if (fileExists) {
-            const updatedFiles = uploadedFiles.map((f) =>
-              f.id === fileId ? {...fileData} : f
-            );
-            setUploadedFiles(updatedFiles);
-            console.log("uploadedFiles 업데이트 성공:", fileData.fileName);
-          } else {
-            console.warn(`파일 ${fileId}가 목록에 없습니다. 추가합니다.`);
-            setUploadedFiles([...uploadedFiles, {...fileData}]);
           }
         }
 
