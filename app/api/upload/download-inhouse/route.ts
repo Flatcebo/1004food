@@ -325,6 +325,7 @@ export async function POST(request: NextRequest) {
             row["공급가"] = salePrice;
           }
         }
+        // 사방넷명 설정: productSabangNameMap에 있으면 사용, 없으면 null로 설정 (상품명으로 fallback)
         if (productSabangNameMap[row.productId] !== undefined) {
           const sabangName = productSabangNameMap[row.productId];
           if (
@@ -332,9 +333,27 @@ export async function POST(request: NextRequest) {
             sabangName !== undefined &&
             String(sabangName).trim() !== ""
           ) {
+            // mapDataToTemplate에서 찾을 수 있도록 여러 키로 저장
             row["사방넷명"] = sabangName;
+            row["sabangName"] = sabangName;
+            row["sabang_name"] = sabangName;
+          } else {
+            // 사방넷명이 null이거나 빈 문자열인 경우 명시적으로 제거 (상품명으로 fallback)
+            delete row["사방넷명"];
+            delete row["sabangName"];
+            delete row["sabang_name"];
           }
+        } else {
+          // productSabangNameMap에 없는 경우 명시적으로 제거 (상품명으로 fallback)
+          delete row["사방넷명"];
+          delete row["sabangName"];
+          delete row["sabang_name"];
         }
+      } else {
+        // productId가 없는 경우 명시적으로 제거 (상품명으로 fallback)
+        delete row["사방넷명"];
+        delete row["sabangName"];
+        delete row["sabang_name"];
       }
     });
 

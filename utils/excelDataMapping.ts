@@ -236,9 +236,10 @@ export function mapDataToTemplate(
       // 사방넷명이 있으면 사방넷명 사용
       const sabangValue =
         row["사방넷명"] || row["sabangName"] || row["sabang_name"] || "";
-      if (sabangValue !== null && sabangValue !== undefined) {
+      if (sabangValue !== null && sabangValue !== undefined && sabangValue !== "") {
         const sabangStr = normalizeStringValue(sabangValue);
-        if (sabangStr) {
+        // 빈 문자열이 아닌 경우에만 사방넷명 사용
+        if (sabangStr && sabangStr.trim() !== "") {
           return prepareExcelCellValue(sabangStr, false);
         }
       }
