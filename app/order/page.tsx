@@ -309,6 +309,7 @@ export default function Page() {
 
       let fileChanged = false;
       const fileProductCodeMap = {...file.productCodeMap};
+      const fileProductIdMap = {...(file.productIdMap || {})};
 
       const updatedTableData = file.tableData.map((row, idx) => {
         if (idx === 0) return row;
@@ -379,6 +380,11 @@ export default function Page() {
         // productCodeMap에 비어있고 자동매칭된 코드가 있으면 map에도 채워둠
         if (!fileProductCodeMap[name] && found?.code) {
           fileProductCodeMap[name] = found.code;
+        }
+
+        // productIdMap에 비어있고 자동매칭된 상품이 있으면 ID도 저장
+        if (!fileProductIdMap[name] && found?.id) {
+          fileProductIdMap[name] = found.id;
         }
 
         return updatedRow;
