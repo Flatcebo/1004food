@@ -119,15 +119,49 @@ export async function POST(request: NextRequest) {
           rowObj["주문상태"] = "공급중";
         }
 
-        // 매핑코드 추가 (productCodeMap에서 가져오기)
+        // 매핑코드 및 productId 추가 (productCodeMap, productIdMap에서 가져오기)
         if (nameIdx !== -1) {
           const productName = String(row[nameIdx] || "").trim();
-          if (productName && productCodeMap[productName]) {
-            rowObj["매핑코드"] = productCodeMap[productName];
-          }
-          // productId 추가 (productIdMap에서 가져오기)
-          if (productName && productIdMap[productName]) {
-            rowObj["productId"] = productIdMap[productName];
+          if (productName) {
+            // 매핑코드 추가
+            if (productCodeMap[productName]) {
+              rowObj["매핑코드"] = productCodeMap[productName];
+            }
+            // productId 추가 (productIdMap에서 가져오기)
+            // 여러 키 변형으로 시도 (정확한 매칭, 공백 제거 등)
+            let productId = null;
+            
+            // 1순위: 정확한 상품명으로 매칭
+            if (productIdMap[productName]) {
+              productId = productIdMap[productName];
+            } else {
+              // 2순위: 공백 제거한 상품명으로 매칭
+              const trimmedName = productName.replace(/\s+/g, "");
+              if (productIdMap[trimmedName]) {
+                productId = productIdMap[trimmedName];
+              } else {
+                // 3순위: productIdMap의 모든 키를 순회하며 부분 매칭 시도
+                for (const [key, value] of Object.entries(productIdMap)) {
+                  const trimmedKey = key.replace(/\s+/g, "");
+                  if (trimmedKey === trimmedName || key === productName) {
+                    productId = value;
+                    break;
+                  }
+                }
+              }
+            }
+            
+            if (productId) {
+              rowObj["productId"] = productId;
+            } else {
+              // 디버깅: productIdMap에 없는 경우 로그 출력 (첫 3개만)
+              if (rowIndex < 3) {
+                console.log(`⚠️ productIdMap에 없는 상품명: "${productName}"`, {
+                  productIdMapKeys: Object.keys(productIdMap),
+                  productIdMapSample: Object.entries(productIdMap).slice(0, 3),
+                });
+              }
+            }
           }
         }
 
@@ -146,6 +180,11 @@ export async function POST(request: NextRequest) {
         sampleRow: rowObjects[0],
         hasInternalCode: !!rowObjects[0]?.["내부코드"],
         hasMappingCode: !!rowObjects[0]?.["매핑코드"],
+        hasProductId: !!rowObjects[0]?.["productId"],
+        productIdMapSize: Object.keys(productIdMap).length,
+        productIdMapSample: Object.entries(productIdMap).slice(0, 3),
+        firstRowProductName: rowObjects[0]?.["상품명"],
+        firstRowProductId: rowObjects[0]?.["productId"],
       });
 
       // uploads 테이블에 저장

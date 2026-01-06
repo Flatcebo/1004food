@@ -240,6 +240,9 @@ export function useFileSave({
             fieldIndices.postFee ??
             headerRow.findIndex((h: any) => h === "택배비");
 
+          // productIdMap 업데이트를 위한 맵 생성
+          const updatedProductIdMap = {...(file.productIdMap || {})};
+
           const rows = file.tableData.slice(1).map((row: any[]) => {
             const name =
               nameIdx !== -1 ? String(row[nameIdx] || "").trim() : "";
@@ -271,6 +274,7 @@ export function useFileSave({
               // 3순위: 매핑코드로 찾기 (같은 매핑코드를 가진 여러 상품 중 첫 번째가 선택될 수 있음)
               const productIdMap = file.productIdMap || {};
               let matchedProduct = null;
+              let productId = null;
               
               const selectedProductId = productIdMap[name];
               if (selectedProductId !== undefined) {
@@ -279,6 +283,7 @@ export function useFileSave({
                   (c: any) => c.id === selectedProductId
                 );
                 // 사용자가 선택한 상품 ID 저장 (다운로드 시 정확한 상품을 찾기 위함)
+                productId = selectedProductId;
                 rowData["productId"] = selectedProductId;
               }
               
@@ -289,6 +294,7 @@ export function useFileSave({
                 );
                 // 상품명으로 찾은 경우에도 ID 저장
                 if (matchedProduct?.id) {
+                  productId = matchedProduct.id;
                   rowData["productId"] = matchedProduct.id;
                 }
               }
@@ -301,8 +307,14 @@ export function useFileSave({
                 });
                 // 매핑코드로 찾은 경우에도 ID 저장
                 if (matchedProduct?.id) {
+                  productId = matchedProduct.id;
                   rowData["productId"] = matchedProduct.id;
                 }
+              }
+
+              // productIdMap 업데이트 (productId가 있으면)
+              if (productId && name) {
+                updatedProductIdMap[name] = productId;
               }
 
               // 디버깅: 첫 번째 상품만 로그 출력
@@ -534,6 +546,7 @@ export function useFileSave({
             fileName: file.fileName,
             rowCount: file.rowCount,
             data: rows,
+            productIdMap: updatedProductIdMap, // 업데이트된 productIdMap 포함
           };
         })
         .filter((d: any) => d !== null);
@@ -573,6 +586,10 @@ export function useFileSave({
           const file = filesToUpload.find((f) => f.id === fileId);
           if (!file) return null;
 
+          // uploadData에서 해당 파일의 업데이트된 productIdMap 찾기
+          const uploadDataItem = uploadData.find((d: any) => d.fileName === file.fileName);
+          const updatedProductIdMap = uploadDataItem?.productIdMap || {};
+
           // 최신 파일 데이터 가져오기
           let fileData = file;
           const storedFile = sessionStorage.getItem(`uploadedFile_${fileId}`);
@@ -583,6 +600,12 @@ export function useFileSave({
               console.error("파일 데이터 파싱 실패:", error);
             }
           }
+
+          // 기존 productIdMap과 업데이트된 productIdMap 병합 (업데이트된 것이 우선)
+          const mergedProductIdMap = {
+            ...(fileData.productIdMap || {}),
+            ...updatedProductIdMap,
+          };
 
           // 서버에 파일 업데이트 및 확인 상태 설정
           const updateResponse = await fetch("/api/upload/temp/update", {
@@ -595,7 +618,7 @@ export function useFileSave({
               tableData: fileData.tableData,
               headerIndex: fileData.headerIndex,
               productCodeMap: fileData.productCodeMap || {},
-              productIdMap: fileData.productIdMap || {}, // 사용자가 선택한 상품 ID 맵도 함께 전송
+              productIdMap: mergedProductIdMap, // 업데이트된 productIdMap 사용
               isConfirmed: true,
             }),
           });
