@@ -307,42 +307,42 @@ export async function POST(request: NextRequest) {
         // 전화번호 필드들에 하이픈 추가 가공 (ID 유지)
         const processedRowsWithIds = filteredRowsWithIds.map((item: any) => {
           const processedRow = {...item.row_data};
-          
+
           // 수취인 전화번호 가공
           if (processedRow["수취인 전화번호"]) {
             processedRow["수취인 전화번호"] = formatPhoneNumber(
               processedRow["수취인 전화번호"]
             );
           }
-          
+
           // 주문자 전화번호 가공
           if (processedRow["주문자 전화번호"]) {
             processedRow["주문자 전화번호"] = formatPhoneNumber(
               processedRow["주문자 전화번호"]
             );
           }
-          
+
           // 전화번호1 가공
           if (processedRow["전화번호1"]) {
             processedRow["전화번호1"] = formatPhoneNumber(
               processedRow["전화번호1"]
             );
           }
-          
+
           // 전화번호2 가공
           if (processedRow["전화번호2"]) {
             processedRow["전화번호2"] = formatPhoneNumber(
               processedRow["전화번호2"]
             );
           }
-          
+
           // 전화번호 가공
           if (processedRow["전화번호"]) {
             processedRow["전화번호"] = formatPhoneNumber(
               processedRow["전화번호"]
             );
           }
-          
+
           return {
             id: item.id,
             row_data: processedRow,
@@ -355,46 +355,46 @@ export async function POST(request: NextRequest) {
         dataRows = dataRows.filter(
           (row: any) => row.내외주 === "외주" && row.매핑코드 !== "106464"
         );
-        
+
         // 전화번호 필드들에 하이픈 추가 가공
         dataRows = dataRows.map((row: any) => {
           const processedRow = {...row};
-          
+
           // 수취인 전화번호 가공
           if (processedRow["수취인 전화번호"]) {
             processedRow["수취인 전화번호"] = formatPhoneNumber(
               processedRow["수취인 전화번호"]
             );
           }
-          
+
           // 주문자 전화번호 가공
           if (processedRow["주문자 전화번호"]) {
             processedRow["주문자 전화번호"] = formatPhoneNumber(
               processedRow["주문자 전화번호"]
             );
           }
-          
+
           // 전화번호1 가공
           if (processedRow["전화번호1"]) {
             processedRow["전화번호1"] = formatPhoneNumber(
               processedRow["전화번호1"]
             );
           }
-          
+
           // 전화번호2 가공
           if (processedRow["전화번호2"]) {
             processedRow["전화번호2"] = formatPhoneNumber(
               processedRow["전화번호2"]
             );
           }
-          
+
           // 전화번호 가공
           if (processedRow["전화번호"]) {
             processedRow["전화번호"] = formatPhoneNumber(
               processedRow["전화번호"]
             );
           }
-          
+
           return processedRow;
         });
       }
@@ -406,14 +406,51 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // 매핑코드별 가격, 사방넷명, 업체명 정보 조회
+      // 상품 정보 조회: productId가 있으면 ID로, 없으면 매핑코드로 조회
+      const productIds = [
+        ...new Set(dataRows.map((row: any) => row.productId).filter(Boolean)),
+      ];
       const productCodes = [
-        ...new Set(dataRows.map((row: any) => row.매핑코드).filter(Boolean)),
+        ...new Set(
+          dataRows
+            .filter((row: any) => !row.productId && row.매핑코드)
+            .map((row: any) => row.매핑코드)
+        ),
       ];
       const productSalePriceMap: {[code: string]: number | null} = {};
       const productSabangNameMap: {[code: string]: string | null} = {};
       const productVendorNameMap: {[code: string]: string | null} = {};
+      const productSalePriceMapById: {[id: string | number]: number | null} =
+        {};
+      const productSabangNameMapById: {[id: string | number]: string | null} =
+        {};
+      const productVendorNameMapById: {[id: string | number]: string | null} =
+        {};
 
+      // productId로 조회
+      if (productIds.length > 0) {
+        const productsById = await sql`
+          SELECT id, code, sale_price, sabang_name as "sabangName", purchase as "vendorName"
+          FROM products
+          WHERE id = ANY(${productIds})
+        `;
+
+        productsById.forEach((p: any) => {
+          if (p.id) {
+            if (p.sale_price !== null && p.sale_price !== undefined) {
+              productSalePriceMapById[p.id] = p.sale_price;
+            }
+            if (p.sabangName !== undefined) {
+              productSabangNameMapById[p.id] = p.sabangName;
+            }
+            if (p.vendorName !== undefined) {
+              productVendorNameMapById[p.id] = p.vendorName;
+            }
+          }
+        });
+      }
+
+      // 매핑코드로 조회 (productId가 없는 경우)
       if (productCodes.length > 0) {
         const products = await sql`
           SELECT code, sale_price, sabang_name as "sabangName", purchase as "vendorName"
@@ -436,21 +473,52 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // 매핑코드를 통해 매입처로 업체명 업데이트
+      // 매핑코드를 통해 매입처로 업체명 업데이트 및 공급가, 사방넷명 주입
       dataRows.forEach((row: any) => {
         // 내주는 제외 (외주만 처리)
         if (row.내외주 !== "외주") {
           return;
         }
 
-        if (row.매핑코드 && productVendorNameMap[row.매핑코드]) {
-          row.업체명 = productVendorNameMap[row.매핑코드];
-        } else {
-          row.업체명 = "매입처미지정";
-        }
-
-        // 공급가와 사방넷명 주입
-        if (row.매핑코드) {
+        if (row.productId) {
+          // productId로 조회한 정보 사용
+          if (productVendorNameMapById[row.productId] !== undefined) {
+            row.업체명 =
+              productVendorNameMapById[row.productId] || "매입처미지정";
+          }
+          if (productSalePriceMapById[row.productId] !== undefined) {
+            const salePrice = productSalePriceMapById[row.productId];
+            if (salePrice !== null) {
+              row["공급가"] = salePrice;
+            }
+          }
+          if (productSabangNameMapById[row.productId] !== undefined) {
+            const sabangName = productSabangNameMapById[row.productId];
+            if (
+              sabangName !== null &&
+              sabangName !== undefined &&
+              String(sabangName).trim() !== ""
+            ) {
+              row["사방넷명"] = sabangName;
+              row["sabangName"] = sabangName;
+              row["sabang_name"] = sabangName;
+            } else {
+              delete row["사방넷명"];
+              delete row["sabangName"];
+              delete row["sabang_name"];
+            }
+          } else {
+            delete row["사방넷명"];
+            delete row["sabangName"];
+            delete row["sabang_name"];
+          }
+        } else if (row.매핑코드) {
+          // 매핑코드로 조회한 정보 사용
+          if (productVendorNameMap[row.매핑코드] !== undefined) {
+            row.업체명 = productVendorNameMap[row.매핑코드] || "매입처미지정";
+          } else {
+            row.업체명 = "매입처미지정";
+          }
           if (productSalePriceMap[row.매핑코드] !== undefined) {
             const salePrice = productSalePriceMap[row.매핑코드];
             if (salePrice !== null) {
@@ -465,7 +533,17 @@ export async function POST(request: NextRequest) {
               String(sabangName).trim() !== ""
             ) {
               row["사방넷명"] = sabangName;
+              row["sabangName"] = sabangName;
+              row["sabang_name"] = sabangName;
+            } else {
+              delete row["사방넷명"];
+              delete row["sabangName"];
+              delete row["sabang_name"];
             }
+          } else {
+            delete row["사방넷명"];
+            delete row["sabangName"];
+            delete row["sabang_name"];
           }
         }
       });
@@ -480,7 +558,8 @@ export async function POST(request: NextRequest) {
           let value = mapDataToTemplate(row, headerStr, {
             templateName: templateData.name,
             formatPhone: true, // CJ외주 발주서에서도 전화번호에 하이픈 추가
-            preferSabangName: preferSabangName !== undefined ? preferSabangName : true,
+            preferSabangName:
+              preferSabangName !== undefined ? preferSabangName : true,
           });
 
           // 모든 값을 문자열로 변환 (0 유지)
@@ -681,42 +760,42 @@ export async function POST(request: NextRequest) {
         // 전화번호 필드들에 하이픈 추가 가공 (ID 유지)
         const processedRowsWithIds = filteredRowsWithIds.map((item: any) => {
           const processedRow = {...item.row_data};
-          
+
           // 수취인 전화번호 가공
           if (processedRow["수취인 전화번호"]) {
             processedRow["수취인 전화번호"] = formatPhoneNumber(
               processedRow["수취인 전화번호"]
             );
           }
-          
+
           // 주문자 전화번호 가공
           if (processedRow["주문자 전화번호"]) {
             processedRow["주문자 전화번호"] = formatPhoneNumber(
               processedRow["주문자 전화번호"]
             );
           }
-          
+
           // 전화번호1 가공
           if (processedRow["전화번호1"]) {
             processedRow["전화번호1"] = formatPhoneNumber(
               processedRow["전화번호1"]
             );
           }
-          
+
           // 전화번호2 가공
           if (processedRow["전화번호2"]) {
             processedRow["전화번호2"] = formatPhoneNumber(
               processedRow["전화번호2"]
             );
           }
-          
+
           // 전화번호 가공
           if (processedRow["전화번호"]) {
             processedRow["전화번호"] = formatPhoneNumber(
               processedRow["전화번호"]
             );
           }
-          
+
           return {
             id: item.id,
             row_data: processedRow,
@@ -732,46 +811,46 @@ export async function POST(request: NextRequest) {
             row.매핑코드 !== "106464" &&
             !row.업체명?.includes("CJ")
         );
-        
+
         // 전화번호 필드들에 하이픈 추가 가공
         dataRows = dataRows.map((row: any) => {
           const processedRow = {...row};
-          
+
           // 수취인 전화번호 가공
           if (processedRow["수취인 전화번호"]) {
             processedRow["수취인 전화번호"] = formatPhoneNumber(
               processedRow["수취인 전화번호"]
             );
           }
-          
+
           // 주문자 전화번호 가공
           if (processedRow["주문자 전화번호"]) {
             processedRow["주문자 전화번호"] = formatPhoneNumber(
               processedRow["주문자 전화번호"]
             );
           }
-          
+
           // 전화번호1 가공
           if (processedRow["전화번호1"]) {
             processedRow["전화번호1"] = formatPhoneNumber(
               processedRow["전화번호1"]
             );
           }
-          
+
           // 전화번호2 가공
           if (processedRow["전화번호2"]) {
             processedRow["전화번호2"] = formatPhoneNumber(
               processedRow["전화번호2"]
             );
           }
-          
+
           // 전화번호 가공
           if (processedRow["전화번호"]) {
             processedRow["전화번호"] = formatPhoneNumber(
               processedRow["전화번호"]
             );
           }
-          
+
           return processedRow;
         });
       }
@@ -841,8 +920,21 @@ export async function POST(request: NextRequest) {
               sabangName !== undefined &&
               String(sabangName).trim() !== ""
             ) {
+              // mapDataToTemplate에서 찾을 수 있도록 여러 키로 저장
               row["사방넷명"] = sabangName;
+              row["sabangName"] = sabangName;
+              row["sabang_name"] = sabangName;
+            } else {
+              // 사방넷명이 null이거나 빈 문자열인 경우 명시적으로 제거 (상품명으로 fallback)
+              delete row["사방넷명"];
+              delete row["sabangName"];
+              delete row["sabang_name"];
             }
+          } else {
+            // productSabangNameMap에 없는 경우 명시적으로 제거 (상품명으로 fallback)
+            delete row["사방넷명"];
+            delete row["sabangName"];
+            delete row["sabang_name"];
           }
         }
       });
@@ -1079,14 +1171,48 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 일반 발주서: 매핑코드별 가격, 사방넷명 정보 조회
+    // 일반 발주서: productId가 있으면 ID로, 없으면 매핑코드로 가격, 사방넷명 정보 조회
+    const productIds = [
+      ...new Set(dataRows.map((row: any) => row.productId).filter(Boolean)),
+    ];
     const productCodes = [
-      ...new Set(dataRows.map((row: any) => row.매핑코드).filter(Boolean)),
+      ...new Set(
+        dataRows
+          .filter((row: any) => !row.productId && row.매핑코드)
+          .map((row: any) => row.매핑코드)
+      ),
     ];
     const productSalePriceMap: {[code: string]: number | null} = {};
     const productSabangNameMap: {[code: string]: string | null} = {};
     const productVendorNameMap: {[code: string]: string | null} = {};
+    const productSalePriceMapById: {[id: string | number]: number | null} = {};
+    const productSabangNameMapById: {[id: string | number]: string | null} = {};
+    const productVendorNameMapById: {[id: string | number]: string | null} = {};
 
+    // productId로 조회
+    if (productIds.length > 0) {
+      const productsById = await sql`
+        SELECT id, code, sale_price, sabang_name as "sabangName", purchase as "vendorName"
+        FROM products
+        WHERE id = ANY(${productIds})
+      `;
+
+      productsById.forEach((p: any) => {
+        if (p.id) {
+          if (p.sale_price !== null && p.sale_price !== undefined) {
+            productSalePriceMapById[p.id] = p.sale_price;
+          }
+          if (p.sabangName !== undefined) {
+            productSabangNameMapById[p.id] = p.sabangName;
+          }
+          if (p.vendorName !== undefined) {
+            productVendorNameMapById[p.id] = p.vendorName;
+          }
+        }
+      });
+    }
+
+    // 매핑코드로 조회 (productId가 없는 경우)
     if (productCodes.length > 0) {
       const products = await sql`
         SELECT code, sale_price, sabang_name as "sabangName", purchase as "vendorName"
@@ -1109,9 +1235,42 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 데이터에 공급가와 사방넷명 주입
+    // 데이터에 공급가와 사방넷명 주입: productId가 있으면 ID로, 없으면 매핑코드로 찾기
     dataRows.forEach((row: any) => {
-      if (row.매핑코드) {
+      if (row.productId) {
+        // productId로 조회한 정보 사용
+        if (productSalePriceMapById[row.productId] !== undefined) {
+          const salePrice = productSalePriceMapById[row.productId];
+          if (salePrice !== null) {
+            row["공급가"] = salePrice;
+          }
+        }
+        if (productSabangNameMapById[row.productId] !== undefined) {
+          const sabangName = productSabangNameMapById[row.productId];
+          if (
+            sabangName !== null &&
+            sabangName !== undefined &&
+            String(sabangName).trim() !== ""
+          ) {
+            row["사방넷명"] = sabangName;
+            row["sabangName"] = sabangName;
+            row["sabang_name"] = sabangName;
+          } else {
+            delete row["사방넷명"];
+            delete row["sabangName"];
+            delete row["sabang_name"];
+          }
+        } else {
+          delete row["사방넷명"];
+          delete row["sabangName"];
+          delete row["sabang_name"];
+        }
+        if (productVendorNameMapById[row.productId] !== undefined) {
+          row.업체명 =
+            productVendorNameMapById[row.productId] || "매입처미지정";
+        }
+      } else if (row.매핑코드) {
+        // 매핑코드로 조회한 정보 사용
         if (productSalePriceMap[row.매핑코드] !== undefined) {
           const salePrice = productSalePriceMap[row.매핑코드];
           if (salePrice !== null) {
@@ -1126,7 +1285,20 @@ export async function POST(request: NextRequest) {
             String(sabangName).trim() !== ""
           ) {
             row["사방넷명"] = sabangName;
+            row["sabangName"] = sabangName;
+            row["sabang_name"] = sabangName;
+          } else {
+            delete row["사방넷명"];
+            delete row["sabangName"];
+            delete row["sabang_name"];
           }
+        } else {
+          delete row["사방넷명"];
+          delete row["sabangName"];
+          delete row["sabang_name"];
+        }
+        if (productVendorNameMap[row.매핑코드] !== undefined) {
+          row.업체명 = productVendorNameMap[row.매핑코드] || "매입처미지정";
         }
       }
     });
@@ -1182,7 +1354,8 @@ export async function POST(request: NextRequest) {
         let value = mapDataToTemplate(row, headerStr, {
           templateName: templateData.name,
           formatPhone: true, // 외주 발주서에서는 전화번호에 하이픈 추가
-          preferSabangName: preferSabangName !== undefined ? preferSabangName : true,
+          preferSabangName:
+            preferSabangName !== undefined ? preferSabangName : true,
         });
 
         // 모든 값을 문자열로 변환 (0 유지)

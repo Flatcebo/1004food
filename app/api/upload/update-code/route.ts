@@ -32,7 +32,7 @@ export async function PUT(request: NextRequest) {
 
     // 기존 row_data를 복사하고 선택한 매핑코드의 모든 필드를 업데이트
     // 단, 상품명은 기존 것을 유지
-    const updatedRowData = {
+    const updatedRowData: any = {
       ...currentRowData,
       매핑코드: codeData.code, // 절대적으로 선택한 매핑코드 사용
       내외주: codeData.type,
@@ -43,6 +43,11 @@ export async function PUT(request: NextRequest) {
       기타: codeData.etc || "",
       상품명: currentProductName, // 기존 상품명 유지
     };
+
+    // 선택한 상품 ID가 있으면 저장 (다운로드 시 정확한 상품을 찾기 위함)
+    if (codeData.productId) {
+      updatedRowData.productId = codeData.productId;
+    }
 
     // row_data 업데이트
     const result = await sql`

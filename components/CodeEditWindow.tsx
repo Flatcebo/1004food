@@ -104,6 +104,7 @@ export default function CodeEditWindow({
               price: codeItem.price,
               postFee: codeItem.postFee,
               etc: codeItem.etc,
+              productId: codeItem.id, // 선택한 상품 ID 저장
             },
           }),
         });

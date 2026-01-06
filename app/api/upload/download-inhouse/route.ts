@@ -258,13 +258,23 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 상품 정보 조회: 사용자가 선택한 상품 ID로만 조회
+    // 상품 정보 조회: productId가 있으면 ID로, 없으면 매핑코드로 조회
     const productIds = [
       ...new Set(dataRows.map((row: any) => row.productId).filter(Boolean)),
+    ];
+    const productCodes = [
+      ...new Set(
+        dataRows
+          .filter((row: any) => !row.productId && row.매핑코드)
+          .map((row: any) => row.매핑코드)
+      ),
     ];
     const productSalePriceMap: {[id: string | number]: number | null} = {};
     const productSabangNameMap: {[id: string | number]: string | null} = {};
     const productVendorNameMap: {[id: string | number]: string | null} = {};
+    const productSalePriceMapByCode: {[code: string]: number | null} = {};
+    const productSabangNameMapByCode: {[code: string]: string | null} = {};
+    const productVendorNameMapByCode: {[code: string]: string | null} = {};
 
     // 사용자가 선택한 상품 ID로만 조회
     if (productIds.length > 0) {
@@ -284,6 +294,29 @@ export async function POST(request: NextRequest) {
           }
           if (p.vendorName !== undefined) {
             productVendorNameMap[p.id] = p.vendorName;
+          }
+        }
+      });
+    }
+
+    // productId가 없는 경우 매핑코드로 조회
+    if (productCodes.length > 0) {
+      const productsByCode = await sql`
+        SELECT code, sale_price, sabang_name as "sabangName", purchase as "vendorName"
+        FROM products
+        WHERE code = ANY(${productCodes})
+      `;
+
+      productsByCode.forEach((p: any) => {
+        if (p.code) {
+          if (p.sale_price !== null && p.sale_price !== undefined) {
+            productSalePriceMapByCode[p.code] = p.sale_price;
+          }
+          if (p.sabangName !== undefined) {
+            productSabangNameMapByCode[p.code] = p.sabangName;
+          }
+          if (p.vendorName !== undefined) {
+            productVendorNameMapByCode[p.code] = p.vendorName;
           }
         }
       });
@@ -315,7 +348,7 @@ export async function POST(request: NextRequest) {
       downloadedRowIds = dataRowsWithIds.map((item: any) => item.id);
     }
 
-    // 데이터에 공급가와 사방넷명 주입: 사용자가 선택한 상품 ID로만 찾기
+    // 데이터에 공급가와 사방넷명 주입: productId가 있으면 ID로, 없으면 매핑코드로 찾기
     dataRows.forEach((row: any) => {
       if (row.productId) {
         // 사용자가 선택한 상품 ID로만 찾기
@@ -349,8 +382,40 @@ export async function POST(request: NextRequest) {
           delete row["sabangName"];
           delete row["sabang_name"];
         }
+      } else if (row.매핑코드) {
+        // productId가 없으면 매핑코드로 찾기
+        if (productSalePriceMapByCode[row.매핑코드] !== undefined) {
+          const salePrice = productSalePriceMapByCode[row.매핑코드];
+          if (salePrice !== null) {
+            row["공급가"] = salePrice;
+          }
+        }
+        // 사방넷명 설정: productSabangNameMapByCode에 있으면 사용
+        if (productSabangNameMapByCode[row.매핑코드] !== undefined) {
+          const sabangName = productSabangNameMapByCode[row.매핑코드];
+          if (
+            sabangName !== null &&
+            sabangName !== undefined &&
+            String(sabangName).trim() !== ""
+          ) {
+            // mapDataToTemplate에서 찾을 수 있도록 여러 키로 저장
+            row["사방넷명"] = sabangName;
+            row["sabangName"] = sabangName;
+            row["sabang_name"] = sabangName;
+          } else {
+            // 사방넷명이 null이거나 빈 문자열인 경우 명시적으로 제거 (상품명으로 fallback)
+            delete row["사방넷명"];
+            delete row["sabangName"];
+            delete row["sabang_name"];
+          }
+        } else {
+          // productSabangNameMapByCode에 없는 경우 명시적으로 제거 (상품명으로 fallback)
+          delete row["사방넷명"];
+          delete row["sabangName"];
+          delete row["sabang_name"];
+        }
       } else {
-        // productId가 없는 경우 명시적으로 제거 (상품명으로 fallback)
+        // productId와 매핑코드가 모두 없는 경우 명시적으로 제거 (상품명으로 fallback)
         delete row["사방넷명"];
         delete row["sabangName"];
         delete row["sabang_name"];

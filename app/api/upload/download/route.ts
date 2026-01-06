@@ -265,27 +265,59 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 매핑코드별 가격 정보 조회 (같은 상품코드는 같은 가격 사용)
+    // 상품 정보 조회: productId가 있으면 ID로, 없으면 매핑코드로 조회
+    const productIds = [
+      ...new Set(rows.map((row: any) => row.productId).filter(Boolean)),
+    ];
     const productCodes = [
-      ...new Set(rows.map((row: any) => row.매핑코드).filter(Boolean)),
+      ...new Set(
+        rows
+          .filter((row: any) => !row.productId && row.매핑코드)
+          .map((row: any) => row.매핑코드)
+      ),
     ];
     const productPriceMap: {[code: string]: number | null} = {};
     const productSalePriceMap: {[code: string]: number | null} = {};
     const productSabangNameMap: {[code: string]: string | null} = {};
+    const productPriceMapById: {[id: string | number]: number | null} = {};
+    const productSalePriceMapById: {[id: string | number]: number | null} = {};
+    const productSabangNameMapById: {[id: string | number]: string | null} = {};
 
+    // productId로 조회
+    if (productIds.length > 0) {
+      try {
+        const productsById = await sql`
+          SELECT id, code, price, sale_price, sabang_name as "sabangName"
+          FROM products
+          WHERE id = ANY(${productIds})
+        `;
+
+        productsById.forEach((p: any) => {
+          if (p.id) {
+            if (p.price !== null && p.price !== undefined) {
+              productPriceMapById[p.id] = p.price;
+            }
+            if (p.sale_price !== null && p.sale_price !== undefined) {
+              productSalePriceMapById[p.id] = p.sale_price;
+            }
+            if (p.sabangName !== undefined) {
+              productSabangNameMapById[p.id] = p.sabangName;
+            }
+          }
+        });
+      } catch (error) {
+        console.error("상품 ID로 조회 실패:", error);
+      }
+    }
+
+    // 매핑코드로 조회 (productId가 없는 경우)
     if (productCodes.length > 0) {
       try {
-        console.log("=== 사방넷명 매핑 디버깅 ===");
-        console.log("매핑코드 목록:", productCodes);
-
         const products = await sql`
           SELECT code, price, sale_price, sabang_name as "sabangName"
           FROM products
           WHERE code = ANY(${productCodes})
         `;
-
-        console.log("조회된 상품 개수:", products.length);
-        console.log("조회된 상품 데이터:", JSON.stringify(products, null, 2));
 
         products.forEach((p: any) => {
           if (p.code) {
@@ -297,14 +329,9 @@ export async function POST(request: NextRequest) {
             }
             if (p.sabangName !== undefined) {
               productSabangNameMap[p.code] = p.sabangName;
-              console.log(`매핑: ${p.code} => 사방넷명: ${p.sabangName}`);
-            } else {
-              console.log(`매핑: ${p.code} => 사방넷명 없음`);
             }
           }
         });
-
-        console.log("productSabangNameMap:", productSabangNameMap);
       } catch (error) {
         console.error("상품 가격 조회 실패:", error);
       }
@@ -312,24 +339,63 @@ export async function POST(request: NextRequest) {
 
     // 템플릿 헤더 순서에 맞게 데이터 재구성
     let excelData = rows.map((row, idx) => {
-      // 매핑코드가 있으면 products 테이블에서 가격 정보 가져오기
-      if (row.매핑코드) {
-        // salePrice 우선 사용 (공급가용)
-        if (productSalePriceMap[row.매핑코드] !== undefined) {
-          const salePrice = productSalePriceMap[row.매핑코드];
+      // productId가 있으면 ID로, 없으면 매핑코드로 가격 및 사방넷명 정보 가져오기
+      if (row.productId) {
+        // productId로 조회한 정보 사용
+        if (productSalePriceMapById[row.productId] !== undefined) {
+          const salePrice = productSalePriceMapById[row.productId];
           if (salePrice !== null) {
-            // 공급가 필드에 명시적으로 설정 (여러 변형명 지원)
             row["공급가"] = salePrice;
             row["salePrice"] = salePrice;
             row["sale_price"] = salePrice;
-            // 가격 필드에도 설정 (기존 호환성)
             if (!row.가격 || row.가격 === "") {
               row.가격 = salePrice;
             }
           }
+        } else if (productPriceMapById[row.productId] !== undefined) {
+          const productPrice = productPriceMapById[row.productId];
+          if (productPrice !== null) {
+            row["공급가"] = productPrice;
+            if (!row.가격 || row.가격 === "") {
+              row.가격 = productPrice;
+            }
+          }
         }
-        // salePrice가 없으면 price 사용
-        else if (productPriceMap[row.매핑코드] !== undefined) {
+
+        // 사방넷명 매핑
+        if (productSabangNameMapById[row.productId] !== undefined) {
+          const sabangName = productSabangNameMapById[row.productId];
+          if (
+            sabangName !== null &&
+            sabangName !== undefined &&
+            String(sabangName).trim() !== ""
+          ) {
+            row["사방넷명"] = sabangName;
+            row["sabangName"] = sabangName;
+            row["sabang_name"] = sabangName;
+          } else {
+            delete row["사방넷명"];
+            delete row["sabangName"];
+            delete row["sabang_name"];
+          }
+        } else {
+          delete row["사방넷명"];
+          delete row["sabangName"];
+          delete row["sabang_name"];
+        }
+      } else if (row.매핑코드) {
+        // 매핑코드로 조회한 정보 사용
+        if (productSalePriceMap[row.매핑코드] !== undefined) {
+          const salePrice = productSalePriceMap[row.매핑코드];
+          if (salePrice !== null) {
+            row["공급가"] = salePrice;
+            row["salePrice"] = salePrice;
+            row["sale_price"] = salePrice;
+            if (!row.가격 || row.가격 === "") {
+              row.가격 = salePrice;
+            }
+          }
+        } else if (productPriceMap[row.매핑코드] !== undefined) {
           const productPrice = productPriceMap[row.매핑코드];
           if (productPrice !== null) {
             row["공급가"] = productPrice;
@@ -339,15 +405,9 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // 사방넷명 매핑: products 테이블 값이 있으면 row에 주입
+        // 사방넷명 매핑
         if (productSabangNameMap[row.매핑코드] !== undefined) {
           const sabangName = productSabangNameMap[row.매핑코드];
-          if (idx < 3) {
-            // 처음 3개 row만 로그
-            console.log(`\n[Row ${idx}] 매핑코드: ${row.매핑코드}`);
-            console.log(`원본 상품명: ${row.상품명}`);
-            console.log(`조회된 사방넷명: ${sabangName}`);
-          }
           if (
             sabangName !== null &&
             sabangName !== undefined &&
@@ -355,24 +415,16 @@ export async function POST(request: NextRequest) {
           ) {
             row["사방넷명"] = sabangName;
             row["sabangName"] = sabangName;
-            if (idx < 3) {
-              console.log(`✓ 사방넷명 주입 완료: ${sabangName}`);
-            }
+            row["sabang_name"] = sabangName;
           } else {
-            if (idx < 3) {
-              console.log(`✗ 사방넷명이 비어있거나 null`);
-            }
+            delete row["사방넷명"];
+            delete row["sabangName"];
+            delete row["sabang_name"];
           }
         } else {
-          if (idx < 3) {
-            console.log(
-              `\n[Row ${idx}] 매핑코드: ${row.매핑코드} - productSabangNameMap에 없음`
-            );
-          }
-        }
-      } else {
-        if (idx < 3) {
-          console.log(`\n[Row ${idx}] 매핑코드 없음`);
+          delete row["사방넷명"];
+          delete row["sabangName"];
+          delete row["sabang_name"];
         }
       }
 
