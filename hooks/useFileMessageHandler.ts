@@ -67,9 +67,33 @@ export function useFileMessageHandler({
         // 서버에서 최신 데이터 불러오기 (약간의 지연을 두어 서버 업데이트 반영 시간 확보)
         if (loadFilesFromServer) {
           try {
-            // 서버 업데이트가 완료될 시간을 확보하기 위해 약간의 지연
-            await new Promise((resolve) => setTimeout(resolve, 300));
+            // 서버 업데이트가 완료될 시간을 확보하기 위해 더 긴 지연
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            
             await loadFilesFromServer();
+            
+            // loadFilesFromServer 후에도 vendorName이 유지되도록 확인
+            // 서버에서 불러온 데이터에 vendorName이 없을 수 있으므로 다시 확인
+            if (vendorNameFromMessage) {
+              setTimeout(() => {
+                // 현재 상태에서 해당 파일의 vendorName 확인
+                // uploadedFiles는 클로저로 인해 최신 상태가 아닐 수 있으므로
+                // setUploadedFiles의 함수형 업데이트 사용
+                setUploadedFiles((currentFiles) => {
+                  const file = currentFiles.find((f) => f.id === fileId);
+                  if (file && !file.vendorName) {
+                    // vendorName이 없으면 메시지에서 받은 값으로 설정
+                    return currentFiles.map((f) =>
+                      f.id === fileId
+                        ? {...f, vendorName: vendorNameFromMessage}
+                        : f
+                    );
+                  }
+                  return currentFiles;
+                });
+              }, 100);
+            }
+            
             console.log("서버에서 최신 데이터를 불러왔습니다.", {
               fileId,
               vendorName: vendorNameFromMessage,

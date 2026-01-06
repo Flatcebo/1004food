@@ -42,7 +42,8 @@ export async function GET(request: NextRequest) {
             product_code_map as "productCodeMap",
             validation_status as "validationStatus",
             is_confirmed as "isConfirmed",
-            created_at,
+            vendor_name as "vendorName",
+            created_at as "createdAt",
             updated_at
           FROM temp_files
           ORDER BY created_at DESC
@@ -85,7 +86,8 @@ export async function GET(request: NextRequest) {
               product_code_map as "productCodeMap",
               NULL as "validationStatus",
               is_confirmed as "isConfirmed",
-              created_at,
+              vendor_name as "vendorName",
+              created_at as "createdAt",
               updated_at
             FROM temp_files
             ORDER BY created_at DESC

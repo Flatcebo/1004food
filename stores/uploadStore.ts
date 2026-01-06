@@ -527,7 +527,8 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     }
   },
   loadFilesFromServer: async () => {
-    const {setUploadedFiles, confirmFile, selectedSessionId} = get();
+    const {setUploadedFiles, confirmFile, selectedSessionId, uploadedFiles} =
+      get();
 
     const sessionId =
       selectedSessionId === null
@@ -561,15 +562,27 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       const result = await response.json();
 
       if (result.success && result.data) {
+        // 기존 uploadedFiles에서 vendorName을 보존하기 위한 맵 생성
+        const existingFilesMap = new Map(uploadedFiles.map((f) => [f.id, f]));
+
         // uploadTime이 없는 파일들에 대해 현재 시간 설정
-        const updatedFiles = result.data.map((file: any) => ({
-          ...file,
-          uploadTime:
-            file.uploadTime || file.createdAt || new Date().toISOString(),
-          createdAt:
-            file.createdAt || file.uploadTime || new Date().toISOString(),
-          vendorName: file.vendorName || undefined,
-        }));
+        const updatedFiles = result.data.map((file: any) => {
+          const existingFile = existingFilesMap.get(file.id);
+          return {
+            ...file,
+            uploadTime:
+              file.uploadTime || file.createdAt || new Date().toISOString(),
+            createdAt:
+              file.createdAt || file.uploadTime || new Date().toISOString(),
+            // 서버에서 불러온 vendorName이 있으면 우선 사용, 없으면 기존 vendorName 유지
+            // (서버 업데이트가 완료되지 않았을 수 있으므로 기존 값 보존)
+            vendorName:
+              file.vendorName ||
+              file.vendor_name ||
+              existingFile?.vendorName ||
+              undefined,
+          };
+        });
 
         setUploadedFiles(updatedFiles);
 
