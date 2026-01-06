@@ -278,6 +278,8 @@ export function useFileSave({
                 matchedProduct = productsToUse.find(
                   (c: any) => c.id === selectedProductId
                 );
+                // 사용자가 선택한 상품 ID 저장 (다운로드 시 정확한 상품을 찾기 위함)
+                rowData["productId"] = selectedProductId;
               }
               
               if (!matchedProduct) {
@@ -285,6 +287,10 @@ export function useFileSave({
                 matchedProduct = productsToUse.find(
                   (c: any) => c.name && String(c.name).trim() === name
                 );
+                // 상품명으로 찾은 경우에도 ID 저장
+                if (matchedProduct?.id) {
+                  rowData["productId"] = matchedProduct.id;
+                }
               }
               
               if (!matchedProduct) {
@@ -293,6 +299,10 @@ export function useFileSave({
                   const cCode = String(c.code || "").trim();
                   return cCode === code;
                 });
+                // 매핑코드로 찾은 경우에도 ID 저장
+                if (matchedProduct?.id) {
+                  rowData["productId"] = matchedProduct.id;
+                }
               }
 
               // 디버깅: 첫 번째 상품만 로그 출력

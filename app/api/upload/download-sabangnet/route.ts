@@ -200,31 +200,32 @@ export async function POST(request: NextRequest) {
     const isSabangnet = templateName.includes("사방넷");
 
     if (isSabangnet) {
-      // 매핑코드별 가격, 사방넷명, 업체명 정보 조회
-      const productCodes = [
-        ...new Set(dataRows.map((row: any) => row.매핑코드).filter(Boolean)),
+      // 상품 정보 조회: 사용자가 선택한 상품 ID로만 조회
+      const productIds = [
+        ...new Set(dataRows.map((row: any) => row.productId).filter(Boolean)),
       ];
-      const productSalePriceMap: {[code: string]: number | null} = {};
-      const productSabangNameMap: {[code: string]: string | null} = {};
-      const productVendorNameMap: {[code: string]: string | null} = {};
+      const productSalePriceMap: {[id: string | number]: number | null} = {};
+      const productSabangNameMap: {[id: string | number]: string | null} = {};
+      const productVendorNameMap: {[id: string | number]: string | null} = {};
 
-      if (productCodes.length > 0) {
-        const products = await sql`
-          SELECT code, sale_price, sabang_name as "sabangName", purchase as "vendorName"
+      // 사용자가 선택한 상품 ID로만 조회
+      if (productIds.length > 0) {
+        const productsById = await sql`
+          SELECT id, code, sale_price, sabang_name as "sabangName", purchase as "vendorName"
           FROM products
-          WHERE code = ANY(${productCodes})
+          WHERE id = ANY(${productIds})
         `;
 
-        products.forEach((p: any) => {
-          if (p.code) {
+        productsById.forEach((p: any) => {
+          if (p.id) {
             if (p.sale_price !== null && p.sale_price !== undefined) {
-              productSalePriceMap[p.code] = p.sale_price;
+              productSalePriceMap[p.id] = p.sale_price;
             }
             if (p.sabangName !== undefined) {
-              productSabangNameMap[p.code] = p.sabangName;
+              productSabangNameMap[p.id] = p.sabangName;
             }
             if (p.vendorName !== undefined) {
-              productVendorNameMap[p.code] = p.vendorName;
+              productVendorNameMap[p.id] = p.vendorName;
             }
           }
         });
@@ -236,17 +237,18 @@ export async function POST(request: NextRequest) {
           row.업체명 = "업체미지정";
         }
 
-        // 공급가 주입
-        if (row.매핑코드) {
-          if (productSalePriceMap[row.매핑코드] !== undefined) {
-            const salePrice = productSalePriceMap[row.매핑코드];
+        // 공급가 및 사방넷명 주입: 사용자가 선택한 상품 ID로만 찾기
+        if (row.productId) {
+          // 사용자가 선택한 상품 ID로만 찾기
+          if (productSalePriceMap[row.productId] !== undefined) {
+            const salePrice = productSalePriceMap[row.productId];
             if (salePrice !== null) {
               row["판매가"] = salePrice;
               row["sale_price"] = salePrice;
             }
           }
-          if (productSabangNameMap[row.매핑코드] !== undefined) {
-            const sabangName = productSabangNameMap[row.매핑코드];
+          if (productSabangNameMap[row.productId] !== undefined) {
+            const sabangName = productSabangNameMap[row.productId];
             if (
               sabangName !== null &&
               sabangName !== undefined &&
