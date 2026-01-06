@@ -145,10 +145,26 @@ export default function UploadedFilesList({
                     />
                   </td>
                   <td className="border border-gray-300 px-4 py-2">
-                    {/* {file.venderName} */}
+                    {file.vendorName || "-"}
                   </td>
                   <td className="border border-gray-300 px-4 py-2">
-                    {/* {file.uploadTime} */}
+                    {file.createdAt
+                      ? new Date(file.createdAt).toLocaleString("ko-KR", {
+                          year: "numeric",
+                          month: "2-digit",
+                          day: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : file.uploadTime
+                      ? new Date(file.uploadTime).toLocaleString("ko-KR", {
+                          year: "numeric",
+                          month: "2-digit",
+                          day: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : "-"}
                   </td>
                   <td className="border border-gray-300 px-4 py-2">
                     {file.fileName}

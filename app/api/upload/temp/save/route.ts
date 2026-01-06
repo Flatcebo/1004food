@@ -53,8 +53,15 @@ export async function POST(request: NextRequest) {
 
     // 각 파일을 temp_files 테이블에 직접 저장
     const savePromises = files.map(async (file: any) => {
-      const {id, fileName, rowCount, tableData, headerIndex, productCodeMap} =
-        file;
+      const {
+        id,
+        fileName,
+        rowCount,
+        tableData,
+        headerIndex,
+        productCodeMap,
+        vendorName,
+      } = file;
 
       if (!id || !fileName || !tableData) {
         console.warn("파일 데이터가 불완전합니다:", file);
@@ -100,12 +107,16 @@ export async function POST(request: NextRequest) {
                             WHERE table_name = 'temp_files' AND column_name = 'validation_status') THEN
                 ALTER TABLE temp_files ADD COLUMN validation_status JSONB;
               END IF;
+              IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                            WHERE table_name = 'temp_files' AND column_name = 'vendor_name') THEN
+                ALTER TABLE temp_files ADD COLUMN vendor_name VARCHAR(500);
+              END IF;
             END
             $$;
           `;
         } catch (error: any) {
           // 컬럼 추가 실패는 무시 (이미 존재할 수 있음)
-          console.log("validation_status 컬럼 확인:", error.message);
+          console.log("컬럼 확인:", error.message);
         }
 
         // session_id 컬럼 존재 여부에 따라 다르게 처리
@@ -115,7 +126,7 @@ export async function POST(request: NextRequest) {
             INSERT INTO temp_files (
               file_id, file_name, session_id, row_count,
               table_data, header_index, product_code_map,
-              validation_status, created_at, updated_at
+              validation_status, vendor_name, created_at, updated_at
             )
             VALUES (
               ${id},
@@ -126,6 +137,7 @@ export async function POST(request: NextRequest) {
               ${JSON.stringify(headerIndex || {})},
               ${JSON.stringify(productCodeMap || {})},
               ${JSON.stringify(validationResult)},
+              ${vendorName || null},
               ${koreaTime.toISOString()}::timestamp,
               ${koreaTime.toISOString()}::timestamp
             )
@@ -137,8 +149,9 @@ export async function POST(request: NextRequest) {
               header_index = EXCLUDED.header_index,
               product_code_map = EXCLUDED.product_code_map,
               validation_status = EXCLUDED.validation_status,
+              vendor_name = EXCLUDED.vendor_name,
               updated_at = ${koreaTime.toISOString()}::timestamp
-            RETURNING id
+            RETURNING id, created_at
           `;
         } catch (error: any) {
           // validation_status 컬럼이 없으면 다시 시도 (컬럼 추가 후)
@@ -158,7 +171,7 @@ export async function POST(request: NextRequest) {
               INSERT INTO temp_files (
                 file_id, file_name, session_id, row_count,
                 table_data, header_index, product_code_map,
-                validation_status, created_at, updated_at
+                validation_status, vendor_name, created_at, updated_at
               )
               VALUES (
                 ${id},
@@ -169,6 +182,7 @@ export async function POST(request: NextRequest) {
                 ${JSON.stringify(headerIndex || {})},
                 ${JSON.stringify(productCodeMap || {})},
                 ${JSON.stringify(validationResult)},
+                ${vendorName || null},
                 ${koreaTime.toISOString()}::timestamp,
                 ${koreaTime.toISOString()}::timestamp
               )
@@ -180,8 +194,9 @@ export async function POST(request: NextRequest) {
                 header_index = EXCLUDED.header_index,
                 product_code_map = EXCLUDED.product_code_map,
                 validation_status = EXCLUDED.validation_status,
+                vendor_name = EXCLUDED.vendor_name,
                 updated_at = ${koreaTime.toISOString()}::timestamp
-              RETURNING id
+              RETURNING id, created_at
             `;
           } else if (
             error.message &&
@@ -192,7 +207,7 @@ export async function POST(request: NextRequest) {
               INSERT INTO temp_files (
                 file_id, file_name, row_count,
                 table_data, header_index, product_code_map,
-                validation_status, created_at, updated_at
+                validation_status, vendor_name, created_at, updated_at
               )
               VALUES (
                 ${id},
@@ -202,6 +217,7 @@ export async function POST(request: NextRequest) {
                 ${JSON.stringify(headerIndex || {})},
                 ${JSON.stringify(productCodeMap || {})},
                 ${JSON.stringify(validationResult)},
+                ${vendorName || null},
                 ${koreaTime.toISOString()}::timestamp,
                 ${koreaTime.toISOString()}::timestamp
               )
@@ -212,8 +228,9 @@ export async function POST(request: NextRequest) {
                 header_index = EXCLUDED.header_index,
                 product_code_map = EXCLUDED.product_code_map,
                 validation_status = EXCLUDED.validation_status,
+                vendor_name = EXCLUDED.vendor_name,
                 updated_at = ${koreaTime.toISOString()}::timestamp
-              RETURNING id
+              RETURNING id, created_at
             `;
           } else {
             throw error;

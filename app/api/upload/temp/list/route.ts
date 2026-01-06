@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
     const {searchParams} = new URL(request.url);
     const sessionId = searchParams.get("sessionId");
 
-    // validation_status 컬럼이 없으면 추가
+    // validation_status, vendor_name 컬럼이 없으면 추가
     try {
       await sql`
         DO $$
@@ -15,12 +15,16 @@ export async function GET(request: NextRequest) {
                         WHERE table_name = 'temp_files' AND column_name = 'validation_status') THEN
             ALTER TABLE temp_files ADD COLUMN validation_status JSONB;
           END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'temp_files' AND column_name = 'vendor_name') THEN
+            ALTER TABLE temp_files ADD COLUMN vendor_name VARCHAR(500);
+          END IF;
         END
         $$;
       `;
     } catch (error: any) {
       // 컬럼 추가 실패는 무시 (이미 존재할 수 있음)
-      console.log("validation_status 컬럼 확인:", error.message);
+      console.log("컬럼 확인:", error.message);
     }
 
     let files: any[] = [];
@@ -56,7 +60,8 @@ export async function GET(request: NextRequest) {
             product_code_map as "productCodeMap",
             validation_status as "validationStatus",
             is_confirmed as "isConfirmed",
-            created_at,
+            vendor_name as "vendorName",
+            created_at as "createdAt",
             updated_at
           FROM temp_files
           ORDER BY created_at DESC
@@ -97,7 +102,8 @@ export async function GET(request: NextRequest) {
               product_code_map as "productCodeMap",
               NULL as "validationStatus",
               is_confirmed as "isConfirmed",
-              created_at,
+              vendor_name as "vendorName",
+              created_at as "createdAt",
               updated_at
             FROM temp_files
             ORDER BY created_at DESC
