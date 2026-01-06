@@ -643,19 +643,17 @@ export async function POST(request: NextRequest) {
       // CJ외주 발주서인 경우 필터링된 데이터의 실제 다운로드된 행들만 업데이트
       const idsToUpdate = downloadedRowIds;
       if (idsToUpdate && idsToUpdate.length > 0) {
-        // 주문상태 업데이트를 비동기로 처리하여 다운로드 속도 향상
-        setImmediate(async () => {
-          try {
-            // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
-            await sql`
-              UPDATE upload_rows
-              SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
-              WHERE id = ANY(${idsToUpdate})
-            `;
-          } catch (updateError) {
-            console.error("주문상태 업데이트 실패:", updateError);
-          }
-        });
+        try {
+          // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
+          await sql`
+            UPDATE upload_rows
+            SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
+            WHERE id = ANY(${idsToUpdate})
+          `;
+        } catch (updateError) {
+          console.error("주문상태 업데이트 실패:", updateError);
+          // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리
+        }
       }
 
       const responseHeaders = new Headers();
@@ -1059,19 +1057,17 @@ export async function POST(request: NextRequest) {
       // 외주 발주서인 경우 필터링된 데이터의 실제 다운로드된 행들만 업데이트
       const idsToUpdate = downloadedRowIds;
       if (idsToUpdate && idsToUpdate.length > 0) {
-        // 주문상태 업데이트를 비동기로 처리하여 다운로드 속도 향상
-        setImmediate(async () => {
-          try {
-            // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
-            await sql`
-              UPDATE upload_rows
-              SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
-              WHERE id = ANY(${idsToUpdate})
-            `;
-          } catch (updateError) {
-            console.error("주문상태 업데이트 실패:", updateError);
-          }
-        });
+        try {
+          // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
+          await sql`
+            UPDATE upload_rows
+            SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
+            WHERE id = ANY(${idsToUpdate})
+          `;
+        } catch (updateError) {
+          console.error("주문상태 업데이트 실패:", updateError);
+          // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리
+        }
       }
 
       const responseHeaders = new Headers();
