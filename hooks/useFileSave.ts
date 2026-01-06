@@ -265,14 +265,35 @@ export function useFileSave({
             // 상품 정보 수집 (매핑코드가 있는 경우)
             // 상품명이 같다면 DB에 업데이트, 없다면 DB에 신규 등록
             if (name && code) {
-              // 매핑된 상품 찾기: 매핑코드로 우선 찾기 (productCodeMap에서 가져온 매핑코드 사용)
-              // 1순위: 매핑코드로 찾기 (productCodeMap에 저장된 매핑코드)
-              // 2순위: 이름으로 찾기 (foundCode)
-              // code와 productsToUse의 code를 모두 문자열로 변환하고 trim하여 비교
-              let matchedProduct = productsToUse.find((c: any) => {
-                const cCode = String(c.code || "").trim();
-                return cCode === code;
-              });
+              // 매핑된 상품 찾기: 사용자가 선택한 상품 ID 우선 사용
+              // 1순위: 사용자가 선택한 상품 ID로 찾기 (productIdMap에 저장된 ID)
+              // 2순위: 상품명이 정확히 일치하는 경우만 찾기
+              // 3순위: 매핑코드로 찾기 (같은 매핑코드를 가진 여러 상품 중 첫 번째가 선택될 수 있음)
+              const productIdMap = file.productIdMap || {};
+              let matchedProduct = null;
+              
+              const selectedProductId = productIdMap[name];
+              if (selectedProductId !== undefined) {
+                // 사용자가 선택한 상품 ID가 있으면 그것으로 정확히 찾기 (무조건 사용자가 선택한 상품만 사용)
+                matchedProduct = productsToUse.find(
+                  (c: any) => c.id === selectedProductId
+                );
+              }
+              
+              if (!matchedProduct) {
+                // 사용자가 선택하지 않은 경우에만 상품명이 정확히 일치할 때만 찾기
+                matchedProduct = productsToUse.find(
+                  (c: any) => c.name && String(c.name).trim() === name
+                );
+              }
+              
+              if (!matchedProduct) {
+                // 상품명으로도 찾지 못했으면 매핑코드로 찾기 (같은 매핑코드를 가진 여러 상품 중 첫 번째가 선택될 수 있음)
+                matchedProduct = productsToUse.find((c: any) => {
+                  const cCode = String(c.code || "").trim();
+                  return cCode === code;
+                });
+              }
 
               // 디버깅: 첫 번째 상품만 로그 출력
               if (newProducts.length === 0) {
@@ -564,6 +585,7 @@ export function useFileSave({
               tableData: fileData.tableData,
               headerIndex: fileData.headerIndex,
               productCodeMap: fileData.productCodeMap || {},
+              productIdMap: fileData.productIdMap || {}, // 사용자가 선택한 상품 ID 맵도 함께 전송
               isConfirmed: true,
             }),
           });

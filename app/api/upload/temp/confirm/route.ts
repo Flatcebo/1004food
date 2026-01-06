@@ -13,7 +13,8 @@ export async function POST(request: NextRequest) {
         row_count,
         table_data,
         header_index,
-        product_code_map
+        product_code_map,
+        product_id_map
       FROM temp_files
       WHERE is_confirmed = true
       ORDER BY created_at ASC
@@ -79,6 +80,7 @@ export async function POST(request: NextRequest) {
     for (const file of confirmedFiles) {
       const tableData = file.table_data;
       const productCodeMap = file.product_code_map || {};
+      const productIdMap = file.product_id_map || {};
 
       if (!tableData || !Array.isArray(tableData) || tableData.length < 2) {
         console.warn(`파일 ${file.file_name}의 데이터가 비어있습니다.`);

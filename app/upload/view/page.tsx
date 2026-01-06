@@ -912,6 +912,7 @@ function FileViewContent() {
         tableData: [...tableData], // 현재 테이블 데이터의 깊은 복사
         headerIndex: {...headerIndex},
         productCodeMap: {...productCodeMap},
+        productIdMap: {...productIdMap}, // 사용자가 선택한 상품 ID 맵도 함께 저장
         vendorName: vendorName.trim() || undefined, // 업체명 포함
         createdAt:
           file.createdAt || file.uploadTime || new Date().toISOString(), // createdAt 유지
@@ -951,6 +952,7 @@ function FileViewContent() {
           tableData: [...tableData], // 현재 테이블 데이터의 깊은 복사
           headerIndex: {...headerIndex},
           productCodeMap: {...productCodeMap},
+          productIdMap: {...productIdMap}, // 사용자가 선택한 상품 ID 맵도 함께 전송
           vendorName: vendorName.trim() || null, // 업체명 포함
           isConfirmed: true,
         };
