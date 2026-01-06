@@ -48,8 +48,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 한국 시간(KST) 생성
-    const koreaTime = new Date(Date.now() + 9 * 60 * 60 * 1000);
+    // 현재 시간을 UTC로 저장 (PostgreSQL timestamp는 타임존 정보 없이 저장됨)
+    // 표시할 때 한국 시간으로 변환하므로 여기서는 UTC로 저장
+    const now = new Date();
 
     // 각 파일을 temp_files 테이블에 직접 저장
     const savePromises = files.map(async (file: any) => {
@@ -138,8 +139,8 @@ export async function POST(request: NextRequest) {
               ${JSON.stringify(productCodeMap || {})},
               ${JSON.stringify(validationResult)},
               ${vendorName || null},
-              ${koreaTime.toISOString()}::timestamp,
-              ${koreaTime.toISOString()}::timestamp
+              ${now.toISOString()}::timestamp,
+              ${now.toISOString()}::timestamp
             )
             ON CONFLICT (file_id) DO UPDATE SET
               file_name = EXCLUDED.file_name,
@@ -150,7 +151,7 @@ export async function POST(request: NextRequest) {
               product_code_map = EXCLUDED.product_code_map,
               validation_status = EXCLUDED.validation_status,
               vendor_name = EXCLUDED.vendor_name,
-              updated_at = ${koreaTime.toISOString()}::timestamp
+              updated_at = ${now.toISOString()}::timestamp
             RETURNING id, created_at
           `;
         } catch (error: any) {
@@ -183,8 +184,8 @@ export async function POST(request: NextRequest) {
                 ${JSON.stringify(productCodeMap || {})},
                 ${JSON.stringify(validationResult)},
                 ${vendorName || null},
-                ${koreaTime.toISOString()}::timestamp,
-                ${koreaTime.toISOString()}::timestamp
+                ${now.toISOString()}::timestamp,
+                ${now.toISOString()}::timestamp
               )
               ON CONFLICT (file_id) DO UPDATE SET
                 file_name = EXCLUDED.file_name,
@@ -195,7 +196,7 @@ export async function POST(request: NextRequest) {
                 product_code_map = EXCLUDED.product_code_map,
                 validation_status = EXCLUDED.validation_status,
                 vendor_name = EXCLUDED.vendor_name,
-                updated_at = ${koreaTime.toISOString()}::timestamp
+                updated_at = ${now.toISOString()}::timestamp
               RETURNING id, created_at
             `;
           } else if (
@@ -218,8 +219,8 @@ export async function POST(request: NextRequest) {
                 ${JSON.stringify(productCodeMap || {})},
                 ${JSON.stringify(validationResult)},
                 ${vendorName || null},
-                ${koreaTime.toISOString()}::timestamp,
-                ${koreaTime.toISOString()}::timestamp
+                ${now.toISOString()}::timestamp,
+                ${now.toISOString()}::timestamp
               )
               ON CONFLICT (file_id) DO UPDATE SET
                 file_name = EXCLUDED.file_name,
@@ -229,7 +230,7 @@ export async function POST(request: NextRequest) {
                 product_code_map = EXCLUDED.product_code_map,
                 validation_status = EXCLUDED.validation_status,
                 vendor_name = EXCLUDED.vendor_name,
-                updated_at = ${koreaTime.toISOString()}::timestamp
+                updated_at = ${now.toISOString()}::timestamp
               RETURNING id, created_at
             `;
           } else {

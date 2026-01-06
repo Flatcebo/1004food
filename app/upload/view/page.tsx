@@ -1012,6 +1012,71 @@ function FileViewContent() {
     window.close();
   };
 
+  // 주문 복사 기능: 상품명을 수량별로 정리하여 클립보드에 복사
+  const handleCopyOrderSummary = useCallback(() => {
+    if (
+      !tableData.length ||
+      !headerIndex ||
+      typeof headerIndex.nameIdx !== "number"
+    ) {
+      alert("주문 데이터가 없습니다.");
+      return;
+    }
+
+    const headerRow = tableData[0];
+    const productNameIdx = headerIndex.nameIdx;
+    const qtyIdx = headerRow.findIndex((h: any) => h === "수량");
+
+    // 상품명별 수량 집계
+    const productCounts: {[key: string]: number} = {};
+    let totalCount = 0;
+
+    // 헤더를 제외한 모든 행 처리
+    for (let i = 1; i < tableData.length; i++) {
+      const row = tableData[i];
+      const productName = String(row[productNameIdx] || "").trim();
+      const quantity = qtyIdx !== -1 ? Number(row[qtyIdx]) || 1 : 1;
+
+      if (productName) {
+        productCounts[productName] =
+          (productCounts[productName] || 0) + quantity;
+        totalCount += quantity;
+      }
+    }
+
+    // 현재 날짜 (월/일 형식)
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const dateStr = `${month}/${day}`;
+
+    // 상품명을 정렬하여 텍스트 생성
+    const sortedProducts = Object.keys(productCounts).sort((a, b) =>
+      a.localeCompare(b, "ko-KR")
+    );
+
+    // 텍스트 생성: "상품명 - n" 형식으로 줄바꿈 처리
+    const productLines = sortedProducts.map(
+      (productName) => `${productName} - ${productCounts[productName]}`
+    );
+
+    // 최종 텍스트: 최상단에 월/일, 중간에 상품 목록, 최하단에 총 n건
+    const finalText = [dateStr, ...productLines, `총 ${totalCount}건`].join(
+      "\n"
+    );
+
+    // 클립보드에 복사
+    navigator.clipboard
+      .writeText(finalText)
+      .then(() => {
+        alert("주문 정보가 클립보드에 복사되었습니다.");
+      })
+      .catch((error) => {
+        console.error("클립보드 복사 실패:", error);
+        alert("클립보드 복사에 실패했습니다.");
+      });
+  }, [tableData, headerIndex]);
+
   useEffect(() => {
     // 상품 목록 fetch (DB에서)
     fetch("/api/products/list")
@@ -1535,6 +1600,12 @@ function FileViewContent() {
           <div className="font-bold text-lg mt-4 mb-2 text-black text-left w-full flex flex-row justify-between items-center">
             <span>{fileName}</span>
             <div className="flex items-center gap-2">
+              <button
+                onClick={handleCopyOrderSummary}
+                className="px-4 py-1 rounded text-sm font-semibold transition-colors bg-purple-500 hover:bg-purple-600 text-white"
+              >
+                주문 복사
+              </button>
               <button
                 onClick={handleToggleEditMode}
                 className={`px-4 py-1 rounded text-sm font-semibold transition-colors ${

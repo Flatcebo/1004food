@@ -28,8 +28,9 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // 한국 시간(KST) 생성
-    const koreaTime = new Date(Date.now() + 9 * 60 * 60 * 1000);
+    // 현재 시간을 UTC로 저장 (PostgreSQL timestamp는 타임존 정보 없이 저장됨)
+    // 표시할 때 한국 시간으로 변환하므로 여기서는 UTC로 저장
+    const now = new Date();
     const rowCount = Array.isArray(tableData) ? tableData.length - 1 : 0;
 
     console.log("✅ 업데이트할 데이터:", {
@@ -81,7 +82,7 @@ export async function PUT(request: NextRequest) {
           product_code_map = ${JSON.stringify(productCodeMap)},
           validation_status = ${JSON.stringify(validationResult)},
           is_confirmed = ${isConfirmed ?? false},
-          updated_at = ${koreaTime.toISOString()}
+              updated_at = ${now.toISOString()}
         WHERE file_id = ${fileId}
         RETURNING *
       `;
@@ -108,7 +109,7 @@ export async function PUT(request: NextRequest) {
             validation_status = ${JSON.stringify(validationResult)},
             vendor_name = ${vendorName || null},
             is_confirmed = ${isConfirmed ?? false},
-            updated_at = ${koreaTime.toISOString()}
+              updated_at = ${now.toISOString()}
           WHERE file_id = ${fileId}
           RETURNING *
         `;

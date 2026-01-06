@@ -148,23 +148,23 @@ export default function UploadedFilesList({
                     {file.vendorName || "-"}
                   </td>
                   <td className="border border-gray-300 px-4 py-2">
-                    {file.createdAt
-                      ? new Date(file.createdAt).toLocaleString("ko-KR", {
-                          year: "numeric",
-                          month: "2-digit",
-                          day: "2-digit",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })
-                      : file.uploadTime
-                      ? new Date(file.uploadTime).toLocaleString("ko-KR", {
-                          year: "numeric",
-                          month: "2-digit",
-                          day: "2-digit",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })
-                      : "-"}
+                    {(() => {
+                      const dateStr = file.createdAt || file.uploadTime;
+                      if (!dateStr) return "-";
+                      
+                      // UTC 시간을 한국 시간(KST)으로 변환
+                      const date = new Date(dateStr);
+                      
+                      // 한국 시간대(Asia/Seoul)로 변환하여 표시
+                      return date.toLocaleString("ko-KR", {
+                        year: "numeric",
+                        month: "2-digit",
+                        day: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        timeZone: "Asia/Seoul",
+                      });
+                    })()}
                   </td>
                   <td className="border border-gray-300 px-4 py-2">
                     {file.fileName}
