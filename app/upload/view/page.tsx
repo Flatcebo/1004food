@@ -2502,7 +2502,22 @@ function FileViewContent() {
                                         (c: any) => c.id === itemData.id
                                       )
                                     ) {
-                                      setCodes([...codes, itemData]);
+                                      const updatedCodes = [...codes, itemData];
+                                      setCodes(updatedCodes);
+                                      // codesOriginRef도 즉시 업데이트하여 테이블 렌더링 시 반영되도록 함
+                                      codesOriginRef.current = updatedCodes;
+                                    } else if (itemData) {
+                                      // codes에 이미 있더라도 codesOriginRef에 확실히 포함되도록 함
+                                      if (
+                                        !codesOriginRef.current.find(
+                                          (c: any) => c.id === itemData.id
+                                        )
+                                      ) {
+                                        codesOriginRef.current = [
+                                          ...codesOriginRef.current,
+                                          itemData,
+                                        ];
+                                      }
                                     }
 
                                     // 클라이언트 맵에 저장 (useAutoMapping이 덮어쓰지 않도록)
@@ -2613,6 +2628,11 @@ function FileViewContent() {
                                         );
                                         setUploadedFiles(updatedFiles);
                                       }
+
+                                      // 테이블 강제 리렌더링을 위해 약간의 지연 후 다시 설정
+                                      setTimeout(() => {
+                                        setTableData((prev) => [...prev]);
+                                      }, 0);
                                     }
 
                                     // 모달 닫기
@@ -2890,18 +2910,36 @@ function FileViewContent() {
                 setProductCodeMap(updatedProductCodeMap);
 
                 // 사용자가 선택한 상품의 ID 저장 (같은 매핑코드를 가진 다른 상품과 구분하기 위함)
+                // 업데이트된 productIdMap을 직접 사용하기 위해 변수에 저장
+                let updatedProductIdMap = {...productIdMap};
                 if (codeItem?.id !== undefined && codeItem?.id !== null) {
-                  setProductIdMap((prev) => ({
-                    ...prev,
+                  updatedProductIdMap = {
+                    ...productIdMap,
                     [originalProductName]: codeItem.id,
-                  }));
+                  };
+                  setProductIdMap(updatedProductIdMap);
 
                   // 선택한 상품이 codes에 없으면 추가 (실시간 업데이트를 위해)
                   if (
                     codeItem &&
                     !codes.find((c: any) => c.id === codeItem.id)
                   ) {
-                    setCodes([...codes, codeItem]);
+                    const updatedCodes = [...codes, codeItem];
+                    setCodes(updatedCodes);
+                    // codesOriginRef도 즉시 업데이트하여 테이블 렌더링 시 반영되도록 함
+                    codesOriginRef.current = updatedCodes;
+                  } else if (codeItem) {
+                    // codes에 이미 있더라도 codesOriginRef에 확실히 포함되도록 함
+                    if (
+                      !codesOriginRef.current.find(
+                        (c: any) => c.id === codeItem.id
+                      )
+                    ) {
+                      codesOriginRef.current = [
+                        ...codesOriginRef.current,
+                        codeItem,
+                      ];
+                    }
                   }
                 }
 
@@ -2968,13 +3006,13 @@ function FileViewContent() {
 
                   setTableData(updatedTable);
 
-                  // 파일 데이터도 업데이트
+                  // 파일 데이터도 업데이트 (업데이트된 productIdMap 사용)
                   if (fileId) {
                     const updatedFile = {
                       ...file,
                       tableData: updatedTable,
                       productCodeMap: updatedProductCodeMap,
-                      productIdMap: productIdMap, // 사용자가 선택한 상품 ID 맵도 함께 저장
+                      productIdMap: updatedProductIdMap, // 업데이트된 productIdMap 사용
                     };
                     setFile(updatedFile);
                     sessionStorage.setItem(
@@ -2986,6 +3024,11 @@ function FileViewContent() {
                     );
                     setUploadedFiles(updatedFiles);
                   }
+
+                  // 테이블 강제 리렌더링을 위해 약간의 지연 후 다시 설정
+                  setTimeout(() => {
+                    setTableData((prev) => [...prev]);
+                  }, 0);
                 } else {
                   console.warn("헤더 인덱스를 찾을 수 없습니다:", {
                     mappingIdx,
