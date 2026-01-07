@@ -64,7 +64,14 @@ export async function POST(request: NextRequest) {
       },
       {
         name: "운송장번호",
-        aliases: ["운송장번호", "운송장", "trackingnumber", "tracking"],
+        aliases: [
+          "운송장번호",
+          "운송장",
+          "송장번호",
+          "송장",
+          "trackingnumber",
+          "tracking",
+        ],
       },
       {
         name: "택배사",
@@ -79,7 +86,9 @@ export async function POST(request: NextRequest) {
     );
     const headers = raw[headerRowIndex] as string[];
 
-    console.log(`헤더 행 감지: ${headerRowIndex + 1}행 (인덱스: ${headerRowIndex})`);
+    console.log(
+      `헤더 행 감지: ${headerRowIndex + 1}행 (인덱스: ${headerRowIndex})`
+    );
     console.log("엑셀 헤더:", headers);
 
     // 헤더 파싱 및 필수 헤더 인덱스 찾기
@@ -96,15 +105,23 @@ export async function POST(request: NextRequest) {
       if (orderNumberIdx === -1) {
         if (normalized === "주문번호" || normalized === "ordernumber") {
           orderNumberIdx = index;
-          console.log(`주문번호 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`);
+          console.log(
+            `주문번호 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`
+          );
         }
       }
 
       // 운송장번호 정확한 매칭 (운송장보다 우선)
       if (trackingNumberIdx === -1) {
-        if (normalized === "운송장번호" || normalized === "trackingnumber") {
+        if (
+          normalized === "운송장번호" ||
+          normalized === "송장번호" ||
+          normalized === "trackingnumber"
+        ) {
           trackingNumberIdx = index;
-          console.log(`운송장번호 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`);
+          console.log(
+            `운송장번호 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`
+          );
         }
       }
 
@@ -112,7 +129,9 @@ export async function POST(request: NextRequest) {
       if (carrierIdx === -1) {
         if (normalized === "택배사" || normalized === "carrier") {
           carrierIdx = index;
-          console.log(`택배사 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`);
+          console.log(
+            `택배사 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`
+          );
         }
       }
     });
@@ -124,9 +143,14 @@ export async function POST(request: NextRequest) {
 
       // 주문번호 포함 검사
       if (orderNumberIdx === -1) {
-        if (normalized.includes("주문번호") || normalized.includes("ordernumber")) {
+        if (
+          normalized.includes("주문번호") ||
+          normalized.includes("ordernumber")
+        ) {
           orderNumberIdx = index;
-          console.log(`주문번호 헤더 발견 (포함 검사): "${headerStr}" (인덱스: ${index})`);
+          console.log(
+            `주문번호 헤더 발견 (포함 검사): "${headerStr}" (인덱스: ${index})`
+          );
         }
       }
 
@@ -134,11 +158,15 @@ export async function POST(request: NextRequest) {
       if (trackingNumberIdx === -1) {
         if (
           normalized.includes("운송장") ||
+          normalized.includes("송장번호") ||
+          normalized.includes("송장") ||
           normalized.includes("trackingnumber") ||
           normalized.includes("tracking")
         ) {
           trackingNumberIdx = index;
-          console.log(`운송장 헤더 발견 (포함 검사): "${headerStr}" (인덱스: ${index})`);
+          console.log(
+            `운송장 헤더 발견 (포함 검사): "${headerStr}" (인덱스: ${index})`
+          );
         }
       }
 
@@ -150,7 +178,9 @@ export async function POST(request: NextRequest) {
           normalized.includes("carrier")
         ) {
           carrierIdx = index;
-          console.log(`택배사 헤더 발견 (포함 검사): "${headerStr}" (인덱스: ${index})`);
+          console.log(
+            `택배사 헤더 발견 (포함 검사): "${headerStr}" (인덱스: ${index})`
+          );
         }
       }
     });
@@ -160,7 +190,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: `주문번호 헤더를 찾을 수 없습니다. '주문번호' 헤더가 필요합니다.\n발견된 헤더: ${headers.join(", ")}`,
+          error: `주문번호 헤더를 찾을 수 없습니다. '주문번호' 헤더가 필요합니다.\n발견된 헤더: ${headers.join(
+            ", "
+          )}`,
           foundHeaders: headers,
           missingHeaders: ["주문번호"],
         },
@@ -172,7 +204,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: `운송장 헤더를 찾을 수 없습니다. '운송장' 또는 '운송장번호' 헤더가 필요합니다.\n발견된 헤더: ${headers.join(", ")}`,
+          error: `운송장 헤더를 찾을 수 없습니다. '운송장' 또는 '운송장번호' 헤더가 필요합니다.\n발견된 헤더: ${headers.join(
+            ", "
+          )}`,
           foundHeaders: headers,
           missingHeaders: ["운송장", "운송장번호"],
         },
@@ -184,7 +218,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: `택배사 헤더를 찾을 수 없습니다. '택배사' 헤더가 필요합니다.\n발견된 헤더: ${headers.join(", ")}`,
+          error: `택배사 헤더를 찾을 수 없습니다. '택배사' 헤더가 필요합니다.\n발견된 헤더: ${headers.join(
+            ", "
+          )}`,
           foundHeaders: headers,
           missingHeaders: ["택배사"],
         },
@@ -201,12 +237,14 @@ export async function POST(request: NextRequest) {
     // 데이터 행 파싱 및 검증
     const deliveryUpdates = [];
     const errors = [];
-    
+
     // 헤더 행 다음부터 데이터로 사용
     const dataStartIndex = headerRowIndex + 1;
-    
+
     // 헤더를 제외한 전체 데이터 행 수 계산 (빈 행 제외)
-    const totalDataRows = raw.slice(dataStartIndex).filter(row => row && row.length > 0).length;
+    const totalDataRows = raw
+      .slice(dataStartIndex)
+      .filter((row) => row && row.length > 0).length;
 
     for (let i = dataStartIndex; i < raw.length; i++) {
       const row = raw[i];
@@ -214,7 +252,9 @@ export async function POST(request: NextRequest) {
 
       const orderNumber = String(row[orderNumberIdx] || "").trim();
       const trackingNumber = String(row[trackingNumberIdx] || "").trim();
-      const carrier = normalizeCarrierName(String(row[carrierIdx] || "").trim());
+      const carrier = normalizeCarrierName(
+        String(row[carrierIdx] || "").trim()
+      );
 
       // 필수 값 검증
       if (!orderNumber) {
@@ -298,7 +338,9 @@ export async function POST(request: NextRequest) {
           }
 
           if (existingOrder.length > 0) {
-            console.log(`✅ 매칭 성공: ${update.orderNumber} → ${matchType}로 찾음`);
+            console.log(
+              `✅ 매칭 성공: ${update.orderNumber} → ${matchType}로 찾음`
+            );
           }
 
           if (existingOrder.length === 0) {
@@ -337,7 +379,6 @@ export async function POST(request: NextRequest) {
             rowNumber: update.rowNumber,
           });
           successCount++;
-
         } catch (error: any) {
           results.push({
             orderNumber: update.orderNumber,
@@ -349,7 +390,7 @@ export async function POST(request: NextRequest) {
         }
 
         // 각 처리 사이에 약간의 지연을 주어 실시간 효과를 줌 (클라이언트에서 처리)
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
       }
 
       await sql`COMMIT`;
@@ -363,12 +404,10 @@ export async function POST(request: NextRequest) {
         results,
         errors: errors.length > 0 ? errors : undefined,
       });
-
     } catch (error) {
       await sql`ROLLBACK`;
       throw error;
     }
-
   } catch (error: any) {
     console.error("운송장 업로드 처리 실패:", error);
     return NextResponse.json(

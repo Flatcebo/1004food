@@ -5,12 +5,24 @@
 
 // 택배사 매핑 규칙
 const CARRIER_MAPPING_RULES = [
-  { keywords: ["cj", "cj택배", "cj대한통운", "cj대통", "cj대"], standardName: "CJ택배" },
-  { keywords: ["우체국", "우체국택배", "한국우체국", "우편"], standardName: "우체국택배" },
-  { keywords: ["한진", "한진택배", "대한통운", "대통", "한진대통"], standardName: "한진택배" },
-  { keywords: ["천일", "천일택배", "천일특송"], standardName: "천일택배" },
-  { keywords: ["롯데", "롯데택배", "롯데글로벌"], standardName: "롯데택배" },
-  { keywords: ["로젠", "로젠택배", "로젠글로벌"], standardName: "로젠택배" },
+  {
+    keywords: ["cj", "cj택배", "cj대한통운", "cj대통", "cj대"],
+    standardName: "CJ택배",
+  },
+  {
+    keywords: ["우체국", "우체국택배", "한국우체국"],
+    standardName: "우체국택배",
+  },
+  {
+    keywords: ["한진", "한진택배", "대한통운", "대통", "한진대통"],
+    standardName: "한진택배",
+  },
+  {keywords: ["천일", "천일택배", "천일특송"], standardName: "천일택배"},
+  {
+    keywords: ["롯데", "롯데택배", "롯데글로벌", "롯데(현대)택배"],
+    standardName: "롯데택배",
+  },
+  {keywords: ["로젠", "로젠택배", "로젠글로벌"], standardName: "로젠택배"},
 ];
 
 /**
@@ -19,7 +31,7 @@ const CARRIER_MAPPING_RULES = [
  * @returns 표준화된 택배사 이름
  */
 export function normalizeCarrierName(carrier: string): string {
-  if (!carrier || typeof carrier !== 'string') {
+  if (!carrier || typeof carrier !== "string") {
     return carrier;
   }
 
@@ -29,7 +41,7 @@ export function normalizeCarrierName(carrier: string): string {
   // 각 매핑 규칙에 대해 확인
   for (const rule of CARRIER_MAPPING_RULES) {
     // 키워드 중 하나라도 포함되어 있는지 확인
-    const hasKeyword = rule.keywords.some(keyword =>
+    const hasKeyword = rule.keywords.some((keyword) =>
       normalizedInput.includes(keyword.toLowerCase())
     );
 
@@ -47,7 +59,7 @@ export function normalizeCarrierName(carrier: string): string {
  * @returns 표준화된 택배사 이름 목록
  */
 export function getSupportedCarriers(): string[] {
-  return CARRIER_MAPPING_RULES.map(rule => rule.standardName);
+  return CARRIER_MAPPING_RULES.map((rule) => rule.standardName);
 }
 
 /**
@@ -55,7 +67,7 @@ export function getSupportedCarriers(): string[] {
  * @returns 매핑 규칙 설명
  */
 export function getCarrierMappingDescription(): string {
-  return CARRIER_MAPPING_RULES.map(rule =>
-    `${rule.keywords.join(', ')} → ${rule.standardName}`
-  ).join('\n');
+  return CARRIER_MAPPING_RULES.map(
+    (rule) => `${rule.keywords.join(", ")} → ${rule.standardName}`
+  ).join("\n");
 }
