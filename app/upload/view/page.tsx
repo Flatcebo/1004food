@@ -1977,22 +1977,20 @@ function FileViewContent() {
                     let mappingCode = "";
                     if (name) {
                       const trimmedName = String(name).trim();
-                      
+
                       // productIdMap을 사용해서 정확한 상품 찾기
                       const selectedProductId = productIdMap[trimmedName];
                       let matchedProduct = null;
-                      
+
                       if (selectedProductId !== undefined) {
                         // 사용자가 선택한 상품 ID가 있으면 그것으로 정확히 찾기
                         matchedProduct =
-                          codes.find(
-                            (c: any) => c.id === selectedProductId
-                          ) ||
+                          codes.find((c: any) => c.id === selectedProductId) ||
                           codesOriginRef.current.find(
                             (c: any) => c.id === selectedProductId
                           );
                       }
-                      
+
                       // 매핑코드 가져오기 (우선순위: productIdMap으로 찾은 상품 > productCodeMap > 테이블 컬럼 > codes)
                       if (matchedProduct?.code) {
                         mappingCode = matchedProduct.code;
@@ -2007,7 +2005,8 @@ function FileViewContent() {
                               c.name && String(c.name).trim() === trimmedName
                           )?.code ||
                           codesOriginRef.current.find(
-                            (c) => c.name && String(c.name).trim() === trimmedName
+                            (c) =>
+                              c.name && String(c.name).trim() === trimmedName
                           )?.code ||
                           "";
                       }
@@ -2115,10 +2114,12 @@ function FileViewContent() {
                                         // codes와 codesOriginRef.current 모두 확인
                                         product =
                                           codes.find(
-                                            (c: any) => c.id === selectedProductId
+                                            (c: any) =>
+                                              c.id === selectedProductId
                                           ) ||
                                           codesOriginRef.current.find(
-                                            (c: any) => c.id === selectedProductId
+                                            (c: any) =>
+                                              c.id === selectedProductId
                                           );
                                       } else if (productName) {
                                         // 사용자가 선택하지 않은 경우에만 상품명이 정확히 일치할 때만 자동 매칭
@@ -2211,10 +2212,12 @@ function FileViewContent() {
                                         // codes와 codesOriginRef.current 모두 확인
                                         product =
                                           codes.find(
-                                            (c: any) => c.id === selectedProductId
+                                            (c: any) =>
+                                              c.id === selectedProductId
                                           ) ||
                                           codesOriginRef.current.find(
-                                            (c: any) => c.id === selectedProductId
+                                            (c: any) =>
+                                              c.id === selectedProductId
                                           );
                                       } else if (productName) {
                                         // 사용자가 선택하지 않은 경우에만 상품명이 정확히 일치할 때만 자동 매칭
@@ -2332,10 +2335,12 @@ function FileViewContent() {
                                         // codes와 codesOriginRef.current 모두 확인
                                         product =
                                           codes.find(
-                                            (c: any) => c.id === selectedProductId
+                                            (c: any) =>
+                                              c.id === selectedProductId
                                           ) ||
                                           codesOriginRef.current.find(
-                                            (c: any) => c.id === selectedProductId
+                                            (c: any) =>
+                                              c.id === selectedProductId
                                           );
                                       } else if (productName) {
                                         // 사용자가 선택하지 않은 경우에만 상품명이 정확히 일치할 때만 자동 매칭
@@ -2480,13 +2485,23 @@ function FileViewContent() {
                                           c.name === selectedName &&
                                           c.code === selectedCode
                                       ) ||
-                                      (selectedId !== undefined && selectedId !== null
-                                        ? codes.find((c: any) => c.id === selectedId) ||
-                                          codesOriginRef.current.find((c: any) => c.id === selectedId)
+                                      (selectedId !== undefined &&
+                                      selectedId !== null
+                                        ? codes.find(
+                                            (c: any) => c.id === selectedId
+                                          ) ||
+                                          codesOriginRef.current.find(
+                                            (c: any) => c.id === selectedId
+                                          )
                                         : null);
-                                    
+
                                     // 선택한 상품이 codes에 없으면 추가 (실시간 업데이트를 위해)
-                                    if (itemData && !codes.find((c: any) => c.id === itemData.id)) {
+                                    if (
+                                      itemData &&
+                                      !codes.find(
+                                        (c: any) => c.id === itemData.id
+                                      )
+                                    ) {
                                       setCodes([...codes, itemData]);
                                     }
 
@@ -2880,9 +2895,12 @@ function FileViewContent() {
                     ...prev,
                     [originalProductName]: codeItem.id,
                   }));
-                  
+
                   // 선택한 상품이 codes에 없으면 추가 (실시간 업데이트를 위해)
-                  if (codeItem && !codes.find((c: any) => c.id === codeItem.id)) {
+                  if (
+                    codeItem &&
+                    !codes.find((c: any) => c.id === codeItem.id)
+                  ) {
                     setCodes([...codes, codeItem]);
                   }
                 }
