@@ -610,8 +610,12 @@ export async function POST(request: NextRequest) {
         });
       });
 
-      // 정렬: 상품명 오름차순 후 수취인명 오름차순
-      excelData = sortExcelData(excelData, columnOrder);
+      // 정렬: 상품명 또는 사방넷명 오름차순 후 수취인명 오름차순
+      excelData = sortExcelData(excelData, columnOrder, {
+        preferSabangName:
+          preferSabangName !== undefined ? preferSabangName : true,
+        originalData: dataRows,
+      });
 
       // 헤더 추가 (외주 발주서 스타일 적용)
       const headerRow = sheet.addRow(headers);
@@ -720,7 +724,12 @@ export async function POST(request: NextRequest) {
 
       // CJ외주 발주서 다운로드가 성공하면 주문상태 업데이트
       // CJ외주 발주서인 경우 필터링된 데이터의 실제 다운로드된 행들만 업데이트
-      const idsToUpdate = downloadedRowIds;
+      const idsToUpdate =
+        downloadedRowIds.length > 0
+          ? downloadedRowIds
+          : rowIds && rowIds.length > 0
+          ? rowIds
+          : [];
       if (idsToUpdate && idsToUpdate.length > 0) {
         try {
           // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
@@ -729,10 +738,20 @@ export async function POST(request: NextRequest) {
             SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
             WHERE id = ANY(${idsToUpdate})
           `;
+          console.log(
+            `CJ외주 발주서 다운로드: ${idsToUpdate.length}건의 주문상태를 "발주서 다운"으로 업데이트했습니다.`
+          );
         } catch (updateError) {
           console.error("주문상태 업데이트 실패:", updateError);
           // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리
         }
+      } else {
+        console.warn(
+          "CJ외주 발주서 다운로드: 업데이트할 ID가 없습니다. downloadedRowIds:",
+          downloadedRowIds,
+          "rowIds:",
+          rowIds
+        );
       }
 
       const responseHeaders = new Headers();
@@ -1103,8 +1122,12 @@ export async function POST(request: NextRequest) {
           });
         });
 
-        // 정렬
-        excelData = sortExcelData(excelData, columnOrder);
+        // 정렬: 상품명 또는 사방넷명 오름차순 후 수취인명 오름차순
+        excelData = sortExcelData(excelData, columnOrder, {
+          preferSabangName:
+            preferSabangName !== undefined ? preferSabangName : true,
+          originalData: vendorRows,
+        });
 
         // 데이터 추가
         excelData.forEach((rowDatas) => {
@@ -1392,8 +1415,12 @@ export async function POST(request: NextRequest) {
       });
     });
 
-    // 정렬: 상품명 오름차순 후 수취인명 오름차순
-    excelData = sortExcelData(excelData, columnOrder);
+    // 정렬: 상품명 또는 사방넷명 오름차순 후 수취인명 오름차순
+    excelData = sortExcelData(excelData, columnOrder, {
+      preferSabangName:
+        preferSabangName !== undefined ? preferSabangName : true,
+      originalData: dataRows,
+    });
 
     // 정렬된 데이터를 엑셀에 추가
     excelData.forEach((rowDatas) => {

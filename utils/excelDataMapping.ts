@@ -287,10 +287,11 @@ export function mapDataToTemplate(
   return prepareExcelCellValue(value, false);
 }
 
-// 정렬 함수: 상품명 오름차순 후 수취인명 오름차순
+// 정렬 함수: 상품명 또는 사방넷명 오름차순 후 수취인명 오름차순
 export function sortExcelData(
   excelData: any[][],
-  columnOrder: string[]
+  columnOrder: string[],
+  options?: {preferSabangName?: boolean; originalData?: any[]}
 ): any[][] {
   const 수취인명Idx = columnOrder.findIndex(
     (h: string) =>
@@ -311,21 +312,28 @@ export function sortExcelData(
     return excelData;
   }
 
+  // 엑셀 데이터의 상품명 컬럼에는 이미 사방넷명이 적용되어 있을 수 있으므로
+  // 엑셀 데이터의 상품명 컬럼 값을 직접 사용하여 정렬
   return [...excelData].sort((a, b) => {
-    // 상품명으로 먼저 정렬
+    // 1차 정렬: 상품명 또는 사방넷명 (엑셀 데이터의 상품명 컬럼 값 사용)
     if (상품명Idx !== -1) {
       const a상품명 = String(a[상품명Idx] || "").trim();
       const b상품명 = String(b[상품명Idx] || "").trim();
-      if (a상품명 !== b상품명) {
-        return a상품명.localeCompare(b상품명, "ko");
+      
+      // 상품명이 다르면 상품명으로 정렬
+      const 상품명비교 = a상품명.localeCompare(b상품명, "ko");
+      if (상품명비교 !== 0) {
+        return 상품명비교;
       }
     }
-    // 수취인명으로 정렬
+    
+    // 2차 정렬: 수취인명 (상품명이 같은 경우 수취인명으로 정렬)
     if (수취인명Idx !== -1) {
       const a수취인명 = String(a[수취인명Idx] || "").trim();
       const b수취인명 = String(b[수취인명Idx] || "").trim();
       return a수취인명.localeCompare(b수취인명, "ko");
     }
+    
     return 0;
   });
 }
