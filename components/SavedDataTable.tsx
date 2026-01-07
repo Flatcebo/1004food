@@ -149,6 +149,8 @@ const SavedDataTable = memo(function SavedDataTable({
         return "우편번호";
       case "id":
         return "ID";
+      case "productId":
+        return "상품ID";
       default:
         return header;
     }
