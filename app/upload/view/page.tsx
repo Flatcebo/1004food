@@ -963,11 +963,29 @@ function FileViewContent() {
         //   productCodeMapSize: Object.keys(requestData.productCodeMap).length,
         // });
 
+        // company-id 헤더 포함
+        const headers: HeadersInit = {
+          "Content-Type": "application/json",
+        };
+
+        if (typeof window !== "undefined") {
+          try {
+            const stored = localStorage.getItem("auth-storage");
+            if (stored) {
+              const parsed = JSON.parse(stored);
+              const user = parsed.state?.user;
+              if (user?.companyId) {
+                headers["company-id"] = user.companyId.toString();
+              }
+            }
+          } catch (e) {
+            console.error("인증 정보 로드 실패:", e);
+          }
+        }
+
         const response = await fetch("/api/upload/temp/update", {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers,
           body: JSON.stringify(requestData),
         });
 
@@ -1094,7 +1112,25 @@ function FileViewContent() {
 
   useEffect(() => {
     // 상품 목록 fetch (DB에서)
-    fetch("/api/products/list")
+    // company-id 헤더 포함
+    const headers: HeadersInit = {};
+
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("auth-storage");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          const user = parsed.state?.user;
+          if (user?.companyId) {
+            headers["company-id"] = user.companyId.toString();
+          }
+        }
+      } catch (e) {
+        console.error("인증 정보 로드 실패:", e);
+      }
+    }
+
+    fetch("/api/products/list", {headers})
       .then((res) => res.json())
       .then((result) => {
         if (result.success) {
@@ -2734,7 +2770,25 @@ function FileViewContent() {
 
           // 상품 저장 후 최신 codes를 다시 불러오기
           try {
-            const response = await fetch("/api/products/list");
+            // company-id 헤더 포함
+            const headers: HeadersInit = {};
+
+            if (typeof window !== "undefined") {
+              try {
+                const stored = localStorage.getItem("auth-storage");
+                if (stored) {
+                  const parsed = JSON.parse(stored);
+                  const user = parsed.state?.user;
+                  if (user?.companyId) {
+                    headers["company-id"] = user.companyId.toString();
+                  }
+                }
+              } catch (e) {
+                console.error("인증 정보 로드 실패:", e);
+              }
+            }
+
+            const response = await fetch("/api/products/list", {headers});
             const result = await response.json();
             if (result.success) {
               const newCodes = result.data || [];

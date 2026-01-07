@@ -2,23 +2,66 @@ import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
 import {generateUniqueCodesForVendors} from "@/utils/internalCode";
 import {generateAutoDeliveryMessage} from "@/utils/vendorMessageUtils";
+import {getCompanyIdFromRequest, getUserIdFromRequest} from "@/lib/company";
 
 export async function POST(request: NextRequest) {
   try {
-    // 확인된 모든 임시 파일들을 조회 (세션 구분 없음)
-    const confirmedFiles = await sql`
-      SELECT 
-        file_id,
-        file_name,
-        row_count,
-        table_data,
-        header_index,
-        product_code_map,
-        product_id_map
-      FROM temp_files
-      WHERE is_confirmed = true
-      ORDER BY created_at ASC
-    `;
+    // company_id 추출
+    const companyId = await getCompanyIdFromRequest(request);
+    if (!companyId) {
+      return NextResponse.json(
+        {success: false, error: "company_id가 필요합니다."},
+        {status: 400}
+      );
+    }
+
+    // user_id 추출
+    const userId = await getUserIdFromRequest(request);
+
+    // user_id 컬럼 존재 여부 확인
+    let hasUserIdColumn = false;
+    try {
+      const columnCheck = await sql`
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'temp_files' AND column_name = 'user_id'
+      `;
+      hasUserIdColumn = columnCheck.length > 0;
+    } catch (error) {
+      // 테이블이 없거나 다른 에러인 경우 무시
+      console.log("컬럼 확인 실패:", error);
+    }
+
+    // 확인된 모든 임시 파일들을 조회 (세션 구분 없음, company_id, user_id 필터링)
+    let confirmedFiles;
+    if (userId && hasUserIdColumn) {
+      confirmedFiles = await sql`
+        SELECT 
+          file_id,
+          file_name,
+          row_count,
+          table_data,
+          header_index,
+          product_code_map,
+          product_id_map
+        FROM temp_files
+        WHERE is_confirmed = true AND company_id = ${companyId} AND user_id = ${userId}
+        ORDER BY created_at ASC
+      `;
+    } else {
+      confirmedFiles = await sql`
+        SELECT 
+          file_id,
+          file_name,
+          row_count,
+          table_data,
+          header_index,
+          product_code_map,
+          product_id_map
+        FROM temp_files
+        WHERE is_confirmed = true AND company_id = ${companyId}
+        ORDER BY created_at ASC
+      `;
+    }
 
     if (confirmedFiles.length === 0) {
       return NextResponse.json(
@@ -189,11 +232,12 @@ export async function POST(request: NextRequest) {
 
       // uploads 테이블에 저장
       const uploadResult = await sql`
-        INSERT INTO uploads (file_name, row_count, data, created_at)
+        INSERT INTO uploads (file_name, row_count, data, company_id, created_at)
         VALUES (
           ${file.file_name},
           ${rowObjects.length},
           ${JSON.stringify(rowObjects)},
+          ${companyId},
           ${koreaTime.toISOString()}::timestamp
         )
         RETURNING id, created_at
@@ -209,11 +253,12 @@ export async function POST(request: NextRequest) {
           rowObj["쇼핑몰명"] || rowObj["쇼핑몰명(1)"] || rowObj["쇼핑몰"] || "";
 
         return sql`
-          INSERT INTO upload_rows (upload_id, row_data, shop_name, created_at)
+          INSERT INTO upload_rows (upload_id, row_data, shop_name, company_id, created_at)
           VALUES (
             ${uploadId},
             ${JSON.stringify(rowObj)},
             ${shopName},
+            ${companyId},
             ${koreaTime.toISOString()}::timestamp
           )
           RETURNING id
@@ -230,13 +275,20 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 확인된 임시 저장 데이터 삭제
+    // 확인된 임시 저장 데이터 삭제 (company_id, user_id 필터링)
     const confirmedFileIds = confirmedFiles.map((f) => f.file_id);
     if (confirmedFileIds.length > 0) {
-      await sql`
-        DELETE FROM temp_files
-        WHERE file_id = ANY(${confirmedFileIds})
-      `;
+      if (userId && hasUserIdColumn) {
+        await sql`
+          DELETE FROM temp_files
+          WHERE file_id = ANY(${confirmedFileIds}) AND company_id = ${companyId} AND user_id = ${userId}
+        `;
+      } else {
+        await sql`
+          DELETE FROM temp_files
+          WHERE file_id = ANY(${confirmedFileIds}) AND company_id = ${companyId}
+        `;
+      }
     }
 
     return NextResponse.json({

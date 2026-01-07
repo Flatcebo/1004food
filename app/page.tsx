@@ -17,12 +17,34 @@ export default function App() {
 
   const loadDashboardStats = async () => {
     try {
+      // company-id 헤더 포함
+      const headers: HeadersInit = {};
+
+      if (typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem("auth-storage");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            const user = parsed.state?.user;
+            if (user?.companyId) {
+              headers["company-id"] = user.companyId.toString();
+            }
+          }
+        } catch (e) {
+          console.error("인증 정보 로드 실패:", e);
+        }
+      }
+
       // 상품 수 조회 (count 모드로 효율적 조회)
-      const productsResponse = await fetch("/api/products/list?count=true");
+      const productsResponse = await fetch("/api/products/list?count=true", {
+        headers,
+      });
       const productsData = await productsResponse.json();
 
       // 주문 통계 조회
-      const ordersResponse = await fetch("/api/upload/list?stats=true");
+      const ordersResponse = await fetch("/api/upload/list?stats=true", {
+        headers,
+      });
       const ordersData = await ordersResponse.json();
 
       setStats({

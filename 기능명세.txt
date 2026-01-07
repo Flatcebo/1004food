@@ -11,6 +11,7 @@
 - 택배사가 공란이여도 운송장 입력하면 자동으로 들어감
 - 발주서 업로드 header aliases 직접 관리
 - /products/edit 상품 일괄 수정 페이지 생성
+- multi tenant 작업으로 최상위 entity : 회사 > 유저
 
 utils/vendorMessageUtils.ts
 - 배송메시지 맨 앞에 업체명이 자동으로 입력되게 하는 함수

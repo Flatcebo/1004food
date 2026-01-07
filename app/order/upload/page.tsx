@@ -48,8 +48,27 @@ export default function Page() {
   const handleFileDelete = async (fileId: string) => {
     if (confirm("정말로 이 발주서를 삭제하시겠습니까?")) {
       try {
+        // company-id 헤더 포함
+        const headers: HeadersInit = {};
+
+        if (typeof window !== "undefined") {
+          try {
+            const stored = localStorage.getItem("auth-storage");
+            if (stored) {
+              const parsed = JSON.parse(stored);
+              const user = parsed.state?.user;
+              if (user?.companyId) {
+                headers["company-id"] = user.companyId.toString();
+              }
+            }
+          } catch (e) {
+            console.error("인증 정보 로드 실패:", e);
+          }
+        }
+
         const response = await fetch(`/api/upload/temp/delete?fileId=${fileId}`, {
           method: "DELETE",
+          headers,
         });
         const result = await response.json();
 

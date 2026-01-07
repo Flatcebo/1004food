@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import {useState, useCallback, useRef} from "react";
 
 export interface DeliveryResult {
   type: "init" | "processing" | "result";
@@ -28,7 +28,9 @@ export const useDeliveryUpload = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [currentOrderNumber, setCurrentOrderNumber] = useState<string>("");
   const [deliveryResults, setDeliveryResults] = useState<DeliveryResult[]>([]);
-  const [finalResult, setFinalResult] = useState<DeliveryFinalResult | null>(null);
+  const [finalResult, setFinalResult] = useState<DeliveryFinalResult | null>(
+    null
+  );
   const [deliveryError, setDeliveryError] = useState<string>("");
 
   // 운송장 업로드 파일 입력 ref
@@ -56,9 +58,28 @@ export const useDeliveryUpload = () => {
       const formData = new FormData();
       formData.append("file", file);
 
+      // company-id 헤더 포함
+      const headers: HeadersInit = {};
+
+      if (typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem("auth-storage");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            const user = parsed.state?.user;
+            if (user?.companyId) {
+              headers["company-id"] = user.companyId.toString();
+            }
+          }
+        } catch (e) {
+          console.error("인증 정보 로드 실패:", e);
+        }
+      }
+
       // 파일 업로드 요청
       const response = await fetch("/api/upload/delivery-upload", {
         method: "POST",
+        headers,
         body: formData,
       });
 
@@ -115,15 +136,11 @@ export const useDeliveryUpload = () => {
             currentIndex: i + 1,
             totalCount: data.totalCount,
             successCount: result.success
-              ? prev.filter((r) => r.type === "result" && r.success)
-                  .length + 1
-              : prev.filter((r) => r.type === "result" && r.success)
-                  .length,
+              ? prev.filter((r) => r.type === "result" && r.success).length + 1
+              : prev.filter((r) => r.type === "result" && r.success).length,
             failCount: !result.success
-              ? prev.filter((r) => r.type === "result" && !r.success)
-                  .length + 1
-              : prev.filter((r) => r.type === "result" && !r.success)
-                  .length,
+              ? prev.filter((r) => r.type === "result" && !r.success).length + 1
+              : prev.filter((r) => r.type === "result" && !r.success).length,
           },
         ]);
       }

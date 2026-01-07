@@ -1,8 +1,9 @@
 "use client";
 
-import {usePathname} from "next/navigation";
+import {usePathname, useRouter} from "next/navigation";
 import {useAuthStore} from "@/stores/authStore";
 import Link from "next/link";
+import {useState, useEffect} from "react";
 
 // 경로별 메뉴명 매핑
 const menuNames: {[key: string]: string} = {
@@ -21,7 +22,13 @@ export default function Header({
   isSidebarOpen = false,
 }: HeaderProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const {user, isAuthenticated, logout} = useAuthStore();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // 현재 경로에 맞는 메뉴명 가져오기
   const currentMenuName =
@@ -38,11 +45,16 @@ export default function Header({
       ? "상품 데이터 업로드"
       : pathname === "/header-aliases"
       ? "헤더 Alias 관리"
+      : pathname === "/users"
+      ? "회원 관리"
+      : pathname === "/vendors"
+      ? "납품업체 관리"
       : "홈");
 
   const handleLogout = () => {
     if (confirm("로그아웃 하시겠습니까?")) {
       logout();
+      router.push("/login");
     }
   };
 
@@ -90,7 +102,7 @@ export default function Header({
 
       {/* 우측: 사용자 정보 또는 로그인 버튼 */}
       <div className="flex items-center gap-4">
-        {isAuthenticated && user ? (
+        {mounted && isAuthenticated && user ? (
           <>
             <div className="flex items-center gap-3 text-sm">
               <div className="flex flex-col items-end">

@@ -1,16 +1,26 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
+import {getCompanyIdFromRequest} from "@/lib/company";
 
 export async function DELETE(request: NextRequest) {
   try {
+    // company_id 추출
+    const companyId = await getCompanyIdFromRequest(request);
+    if (!companyId) {
+      return NextResponse.json(
+        {success: false, error: "company_id가 필요합니다."},
+        {status: 400}
+      );
+    }
+
     // 먼저 request body에서 ids를 확인
     const body = await request.json().catch(() => ({}));
-    const { ids: bodyIds } = body;
+    const {ids: bodyIds} = body;
 
     // URL 쿼리 파라미터에서도 확인 (하위 호환성)
     const url = new URL(request.url);
-    const id = url.searchParams.get('id');
-    const ids = url.searchParams.get('ids')?.split(',').map(Number);
+    const id = url.searchParams.get("id");
+    const ids = url.searchParams.get("ids")?.split(",").map(Number);
 
     let targetIds: number[];
 
@@ -30,17 +40,17 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    if (targetIds.some(id => isNaN(id))) {
+    if (targetIds.some((id) => isNaN(id))) {
       return NextResponse.json(
         {success: false, error: "유효하지 않은 상품 ID입니다."},
         {status: 400}
       );
     }
 
-    // 여러 ID를 한 번에 삭제
+    // 여러 ID를 한 번에 삭제 (company_id 필터링)
     const result = await sql`
       DELETE FROM products
-      WHERE id = ANY(${targetIds}::int[])
+      WHERE id = ANY(${targetIds}::int[]) AND company_id = ${companyId}
       RETURNING id
     `;
 
@@ -64,4 +74,3 @@ export async function DELETE(request: NextRequest) {
     );
   }
 }
-

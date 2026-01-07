@@ -1,8 +1,18 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
+import {getCompanyIdFromRequest} from "@/lib/company";
 
 export async function PUT(request: NextRequest) {
   try {
+    // company_id 추출
+    const companyId = await getCompanyIdFromRequest(request);
+    if (!companyId) {
+      return NextResponse.json(
+        {success: false, error: "company_id가 필요합니다."},
+        {status: 400}
+      );
+    }
+
     const body = await request.json();
     const {rowId, codeData} = body;
 
@@ -13,11 +23,12 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // 기존 row_data 조회
+    // 기존 row_data 조회 (company_id 필터링)
     const existingRow = await sql`
-      SELECT row_data
-      FROM upload_rows
-      WHERE id = ${rowId}
+      SELECT ur.row_data
+      FROM upload_rows ur
+      INNER JOIN uploads u ON ur.upload_id = u.id
+      WHERE ur.id = ${rowId} AND u.company_id = ${companyId}
     `;
 
     if (existingRow.length === 0) {

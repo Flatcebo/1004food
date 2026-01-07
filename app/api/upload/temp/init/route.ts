@@ -64,6 +64,11 @@ export async function POST() {
                       WHERE table_name = 'temp_files' AND column_name = 'validation_status') THEN
           ALTER TABLE temp_files ADD COLUMN validation_status JSONB;
         END IF;
+        -- user_id 컬럼이 존재하지 않으면 추가
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                      WHERE table_name = 'temp_files' AND column_name = 'user_id') THEN
+          ALTER TABLE temp_files ADD COLUMN user_id VARCHAR(255);
+        END IF;
       END
       $$;
     `;

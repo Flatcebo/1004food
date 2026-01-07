@@ -1,5 +1,6 @@
 import {useState, useEffect, useCallback, useMemo} from "react";
 import {getTodayDate} from "@/utils/date";
+import {getAuthHeaders} from "@/utils/api";
 
 interface Filters {
   types: string[];
@@ -18,8 +19,8 @@ export function useUploadData() {
   });
   const [selectedType, setSelectedType] = useState<string>("");
   const [selectedPostType, setSelectedPostType] = useState<string>("");
-  const [selectedCompany, setSelectedCompany] = useState<string>("");
-  const [selectedVendor, setSelectedVendor] = useState<string>("");
+  const [selectedCompany, setSelectedCompany] = useState<string[]>([]);
+  const [selectedVendor, setSelectedVendor] = useState<string[]>([]);
   const [selectedOrderStatus, setSelectedOrderStatus] =
     useState<string>("공급중");
   const [searchField, setSearchField] = useState<string>("수취인명");
@@ -32,8 +33,8 @@ export function useUploadData() {
   // 실제 적용되는 필터 (검색 버튼 클릭 시 적용)
   const [appliedType, setAppliedType] = useState<string>("");
   const [appliedPostType, setAppliedPostType] = useState<string>("");
-  const [appliedCompany, setAppliedCompany] = useState<string>("");
-  const [appliedVendor, setAppliedVendor] = useState<string>("");
+  const [appliedCompany, setAppliedCompany] = useState<string[]>([]);
+  const [appliedVendor, setAppliedVendor] = useState<string[]>([]);
   const [appliedOrderStatus, setAppliedOrderStatus] =
     useState<string>("공급중");
   const [appliedSearchField, setAppliedSearchField] = useState<string>("");
@@ -57,8 +58,12 @@ export function useUploadData() {
       // 적용된 필터만 사용
       if (appliedType) params.append("type", appliedType);
       if (appliedPostType) params.append("postType", appliedPostType);
-      if (appliedCompany) params.append("company", appliedCompany);
-      if (appliedVendor) params.append("vendor", appliedVendor);
+      if (appliedCompany && appliedCompany.length > 0) {
+        appliedCompany.forEach((c) => params.append("company", c));
+      }
+      if (appliedVendor && appliedVendor.length > 0) {
+        appliedVendor.forEach((v) => params.append("vendor", v));
+      }
       if (appliedOrderStatus) params.append("orderStatus", appliedOrderStatus);
       // 적용된 검색 필드와 값만 사용
       if (appliedSearchField && appliedSearchValue) {
@@ -75,7 +80,9 @@ export function useUploadData() {
       params.append("page", currentPage.toString());
       params.append("limit", appliedItemsPerPage.toString());
 
-      const response = await fetch(`/api/upload/list?${params.toString()}`);
+      const response = await fetch(`/api/upload/list?${params.toString()}`, {
+        headers: getAuthHeaders(),
+      });
       const result = await response.json();
 
       if (result.success) {
@@ -115,6 +122,44 @@ export function useUploadData() {
     setAppliedUploadTimeTo(todayDate);
     setAppliedOrderStatus("공급중");
     setAppliedItemsPerPage(20);
+    
+    // 납품업체 grade인 경우 assigned_vendor_ids를 기본값으로 설정
+    const loadUserVendors = async () => {
+      try {
+        const stored = localStorage.getItem("auth-storage");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          const user = parsed.state?.user;
+          if (user?.grade === "납품업체" && user?.assignedVendorIds && user.assignedVendorIds.length > 0) {
+            // vendors API를 호출하여 ID를 이름으로 변환
+            const headers: HeadersInit = {};
+            if (user?.companyId) {
+              headers["company-id"] = user.companyId.toString();
+            }
+            const vendorsResponse = await fetch("/api/vendors", {
+              headers,
+            });
+            const vendorsResult = await vendorsResponse.json();
+            
+            if (vendorsResult.success && vendorsResult.data) {
+              const vendorNames = vendorsResult.data
+                .filter((v: any) => user.assignedVendorIds.includes(v.id))
+                .map((v: any) => v.name);
+              
+              if (vendorNames.length > 0) {
+                setSelectedVendor(vendorNames);
+                setAppliedVendor(vendorNames);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error("유저 vendors 로드 실패:", error);
+      }
+    };
+    
+    loadUserVendors();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // 필터 변경 시 첫 페이지로 이동하고 데이터 조회
@@ -267,8 +312,8 @@ export function useUploadData() {
   const resetFilters = useCallback(() => {
     setSelectedType("");
     setSelectedPostType("");
-    setSelectedCompany("");
-    setSelectedVendor("");
+    setSelectedCompany([]);
+    setSelectedVendor([]);
     setSelectedOrderStatus("공급중");
     setSearchField("수취인명");
     setSearchValue("");
@@ -277,8 +322,8 @@ export function useUploadData() {
     setItemsPerPage(20);
     setAppliedType("");
     setAppliedPostType("");
-    setAppliedCompany("");
-    setAppliedVendor("");
+    setAppliedCompany([]);
+    setAppliedVendor([]);
     setAppliedOrderStatus("공급중");
     setAppliedSearchField("");
     setAppliedSearchValue("");

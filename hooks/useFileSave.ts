@@ -607,12 +607,30 @@ export function useFileSave({
             ...updatedProductIdMap,
           };
 
+          // company-id 헤더 포함
+          const headers: HeadersInit = {
+            "Content-Type": "application/json",
+          };
+
+          if (typeof window !== "undefined") {
+            try {
+              const stored = localStorage.getItem("auth-storage");
+              if (stored) {
+                const parsed = JSON.parse(stored);
+                const user = parsed.state?.user;
+                if (user?.companyId) {
+                  headers["company-id"] = user.companyId.toString();
+                }
+              }
+            } catch (e) {
+              console.error("인증 정보 로드 실패:", e);
+            }
+          }
+
           // 서버에 파일 업데이트 및 확인 상태 설정
           const updateResponse = await fetch("/api/upload/temp/update", {
             method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-            },
+            headers,
             body: JSON.stringify({
               fileId: fileData.id,
               tableData: fileData.tableData,
@@ -636,12 +654,30 @@ export function useFileSave({
 
         await Promise.all(updatePromises);
 
+        // company-id 헤더 포함
+        const confirmHeaders: HeadersInit = {
+          "Content-Type": "application/json",
+        };
+
+        if (typeof window !== "undefined") {
+          try {
+            const stored = localStorage.getItem("auth-storage");
+            if (stored) {
+              const parsed = JSON.parse(stored);
+              const user = parsed.state?.user;
+              if (user?.companyId) {
+                confirmHeaders["company-id"] = user.companyId.toString();
+              }
+            }
+          } catch (e) {
+            console.error("인증 정보 로드 실패:", e);
+          }
+        }
+
         // 확인된 파일들을 정식으로 저장
         const response = await fetch("/api/upload/temp/confirm", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: confirmHeaders,
           body: JSON.stringify({}),
         });
 

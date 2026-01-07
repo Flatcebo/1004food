@@ -1,9 +1,19 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
 import stringSimilarity from "string-similarity";
+import {getCompanyIdFromRequest} from "@/lib/company";
 
 export async function POST(request: NextRequest) {
   try {
+    // company_id 추출
+    const companyId = await getCompanyIdFromRequest(request);
+    if (!companyId) {
+      return NextResponse.json(
+        {success: false, error: "company_id가 필요합니다."},
+        {status: 400}
+      );
+    }
+
     const body = await request.json();
     const {productName} = body;
 
@@ -16,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     const searchTerm = productName.trim();
 
-    // 모든 상품 조회
+    // company_id로 필터링된 상품 조회
     const allProducts = await sql`
       SELECT 
         id,
@@ -35,6 +45,7 @@ export async function POST(request: NextRequest) {
         sabang_name as "sabangName",
         etc
       FROM products
+      WHERE company_id = ${companyId}
     `;
 
     if (allProducts.length === 0) {

@@ -490,11 +490,32 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     const sessionId = selectedSessionId || (await getCurrentSessionId());
 
     try {
+      // company-id, user-id 헤더 포함
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      };
+
+      if (typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem("auth-storage");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            const user = parsed.state?.user;
+            if (user?.companyId) {
+              headers["company-id"] = user.companyId.toString();
+            }
+            if (user?.id) {
+              headers["user-id"] = user.id;
+            }
+          }
+        } catch (e) {
+          console.error("인증 정보 로드 실패:", e);
+        }
+      }
+
       const response = await fetch("/api/upload/temp/save", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers,
         body: JSON.stringify({
           files: uploadedFiles,
           sessionId: sessionId,
@@ -539,8 +560,32 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
         : selectedSessionId || (await getCurrentSessionId());
 
     try {
+      // company-id, user-id 헤더 포함
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      };
+
+      if (typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem("auth-storage");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            const user = parsed.state?.user;
+            if (user?.companyId) {
+              headers["company-id"] = user.companyId.toString();
+            }
+            if (user?.id) {
+              headers["user-id"] = user.id;
+            }
+          }
+        } catch (e) {
+          console.error("인증 정보 로드 실패:", e);
+        }
+      }
+
       const response = await fetch(
-        `/api/upload/temp/list?sessionId=${sessionId}`
+        `/api/upload/temp/list?sessionId=${sessionId}`,
+        {headers}
       );
 
       // 응답 상태 확인
@@ -1326,7 +1371,27 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
   },
   checkForDuplicateFileName: async (fileName: string): Promise<boolean> => {
     try {
-      const response = await fetch("/api/upload/temp/list");
+      // company-id 헤더 포함
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      };
+
+      if (typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem("auth-storage");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            const user = parsed.state?.user;
+            if (user?.companyId) {
+              headers["company-id"] = user.companyId.toString();
+            }
+          }
+        } catch (e) {
+          console.error("인증 정보 로드 실패:", e);
+        }
+      }
+
+      const response = await fetch("/api/upload/temp/list", {headers});
       const result = await response.json();
 
       if (result.success && result.data) {
@@ -1367,7 +1432,15 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
         .updateLoadingMessage("서버에 저장하고 있습니다...");
 
       // 서버에 저장
-      await get().saveFilesToServer();
+      const saveSuccess = await get().saveFilesToServer();
+
+      // 저장 성공 후 파일 목록 다시 불러오기
+      if (saveSuccess) {
+        useLoadingStore
+          .getState()
+          .updateLoadingMessage("파일 목록을 불러오고 있습니다...");
+        await get().loadFilesFromServer();
+      }
     } catch (error: any) {
       console.error("파일 처리 실패:", error);
       // alert(`파일 처리 실패: ${error.message}`);
@@ -1449,7 +1522,15 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
           .updateLoadingMessage("서버에 저장하고 있습니다...");
 
         // 서버에 저장
-        await get().saveFilesToServer();
+        const saveSuccess = await get().saveFilesToServer();
+
+        // 저장 성공 후 파일 목록 다시 불러오기
+        if (saveSuccess) {
+          useLoadingStore
+            .getState()
+            .updateLoadingMessage("파일 목록을 불러오고 있습니다...");
+          await get().loadFilesFromServer();
+        }
       }
     } catch (error: any) {
       console.error("파일 처리 실패:", error);

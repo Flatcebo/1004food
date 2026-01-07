@@ -9,6 +9,34 @@ import type {
 } from "@/types/api";
 
 /**
+ * 인증된 API 요청을 위한 헤더 생성
+ * localStorage에서 사용자 정보를 가져와 company_id를 헤더에 추가
+ */
+export function getAuthHeaders(): HeadersInit {
+  const headers: HeadersInit = {
+    "Content-Type": "application/json",
+  };
+
+  // 클라이언트 사이드에서만 실행
+  if (typeof window !== "undefined") {
+    try {
+      const stored = localStorage.getItem("auth-storage");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        const user = parsed.state?.user;
+        if (user?.companyId) {
+          headers["company-id"] = user.companyId.toString();
+        }
+      }
+    } catch (e) {
+      console.error("인증 정보 로드 실패:", e);
+    }
+  }
+
+  return headers;
+}
+
+/**
  * API 호출 래퍼 함수
  */
 export async function apiCall<T = any>(
@@ -16,10 +44,11 @@ export async function apiCall<T = any>(
   options?: RequestInit
 ): Promise<ApiResponse<T>> {
   try {
+    const authHeaders = getAuthHeaders();
     const response = await fetch(url, {
       ...options,
       headers: {
-        "Content-Type": "application/json",
+        ...authHeaders,
         ...options?.headers,
       },
     });
@@ -114,5 +143,23 @@ export async function searchPurchase(
   return apiCall<PurchaseOption[]>("/api/purchase/search", {
     method: "POST",
     body: JSON.stringify({query}),
+  });
+}
+
+/**
+ * 인증된 fetch 요청
+ */
+export async function authenticatedFetch(
+  url: string,
+  options: RequestInit = {}
+): Promise<Response> {
+  const headers = getAuthHeaders();
+  
+  return fetch(url, {
+    ...options,
+    headers: {
+      ...headers,
+      ...options.headers,
+    },
   });
 }

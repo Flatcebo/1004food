@@ -1,27 +1,32 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
 import {checkFileValidation} from "@/utils/fileValidation";
+import {getCompanyIdFromRequest, getUserIdFromRequest} from "@/lib/company";
 
-// 중복 파일명 체크 함수 (세션별)
+// 중복 파일명 체크 함수 (세션별, company_id 필터링)
 async function checkDuplicateFileName(
   fileName: string,
-  sessionId: string
+  sessionId: string,
+  companyId: number
 ): Promise<boolean> {
   try {
     const existingFiles = await sql`
       SELECT file_name FROM temp_files
-      WHERE file_name = ${fileName} AND COALESCE(session_id, 'default-session') = ${sessionId}
+      WHERE file_name = ${fileName} 
+        AND COALESCE(session_id, 'default-session') = ${sessionId}
+        AND company_id = ${companyId}
     `;
 
     return existingFiles.length > 0;
   } catch (error: any) {
-    // session_id 컬럼이 없으면 파일명만으로 체크
+    // session_id 컬럼이 없으면 파일명과 company_id만으로 체크
     if (
       error.message &&
       error.message.includes('column "session_id" does not exist')
     ) {
       const existingFiles = await sql`
-        SELECT file_name FROM temp_files WHERE file_name = ${fileName}
+        SELECT file_name FROM temp_files 
+        WHERE file_name = ${fileName} AND company_id = ${companyId}
       `;
       return existingFiles.length > 0;
     }
@@ -31,6 +36,18 @@ async function checkDuplicateFileName(
 
 export async function POST(request: NextRequest) {
   try {
+    // company_id 추출
+    const companyId = await getCompanyIdFromRequest(request);
+    if (!companyId) {
+      return NextResponse.json(
+        {success: false, error: "company_id가 필요합니다."},
+        {status: 400}
+      );
+    }
+
+    // user_id 추출
+    const userId = await getUserIdFromRequest(request);
+
     const body = await request.json();
     const {files, sessionId} = body;
 
@@ -63,6 +80,7 @@ export async function POST(request: NextRequest) {
         productCodeMap,
         productIdMap,
         vendorName,
+        userId: fileUserId,
       } = file;
 
       if (!id || !fileName || !tableData) {
@@ -70,15 +88,22 @@ export async function POST(request: NextRequest) {
         return null;
       }
 
+      // 파일 객체의 userId가 있으면 우선 사용, 없으면 헤더의 userId 사용
+      const finalUserId = fileUserId || userId;
+
       try {
         // 같은 file_id가 이미 존재하는지 확인 (업데이트인 경우)
         const existingFile = await sql`
           SELECT file_id FROM temp_files WHERE file_id = ${id}
         `;
 
-        // 같은 file_id가 없으면 중복 파일명 체크 (세션별)
+        // 같은 file_id가 없으면 중복 파일명 체크 (세션별, company_id 필터링)
         if (existingFile.length === 0) {
-          const isDuplicate = await checkDuplicateFileName(fileName, sessionId);
+          const isDuplicate = await checkDuplicateFileName(
+            fileName,
+            sessionId,
+            companyId
+          );
 
           if (isDuplicate) {
             console.log(`❌ 중복 파일명 감지로 저장 거부: "${fileName}"`);
@@ -100,7 +125,7 @@ export async function POST(request: NextRequest) {
           productCodeMap,
         });
 
-        // validation_status 컬럼이 없으면 추가
+        // validation_status, user_id 컬럼이 없으면 추가
         try {
           await sql`
             DO $$
@@ -117,6 +142,10 @@ export async function POST(request: NextRequest) {
                             WHERE table_name = 'temp_files' AND column_name = 'product_id_map') THEN
                 ALTER TABLE temp_files ADD COLUMN product_id_map JSONB;
               END IF;
+              IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                            WHERE table_name = 'temp_files' AND column_name = 'user_id') THEN
+                ALTER TABLE temp_files ADD COLUMN user_id VARCHAR(255);
+              END IF;
             END
             $$;
           `;
@@ -130,7 +159,7 @@ export async function POST(request: NextRequest) {
         try {
           result = await sql`
             INSERT INTO temp_files (
-              file_id, file_name, session_id, row_count,
+              file_id, file_name, session_id, company_id, user_id, row_count,
               table_data, header_index, product_code_map, product_id_map,
               validation_status, vendor_name, created_at, updated_at
             )
@@ -138,6 +167,8 @@ export async function POST(request: NextRequest) {
               ${id},
               ${fileName},
               ${sessionId},
+              ${companyId},
+              ${userId || null},
               ${rowCount},
               ${JSON.stringify(tableData)},
               ${JSON.stringify(headerIndex || {})},
@@ -151,6 +182,8 @@ export async function POST(request: NextRequest) {
             ON CONFLICT (file_id) DO UPDATE SET
               file_name = EXCLUDED.file_name,
               session_id = EXCLUDED.session_id,
+              company_id = EXCLUDED.company_id,
+              user_id = EXCLUDED.user_id,
               row_count = EXCLUDED.row_count,
               table_data = EXCLUDED.table_data,
               header_index = EXCLUDED.header_index,
@@ -162,22 +195,34 @@ export async function POST(request: NextRequest) {
             RETURNING id, created_at
           `;
         } catch (error: any) {
-          // validation_status 컬럼이 없으면 다시 시도 (컬럼 추가 후)
+          // validation_status 또는 user_id 컬럼이 없으면 다시 시도 (컬럼 추가 후)
           if (
             error.message &&
-            error.message.includes('column "validation_status" does not exist')
+            (error.message.includes(
+              'column "validation_status" does not exist'
+            ) ||
+              error.message.includes('column "user_id" does not exist'))
           ) {
             // 컬럼 추가 시도
             try {
-              await sql`ALTER TABLE temp_files ADD COLUMN validation_status JSONB`;
+              if (
+                error.message.includes(
+                  'column "validation_status" does not exist'
+                )
+              ) {
+                await sql`ALTER TABLE temp_files ADD COLUMN validation_status JSONB`;
+              }
+              if (error.message.includes('column "user_id" does not exist')) {
+                await sql`ALTER TABLE temp_files ADD COLUMN user_id VARCHAR(255)`;
+              }
             } catch (addError: any) {
               // 이미 존재할 수 있음
-              console.log("validation_status 컬럼 추가:", addError.message);
+              console.log("컬럼 추가:", addError.message);
             }
             // 다시 저장 시도
             result = await sql`
               INSERT INTO temp_files (
-                file_id, file_name, session_id, row_count,
+                file_id, file_name, session_id, company_id, user_id, row_count,
                 table_data, header_index, product_code_map, product_id_map,
                 validation_status, vendor_name, created_at, updated_at
               )
@@ -185,6 +230,8 @@ export async function POST(request: NextRequest) {
                 ${id},
                 ${fileName},
                 ${sessionId},
+                ${companyId},
+                ${finalUserId || null},
                 ${rowCount},
                 ${JSON.stringify(tableData)},
                 ${JSON.stringify(headerIndex || {})},
@@ -198,6 +245,8 @@ export async function POST(request: NextRequest) {
               ON CONFLICT (file_id) DO UPDATE SET
                 file_name = EXCLUDED.file_name,
                 session_id = EXCLUDED.session_id,
+                company_id = EXCLUDED.company_id,
+                user_id = EXCLUDED.user_id,
                 row_count = EXCLUDED.row_count,
                 table_data = EXCLUDED.table_data,
                 header_index = EXCLUDED.header_index,
@@ -212,38 +261,90 @@ export async function POST(request: NextRequest) {
             error.message &&
             error.message.includes('column "session_id" does not exist')
           ) {
-            // session_id 컬럼이 없으면 session_id 없이 저장
-            result = await sql`
-              INSERT INTO temp_files (
-                file_id, file_name, row_count,
-                table_data, header_index, product_code_map, product_id_map,
-                validation_status, vendor_name, created_at, updated_at
-              )
-              VALUES (
+            // session_id 컬럼이 없으면 session_id 없이 저장 (company_id, user_id는 포함)
+            // user_id 컬럼이 있는지 확인
+            let hasUserIdColumn = true;
+            try {
+              const columnCheck = await sql`
+                SELECT 1 FROM information_schema.columns
+                WHERE table_name = 'temp_files' AND column_name = 'user_id'
+              `;
+              hasUserIdColumn = columnCheck.length > 0;
+            } catch (e) {
+              hasUserIdColumn = false;
+            }
+
+            if (hasUserIdColumn) {
+              result = await sql`
+                INSERT INTO temp_files (
+                  file_id, file_name, company_id, user_id, row_count,
+                  table_data, header_index, product_code_map, product_id_map,
+                  validation_status, vendor_name, created_at, updated_at
+                )
+                VALUES (
                 ${id},
                 ${fileName},
+                ${companyId},
+                ${finalUserId || null},
                 ${rowCount},
-                ${JSON.stringify(tableData)},
-                ${JSON.stringify(headerIndex || {})},
-                ${JSON.stringify(productCodeMap || {})},
-                ${JSON.stringify(productIdMap || {})},
-                ${JSON.stringify(validationResult)},
-                ${vendorName || null},
-                ${now.toISOString()}::timestamp,
-                ${now.toISOString()}::timestamp
-              )
-              ON CONFLICT (file_id) DO UPDATE SET
-                file_name = EXCLUDED.file_name,
-                row_count = EXCLUDED.row_count,
-                table_data = EXCLUDED.table_data,
-                header_index = EXCLUDED.header_index,
-                product_code_map = EXCLUDED.product_code_map,
-                product_id_map = EXCLUDED.product_id_map,
-                validation_status = EXCLUDED.validation_status,
-                vendor_name = EXCLUDED.vendor_name,
-                updated_at = ${now.toISOString()}::timestamp
-              RETURNING id, created_at
-            `;
+                  ${JSON.stringify(tableData)},
+                  ${JSON.stringify(headerIndex || {})},
+                  ${JSON.stringify(productCodeMap || {})},
+                  ${JSON.stringify(productIdMap || {})},
+                  ${JSON.stringify(validationResult)},
+                  ${vendorName || null},
+                  ${now.toISOString()}::timestamp,
+                  ${now.toISOString()}::timestamp
+                )
+                ON CONFLICT (file_id) DO UPDATE SET
+                  file_name = EXCLUDED.file_name,
+                  company_id = EXCLUDED.company_id,
+                  user_id = EXCLUDED.user_id,
+                  row_count = EXCLUDED.row_count,
+                  table_data = EXCLUDED.table_data,
+                  header_index = EXCLUDED.header_index,
+                  product_code_map = EXCLUDED.product_code_map,
+                  product_id_map = EXCLUDED.product_id_map,
+                  validation_status = EXCLUDED.validation_status,
+                  vendor_name = EXCLUDED.vendor_name,
+                  updated_at = ${now.toISOString()}::timestamp
+                RETURNING id, created_at
+              `;
+            } else {
+              result = await sql`
+                INSERT INTO temp_files (
+                  file_id, file_name, company_id, row_count,
+                  table_data, header_index, product_code_map, product_id_map,
+                  validation_status, vendor_name, created_at, updated_at
+                )
+                VALUES (
+                  ${id},
+                  ${fileName},
+                  ${companyId},
+                  ${rowCount},
+                  ${JSON.stringify(tableData)},
+                  ${JSON.stringify(headerIndex || {})},
+                  ${JSON.stringify(productCodeMap || {})},
+                  ${JSON.stringify(productIdMap || {})},
+                  ${JSON.stringify(validationResult)},
+                  ${vendorName || null},
+                  ${now.toISOString()}::timestamp,
+                  ${now.toISOString()}::timestamp
+                )
+                ON CONFLICT (file_id) DO UPDATE SET
+                  file_name = EXCLUDED.file_name,
+                  company_id = EXCLUDED.company_id,
+                  row_count = EXCLUDED.row_count,
+                  table_data = EXCLUDED.table_data,
+                  header_index = EXCLUDED.header_index,
+                  product_code_map = EXCLUDED.product_code_map,
+                  product_id_map = EXCLUDED.product_id_map,
+                  validation_status = EXCLUDED.validation_status,
+                  vendor_name = EXCLUDED.vendor_name,
+                  updated_at = ${now.toISOString()}::timestamp
+                RETURNING id, created_at
+              `;
+            }
           } else {
             throw error;
           }

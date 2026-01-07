@@ -1,8 +1,18 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
+import {getCompanyIdFromRequest} from "@/lib/company";
 
 export async function POST(request: NextRequest) {
   try {
+    // company_id 추출
+    const companyId = await getCompanyIdFromRequest(request);
+    if (!companyId) {
+      return NextResponse.json(
+        {success: false, error: "company_id가 필요합니다."},
+        {status: 400}
+      );
+    }
+
     const {deliveryData} = await request.json();
 
     if (!deliveryData || !Array.isArray(deliveryData)) {
@@ -19,9 +29,12 @@ export async function POST(request: NextRequest) {
       for (const item of deliveryData) {
         const {id, carrier, trackingNumber, orderStatus} = item;
 
-        // 현재 row_data 가져오기
+        // 현재 row_data 가져오기 (company_id 필터링)
         const currentRow = await sql`
-          SELECT row_data FROM upload_rows WHERE id = ${id}
+          SELECT ur.row_data 
+          FROM upload_rows ur
+          INNER JOIN uploads u ON ur.upload_id = u.id
+          WHERE ur.id = ${id} AND u.company_id = ${companyId}
         `;
 
         if (currentRow.length === 0) {
@@ -39,9 +52,12 @@ export async function POST(request: NextRequest) {
         };
 
         await sql`
-          UPDATE upload_rows
+          UPDATE upload_rows ur
           SET row_data = ${JSON.stringify(updatedData)}
-          WHERE id = ${id}
+          FROM uploads u
+          WHERE ur.upload_id = u.id 
+            AND ur.id = ${id}
+            AND u.company_id = ${companyId}
         `;
       }
 

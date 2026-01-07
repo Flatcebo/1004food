@@ -1,0 +1,197 @@
+"use client";
+
+import {useEffect, useState} from "react";
+
+interface Option {
+  value: string | number;
+  label: string;
+}
+
+interface MultiSelectDropdownProps {
+  label: string;
+  options: string[] | Option[];
+  selectedValues: (string | number)[];
+  onChange: (values: (string | number)[]) => void;
+  placeholder?: string;
+  className?: string;
+  showSelectedTags?: boolean;
+}
+
+export default function MultiSelectDropdown({
+  label,
+  options,
+  selectedValues,
+  onChange,
+  placeholder = "전체",
+  className = "",
+  showSelectedTags = false,
+}: MultiSelectDropdownProps) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  // 드롭다운 외부 클릭 시 닫기
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (
+        !target.closest(`.multi-select-dropdown-${label.replace(/\s+/g, "-")}`)
+      ) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [label]);
+
+  const toggleDropdown = () => {
+    setIsOpen(!isOpen);
+  };
+
+  // options가 string[]인지 Option[]인지 확인하고 정규화
+  const normalizedOptions: Option[] = options.map((opt: string | Option) => {
+    if (typeof opt === "string") {
+      return {value: opt, label: opt};
+    }
+    return opt;
+  });
+
+  const handleToggleOption = (optionValue: string | number) => {
+    // 타입 안전한 비교를 위해 모든 값을 문자열로 변환하여 비교
+    const normalizedSelected = selectedValues.map((v) => String(v));
+    const normalizedValue = String(optionValue);
+
+    if (normalizedSelected.includes(normalizedValue)) {
+      // 제거: 원본 타입 유지하면서 필터링
+      onChange(selectedValues.filter((v) => String(v) !== normalizedValue));
+    } else {
+      // 추가: 원본 타입 유지하면서 추가
+      onChange([...selectedValues, optionValue]);
+    }
+  };
+
+  // 체크박스 체크 상태 확인 (타입 안전)
+  const isOptionSelected = (optionValue: string | number) => {
+    return selectedValues.some((v) => String(v) === String(optionValue));
+  };
+
+  // 선택된 값들의 라벨 찾기
+  const getSelectedLabels = () => {
+    return selectedValues
+      .map((val) => {
+        const option = normalizedOptions.find((opt) => opt.value === val);
+        return option ? option.label : String(val);
+      })
+      .filter(Boolean);
+  };
+
+  const selectedLabels = getSelectedLabels();
+  const displayText =
+    selectedValues.length === 0
+      ? placeholder
+      : selectedValues.length === 1
+      ? selectedLabels[0] || String(selectedValues[0])
+      : `${selectedValues.length}개 선택됨`;
+
+  return (
+    <div
+      className={`text-sm font-medium multi-select-dropdown-${label.replace(
+        /\s+/g,
+        "-"
+      )} relative ${
+        showSelectedTags ? "flex flex-col" : "flex items-center"
+      } ${className}`}
+    >
+      <div className={`flex items-center ${showSelectedTags ? "mb-2" : ""}`}>
+        <label className="mr-0">{label} :</label>
+        <div className={`relative ml-2 ${showSelectedTags ? "flex-1" : ""}`}>
+          <button
+            type="button"
+            className={`px-2 py-1 border border-gray-300 rounded bg-white text-left ${
+              showSelectedTags ? "w-full" : "min-w-[150px]"
+            } flex items-center justify-between hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500`}
+            onClick={toggleDropdown}
+          >
+            <span className="truncate">{displayText}</span>
+            <svg
+              className={`w-4 h-4 ml-2 transition-transform ${
+                isOpen ? "rotate-180" : ""
+              }`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 9l-7 7-7-7"
+              />
+            </svg>
+          </button>
+          {isOpen && (
+            <div className="absolute z-9999 mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-48 overflow-y-auto min-w-[150px]">
+              {normalizedOptions && normalizedOptions.length > 0 ? (
+                normalizedOptions.map((option) => {
+                  const isChecked = isOptionSelected(option.value);
+                  return (
+                    <div
+                      key={String(option.value)}
+                      className="flex items-center px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleOption(option.value);
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        readOnly
+                        className="mr-2 pointer-events-none"
+                      />
+                      <span className="text-sm">{option.label}</span>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="px-3 py-2 text-sm text-gray-500">
+                  옵션이 없습니다
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+      {/* 선택된 항목들 표시 */}
+      {showSelectedTags && selectedValues.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {selectedValues.map((value) => {
+            const option = normalizedOptions.find(
+              (opt) => String(opt.value) === String(value)
+            );
+            const label = option ? option.label : String(value);
+            return (
+              <span
+                key={String(value)}
+                className="inline-flex items-center px-2 py-1 rounded-md bg-blue-100 text-blue-800 text-xs"
+              >
+                {label}
+                <button
+                  type="button"
+                  onClick={() => {
+                    onChange(
+                      selectedValues.filter((v) => String(v) !== String(value))
+                    );
+                  }}
+                  className="ml-1 text-blue-600 hover:text-blue-800"
+                >
+                  ×
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -8,6 +8,7 @@ import RowDetailWindow from "./RowDetailWindow";
 import Pagination from "./Pagination";
 import ActiveFilters from "./ActiveFilters";
 import {getColumnWidth} from "@/utils/table";
+import {getAuthHeaders} from "@/utils/api";
 
 interface SavedDataTableProps {
   loading: boolean;
@@ -22,13 +23,13 @@ interface SavedDataTableProps {
   // 필터 정보
   selectedType?: string;
   selectedPostType?: string;
-  selectedCompany?: string;
-  selectedVendor?: string;
+  selectedCompany?: string[];
+  selectedVendor?: string[];
   selectedOrderStatus?: string;
   appliedType?: string;
   appliedPostType?: string;
-  appliedCompany?: string;
-  appliedVendor?: string;
+  appliedCompany?: string[];
+  appliedVendor?: string[];
   appliedOrderStatus?: string;
   appliedSearchField?: string;
   appliedSearchValue?: string;
@@ -54,13 +55,13 @@ const SavedDataTable = memo(function SavedDataTable({
   onDataUpdate,
   selectedType = "",
   selectedPostType = "",
-  selectedCompany = "",
-  selectedVendor = "",
+  selectedCompany = [],
+  selectedVendor = [],
   selectedOrderStatus = "",
   appliedType = "",
   appliedPostType = "",
-  appliedCompany = "",
-  appliedVendor = "",
+  appliedCompany = [] as string[],
+  appliedVendor = [] as string[],
   appliedOrderStatus = "",
   appliedSearchField = "",
   appliedSearchValue = "",
@@ -308,7 +309,10 @@ const SavedDataTable = memo(function SavedDataTable({
   useEffect(() => {
     const fetchTemplates = async () => {
       try {
-        const response = await fetch("/api/upload/template");
+        const headers = getAuthHeaders();
+        const response = await fetch("/api/upload/template", {
+          headers,
+        });
         const result = await response.json();
         if (result.success && result.templates.length > 0) {
           const sortedTemplates = result.templates.sort((a: any, b: any) => {
@@ -428,11 +432,10 @@ const SavedDataTable = memo(function SavedDataTable({
         ? "/api/upload/download-sabangnet"
         : "/api/upload/download";
 
+      const headers = getAuthHeaders();
       const response = await fetch(apiUrl, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers,
         body: JSON.stringify({
           templateId: selectedTemplate,
           rowIds: rowIdsToDownload,
@@ -609,11 +612,29 @@ const SavedDataTable = memo(function SavedDataTable({
         }));
 
         try {
+          // company-id 헤더 포함
+          const headers: HeadersInit = {
+            "Content-Type": "application/json",
+          };
+
+          if (typeof window !== "undefined") {
+            try {
+              const stored = localStorage.getItem("auth-storage");
+              if (stored) {
+                const parsed = JSON.parse(stored);
+                const user = parsed.state?.user;
+                if (user?.companyId) {
+                  headers["company-id"] = user.companyId.toString();
+                }
+              }
+            } catch (e) {
+              console.error("인증 정보 로드 실패:", e);
+            }
+          }
+
           const response = await fetch("/api/upload/update-delivery", {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
+            headers,
             body: JSON.stringify({
               deliveryData: batch,
             }),
@@ -753,11 +774,29 @@ const SavedDataTable = memo(function SavedDataTable({
 
     setIsCanceling(true);
     try {
+      // company-id 헤더 포함
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      };
+
+      if (typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem("auth-storage");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            const user = parsed.state?.user;
+            if (user?.companyId) {
+              headers["company-id"] = user.companyId.toString();
+            }
+          }
+        } catch (e) {
+          console.error("인증 정보 로드 실패:", e);
+        }
+      }
+
       const response = await fetch("/api/upload/cancel", {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers,
         body: JSON.stringify({
           rowIds: Array.from(selectedRows),
         }),
@@ -799,11 +838,29 @@ const SavedDataTable = memo(function SavedDataTable({
 
     setIsDeleting(true);
     try {
+      // company-id 헤더 포함
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      };
+
+      if (typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem("auth-storage");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            const user = parsed.state?.user;
+            if (user?.companyId) {
+              headers["company-id"] = user.companyId.toString();
+            }
+          }
+        } catch (e) {
+          console.error("인증 정보 로드 실패:", e);
+        }
+      }
+
       const response = await fetch("/api/upload/delete", {
         method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers,
         body: JSON.stringify({
           rowIds: Array.from(selectedRows),
         }),
@@ -1413,18 +1470,18 @@ const SavedDataTable = memo(function SavedDataTable({
         value: selectedPostType,
       });
     }
-    if (selectedCompany) {
+    if (selectedCompany && selectedCompany.length > 0) {
       filters.push({
         type: "company",
         label: "업체명",
-        value: selectedCompany,
+        value: selectedCompany.join(", "),
       });
     }
-    if (selectedVendor) {
+    if (selectedVendor && selectedVendor.length > 0) {
       filters.push({
         type: "vendor",
         label: "업체명",
-        value: selectedVendor,
+        value: selectedVendor.join(", "),
       });
     }
     if (selectedOrderStatus) {

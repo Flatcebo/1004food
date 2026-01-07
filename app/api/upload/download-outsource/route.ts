@@ -1,5 +1,6 @@
 import sql from "@/lib/db";
 import {NextRequest, NextResponse} from "next/server";
+import {getCompanyIdFromRequest} from "@/lib/company";
 import * as Excel from "exceljs";
 import {mapDataToTemplate, sortExcelData} from "@/utils/excelDataMapping";
 import JSZip from "jszip";
@@ -71,11 +72,20 @@ export async function POST(request: NextRequest) {
 
     // console.log("rows", rows);
 
-    // 템플릿 정보 조회
+    // company_id 추출
+    const companyId = await getCompanyIdFromRequest(request);
+    if (!companyId) {
+      return NextResponse.json(
+        {success: false, error: "company_id가 필요합니다."},
+        {status: 400}
+      );
+    }
+
+    // 템플릿 정보 조회 (company_id 필터링)
     const templateResult = await sql`
             SELECT template_data
             FROM upload_templates
-            WHERE id = ${templateId}
+            WHERE id = ${templateId} AND company_id = ${companyId}
           `;
 
     if (!templateResult.length) {

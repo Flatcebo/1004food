@@ -95,12 +95,30 @@ export default function CodeEditWindow({
         onCodeUpdate(rowId, codeItem.code, codeItem);
         onClose();
       } else {
+        // company-id 헤더 포함
+        const headers: HeadersInit = {
+          "Content-Type": "application/json",
+        };
+
+        if (typeof window !== "undefined") {
+          try {
+            const stored = localStorage.getItem("auth-storage");
+            if (stored) {
+              const parsed = JSON.parse(stored);
+              const user = parsed.state?.user;
+              if (user?.companyId) {
+                headers["company-id"] = user.companyId.toString();
+              }
+            }
+          } catch (e) {
+            console.error("인증 정보 로드 실패:", e);
+          }
+        }
+
         // 기존 API 호출 로직
         const response = await fetch("/api/upload/update-code", {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers,
           body: JSON.stringify({
             rowId,
             codeData: {

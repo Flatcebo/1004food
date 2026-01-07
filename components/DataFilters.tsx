@@ -11,8 +11,8 @@ interface DataFiltersProps {
   };
   selectedType: string;
   selectedPostType: string;
-  selectedCompany: string;
-  selectedVendor: string;
+  selectedCompany: string[];
+  selectedVendor: string[];
   selectedOrderStatus: string;
   searchField: string;
   searchValue: string;
@@ -21,8 +21,8 @@ interface DataFiltersProps {
   itemsPerPage: number;
   onTypeChange: (type: string) => void;
   onPostTypeChange: (postType: string) => void;
-  onCompanyChange: (company: string) => void;
-  onVendorChange: (vendor: string) => void;
+  onCompanyChange: (companies: string[]) => void;
+  onVendorChange: (vendors: string[]) => void;
   onOrderStatusChange: (status: string) => void;
   onSearchFieldChange: (field: string) => void;
   onSearchValueChange: (value: string) => void;

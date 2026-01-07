@@ -1,5 +1,6 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
+import {getCompanyIdFromRequest} from "@/lib/company";
 import * as XLSX from "xlsx";
 
 // 한국 시간(KST, UTC+9)을 반환하는 함수
@@ -14,6 +15,15 @@ function getKoreaTime(): Date {
 // 양식 템플릿 저장
 export async function POST(request: NextRequest) {
   try {
+    // company_id 추출
+    const companyId = await getCompanyIdFromRequest(request);
+    if (!companyId) {
+      return NextResponse.json(
+        {success: false, error: "company_id가 필요합니다."},
+        {status: 400}
+      );
+    }
+
     const formData = await request.formData();
     const file = formData.get("file") as File;
     const templateName = formData.get("templateName") as string;
@@ -97,10 +107,10 @@ export async function POST(request: NextRequest) {
     // DB에 템플릿 저장 (템플릿 테이블이 필요함)
     // 임시로 JSON으로 저장
     const result = await sql`
-      INSERT INTO upload_templates (name, template_data, created_at)
+      INSERT INTO upload_templates (name, template_data, company_id, created_at)
       VALUES (${templateData.name}, ${JSON.stringify(
       templateData
-    )}, ${koreaTime.toISOString()}::timestamp)
+    )}, ${companyId}, ${koreaTime.toISOString()}::timestamp)
       RETURNING id, created_at
     `.catch(async (err) => {
       // 테이블이 없으면 생성
@@ -110,15 +120,16 @@ export async function POST(request: NextRequest) {
             id SERIAL PRIMARY KEY,
             name VARCHAR(255) NOT NULL,
             template_data JSONB NOT NULL,
+            company_id INTEGER REFERENCES companies(id) ON DELETE CASCADE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
           )
         `;
         // 다시 삽입
         return await sql`
-          INSERT INTO upload_templates (name, template_data, created_at)
+          INSERT INTO upload_templates (name, template_data, company_id, created_at)
           VALUES (${templateData.name}, ${JSON.stringify(
           templateData
-        )}, ${koreaTime.toISOString()}::timestamp)
+        )}, ${companyId}, ${koreaTime.toISOString()}::timestamp)
           RETURNING id, created_at
         `;
       }
@@ -144,9 +155,19 @@ export async function POST(request: NextRequest) {
 // 저장된 템플릿 목록 조회
 export async function GET(request: NextRequest) {
   try {
+    // company_id 추출
+    const companyId = await getCompanyIdFromRequest(request);
+    if (!companyId) {
+      return NextResponse.json(
+        {success: false, error: "company_id가 필요합니다."},
+        {status: 400}
+      );
+    }
+
     const templates = await sql`
       SELECT id, name, template_data, created_at
       FROM upload_templates
+      WHERE company_id = ${companyId}
       ORDER BY created_at DESC
     `.catch(async (err) => {
       // 테이블이 없으면 빈 배열 반환
@@ -177,6 +198,15 @@ export async function GET(request: NextRequest) {
 // 템플릿 삭제
 export async function DELETE(request: NextRequest) {
   try {
+    // company_id 추출
+    const companyId = await getCompanyIdFromRequest(request);
+    if (!companyId) {
+      return NextResponse.json(
+        {success: false, error: "company_id가 필요합니다."},
+        {status: 400}
+      );
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const templateId = searchParams.get("id");
 
@@ -189,7 +219,7 @@ export async function DELETE(request: NextRequest) {
 
     const result = await sql`
       DELETE FROM upload_templates
-      WHERE id = ${templateId}
+      WHERE id = ${templateId} AND company_id = ${companyId}
       RETURNING id
     `;
 

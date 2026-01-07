@@ -3,6 +3,7 @@
 import {useEffect, useState, useRef, useCallback, useMemo} from "react";
 import {useUploadStore} from "@/stores/uploadStore";
 import {useLoadingStore} from "@/stores/loadingStore";
+import {useAuthStore} from "@/stores/authStore";
 import ModalTable from "@/components/ModalTable";
 import OrderModalContent from "@/components/OrderModalContent";
 import SavedDataTable from "@/components/SavedDataTable";
@@ -162,12 +163,12 @@ export default function Page() {
         if (setAppliedPostType) setAppliedPostType("");
         break;
       case "company":
-        setSelectedCompany("");
-        if (setAppliedCompany) setAppliedCompany("");
+        setSelectedCompany([]);
+        if (setAppliedCompany) setAppliedCompany([]);
         break;
       case "vendor":
-        setSelectedVendor("");
-        if (setAppliedVendor) setAppliedVendor("");
+        setSelectedVendor([]);
+        if (setAppliedVendor) setAppliedVendor([]);
         break;
       case "orderStatus":
         setSelectedOrderStatus("공급중");
@@ -549,8 +550,27 @@ export default function Page() {
   const handleFileDelete = async (fileId: string) => {
     // 서버에서 먼저 삭제
     try {
+      // company-id 헤더 포함
+      const headers: HeadersInit = {};
+
+      if (typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem("auth-storage");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            const user = parsed.state?.user;
+            if (user?.companyId) {
+              headers["company-id"] = user.companyId.toString();
+            }
+          }
+        } catch (e) {
+          console.error("인증 정보 로드 실패:", e);
+        }
+      }
+
       const response = await fetch(`/api/upload/temp/delete?fileId=${fileId}`, {
         method: "DELETE",
+        headers,
       });
       const result = await response.json();
 
@@ -616,7 +636,7 @@ export default function Page() {
                   setModalMode("excel");
                 }}
               >
-                엑셀 업로드
+                발주서 업로드
               </button>
 
               <button

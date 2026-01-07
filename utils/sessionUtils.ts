@@ -14,12 +14,12 @@ function getUserSessionKey(userId?: string | null): string {
     return `current_upload_session_${userId}`;
   }
   // 로그인하지 않은 경우 기본 키 사용
-  return 'current_upload_session_guest';
+  return "current_upload_session_guest";
 }
 
 // 현재 사용자 ID 가져오기 (authStore에서)
 function getCurrentUserId(): string | null {
-  if (typeof window === 'undefined') return null;
+  if (typeof window === "undefined") return null;
 
   try {
     const stored = localStorage.getItem("auth-storage");
@@ -37,7 +37,7 @@ function getCurrentUserId(): string | null {
 
 // 현재 세션 ID 가져오기
 export async function getCurrentSessionId(): Promise<string> {
-  if (typeof window === 'undefined') return 'default-session';
+  if (typeof window === "undefined") return "default-session";
 
   const userId = getCurrentUserId();
   const sessionKey = getUserSessionKey(userId);
@@ -54,8 +54,10 @@ export async function getCurrentSessionId(): Promise<string> {
 
   // 기본 세션 생성 및 데이터베이스 저장
   const defaultSession = {
-    sessionId: `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    sessionName: userId ? '내 세션' : '게스트 세션',
+    sessionId: `session_${Date.now()}_${Math.random()
+      .toString(36)
+      .substr(2, 9)}`,
+    sessionName: userId ? "내 세션" : "게스트 세션",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     userId: userId || undefined,
@@ -63,7 +65,10 @@ export async function getCurrentSessionId(): Promise<string> {
 
   try {
     // 데이터베이스에 세션 저장 시도
-    const savedSession = await createNewSession(defaultSession.sessionName, userId || undefined);
+    const savedSession = await createNewSession(
+      defaultSession.sessionName,
+      userId || undefined
+    );
     if (savedSession) {
       // 데이터베이스에 저장된 세션 정보로 업데이트
       defaultSession.sessionId = savedSession.sessionId;
@@ -71,7 +76,7 @@ export async function getCurrentSessionId(): Promise<string> {
       defaultSession.updatedAt = savedSession.updatedAt;
     }
   } catch (error) {
-    console.warn('기본 세션 데이터베이스 저장 실패:', error);
+    console.warn("기본 세션 데이터베이스 저장 실패:", error);
   }
 
   localStorage.setItem(sessionKey, JSON.stringify(defaultSession));
@@ -80,7 +85,7 @@ export async function getCurrentSessionId(): Promise<string> {
 
 // 현재 세션 정보 가져오기
 export function getCurrentSession(): UploadSession | null {
-  if (typeof window === 'undefined') return null;
+  if (typeof window === "undefined") return null;
 
   const userId = getCurrentUserId();
   const sessionKey = getUserSessionKey(userId);
@@ -98,7 +103,7 @@ export function getCurrentSession(): UploadSession | null {
 
 // 세션 설정
 export function setCurrentSession(session: UploadSession): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === "undefined") return;
 
   const userId = getCurrentUserId();
   const sessionKey = getUserSessionKey(userId);
@@ -107,14 +112,35 @@ export function setCurrentSession(session: UploadSession): void {
 }
 
 // 새 세션 생성
-export async function createNewSession(sessionName: string, userId?: string): Promise<UploadSession | null> {
+export async function createNewSession(
+  sessionName: string,
+  userId?: string
+): Promise<UploadSession | null> {
   try {
-    const response = await fetch('/api/upload/sessions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ sessionName, userId }),
+    // company-id 헤더 포함
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
+    };
+
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("auth-storage");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          const user = parsed.state?.user;
+          if (user?.companyId) {
+            headers["company-id"] = user.companyId.toString();
+          }
+        }
+      } catch (e) {
+        console.error("인증 정보 로드 실패:", e);
+      }
+    }
+
+    const response = await fetch("/api/upload/sessions", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({sessionName, userId}),
     });
 
     const result = await response.json();
@@ -130,22 +156,26 @@ export async function createNewSession(sessionName: string, userId?: string): Pr
       return newSession;
     }
   } catch (error) {
-    console.error('세션 생성 실패:', error);
+    console.error("세션 생성 실패:", error);
   }
   return null;
 }
 
 // 모든 세션 목록 가져오기
-export async function getAllSessions(userId?: string): Promise<UploadSession[]> {
+export async function getAllSessions(
+  userId?: string
+): Promise<UploadSession[]> {
   try {
-    const url = userId ? `/api/upload/sessions?userId=${userId}` : '/api/upload/sessions';
+    const url = userId
+      ? `/api/upload/sessions?userId=${userId}`
+      : "/api/upload/sessions";
     const response = await fetch(url);
     const result = await response.json();
     if (result.success) {
       return result.data;
     }
   } catch (error) {
-    console.error('세션 목록 조회 실패:', error);
+    console.error("세션 목록 조회 실패:", error);
   }
   return [];
 }
@@ -158,14 +188,36 @@ export function switchSession(session: UploadSession): void {
 // 세션 삭제
 export async function deleteSession(sessionId: string): Promise<boolean> {
   try {
-    const response = await fetch(`/api/upload/sessions?sessionId=${sessionId}`, {
-      method: 'DELETE',
-    });
+    // company-id 헤더 포함
+    const headers: HeadersInit = {};
+
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("auth-storage");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          const user = parsed.state?.user;
+          if (user?.companyId) {
+            headers["company-id"] = user.companyId.toString();
+          }
+        }
+      } catch (e) {
+        console.error("인증 정보 로드 실패:", e);
+      }
+    }
+
+    const response = await fetch(
+      `/api/upload/sessions?sessionId=${sessionId}`,
+      {
+        method: "DELETE",
+        headers,
+      }
+    );
 
     const result = await response.json();
     return result.success;
   } catch (error) {
-    console.error('세션 삭제 실패:', error);
+    console.error("세션 삭제 실패:", error);
   }
   return false;
 }

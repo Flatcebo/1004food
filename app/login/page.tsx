@@ -11,24 +11,55 @@ export default function LoginPage() {
     id: "",
     password: "",
   });
+  const [error, setError] = useState<string>("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError("");
 
-    // TODO: 실제 로그인 API 호출
-    // 임시로 테스트용 로그인 처리
-    if (formData.id && formData.password) {
-      // 임시 사용자 데이터 (실제로는 API에서 받아와야 함)
-      login({
-        id: formData.id,
-        name: "홍길동", // 실제로는 API 응답에서 받아옴
-        position: "대리", // 실제로는 API 응답에서 받아옴
-        role: "일반사용자", // 실제로는 API 응답에서 받아옴
+    if (!formData.id || !formData.password) {
+      setError("아이디와 비밀번호를 입력해주세요.");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: formData.id,
+          password: formData.password,
+        }),
       });
 
-      router.push("/upload");
-    } else {
-      alert("아이디와 비밀번호를 입력해주세요.");
+      const result = await response.json();
+
+      if (!result.success) {
+        setError(result.error || "로그인에 실패했습니다.");
+        setIsLoading(false);
+        return;
+      }
+
+      // 로그인 성공 - 사용자 정보 저장
+      login({
+        id: result.data.id,
+        companyId: result.data.companyId,
+        name: result.data.name,
+        position: result.data.position || "",
+        role: result.data.role || "",
+        grade: result.data.grade,
+      });
+
+      router.push("/");
+    } catch (err: any) {
+      console.error("로그인 오류:", err);
+      setError("로그인 중 오류가 발생했습니다.");
+      setIsLoading(false);
     }
   };
 
@@ -73,11 +104,17 @@ export default function LoginPage() {
               placeholder="비밀번호를 입력하세요"
             />
           </div>
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+              {error}
+            </div>
+          )}
           <button
             type="submit"
-            className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md transition-colors"
+            disabled={isLoading}
+            className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-white font-medium rounded-md transition-colors"
           >
-            로그인
+            {isLoading ? "로그인 중..." : "로그인"}
           </button>
         </form>
       </div>

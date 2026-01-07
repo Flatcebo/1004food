@@ -3,6 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import {usePathname} from "next/navigation";
+import {useAuthStore} from "@/stores/authStore";
+import {useState, useEffect} from "react";
 
 const menuNames: {path: string; name: string}[] = [
   {
@@ -21,10 +23,7 @@ const menuNames: {path: string; name: string}[] = [
     path: "/upload/templates",
     name: "양식 템플릿 관리",
   },
-  {
-    path: "/products/upload",
-    name: "상품 데이터 업로드",
-  },
+
   {
     path: "/header-aliases",
     name: "헤더 Alias 관리",
@@ -33,21 +32,29 @@ const menuNames: {path: string; name: string}[] = [
 
 const adminMenuNames: {path: string; name: string}[] = [
   {
-    path: "/upload/templates",
-    name: "양식 템플릿 관리",
-  },
-  {
     path: "/products/upload",
     name: "상품 데이터 업로드",
   },
   {
-    path: "/header-aliases",
-    name: "헤더 Alias 관리",
+    path: "/users",
+    name: "회원 관리",
+  },
+  {
+    path: "/vendors",
+    name: "납품업체 관리",
   },
 ];
 
 export default function SideBar() {
   const pathname = usePathname();
+  const {user} = useAuthStore();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isAdmin = mounted && user?.grade === "관리자";
 
   const isUploadActive =
     pathname === "/upload" ||
@@ -59,6 +66,8 @@ export default function SideBar() {
   const isProductUploadActive = pathname === "/products/upload";
   const isTemplatesActive = pathname === "/upload/templates";
   const isHeaderAliasesActive = pathname === "/header-aliases";
+  const isUsersActive = pathname === "/users";
+  const isVendorsActive = pathname === "/vendors";
 
   return (
     <div className="w-60 h-full bg-[#25323c] shrink-0">
@@ -110,43 +119,28 @@ export default function SideBar() {
                 </Link>
               );
             })}
-            {/* <Link
-              href="/upload"
-              className={`w-full px-4 py-2 rounded-lg transition-all duration-200 ${
-                isUploadActive
-                  ? "text-[#888eab]"
-                  : "hover:bg-gray-700 hover:translate-x-1 active:scale-95 text-white"
-              }`}
-            >
-              <span>발주서 업로드</span>
-            </Link>
-
-            <Link
-              href="/upload/templates"
-              className={`w-full px-4 py-2 rounded-lg transition-all duration-200 ${
-                isTemplatesActive
-                  ? "text-[#888eab]"
-                  : "hover:bg-gray-700 hover:translate-x-1 active:scale-95 text-white"
-              }`}
-            >
-              <span>양식 템플릿 관리</span>
-            </Link>
-
-            <Link
-              href="/products"
-              className={`w-full px-4 py-2 rounded-lg transition-all duration-200 ${
-                isProductsActive
-                  ? "text-[#888eab]"
-                  : "hover:bg-gray-700 hover:translate-x-1 active:scale-95 text-white"
-              }`}
-            >
-              <span>상품 관리</span>
-            </Link> */}
+            {isAdmin &&
+              adminMenuNames.map((menu, key) => {
+                return (
+                  <>
+                    <Link
+                      href={menu.path}
+                      className={`w-full px-4 py-2 rounded-lg transition-all duration-200 ${
+                        pathname === menu.path
+                          ? "text-[#888eab]"
+                          : "hover:bg-gray-700 hover:translate-x-1 active:scale-95 text-white"
+                      }`}
+                    >
+                      <span>{menu.name}</span>
+                    </Link>
+                  </>
+                );
+              })}
           </div>
         </div>
 
         <div className="w-full text-center text-sm text-white py-2">
-          beta 1.1.0
+          beta 2.1.0
         </div>
       </div>
     </div>

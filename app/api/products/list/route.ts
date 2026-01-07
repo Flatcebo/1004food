@@ -1,15 +1,26 @@
-import {NextResponse} from "next/server";
+import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
+import {getCompanyIdFromRequest} from "@/lib/company";
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
+    // company_id 추출
+    const companyId = await getCompanyIdFromRequest(request);
+    if (!companyId) {
+      return NextResponse.json(
+        {success: false, error: "company_id가 필요합니다."},
+        {status: 400}
+      );
+    }
+
     const {searchParams} = new URL(request.url);
     const countOnly = searchParams.get("count") === "true";
 
     if (countOnly) {
-      // 상품 수만 조회
+      // 상품 수만 조회 (company_id 필터링)
       const result = await sql`
         SELECT COUNT(*) as total FROM products
+        WHERE company_id = ${companyId}
       `;
 
       return NextResponse.json({
@@ -38,6 +49,7 @@ export async function GET(request: Request) {
         created_at as "createdAt",
         updated_at as "updatedAt"
       FROM products
+      WHERE company_id = ${companyId}
       ORDER BY created_at DESC, id DESC
     `;
 

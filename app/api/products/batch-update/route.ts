@@ -1,8 +1,18 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
+import {getCompanyIdFromRequest} from "@/lib/company";
 
 export async function PUT(request: NextRequest) {
   try {
+    // company_id 추출
+    const companyId = await getCompanyIdFromRequest(request);
+    if (!companyId) {
+      return NextResponse.json(
+        {success: false, error: "company_id가 필요합니다."},
+        {status: 400}
+      );
+    }
+
     const body = await request.json();
     const {ids, updates} = body;
 
@@ -146,7 +156,7 @@ export async function PUT(request: NextRequest) {
       const result = await sql`
         UPDATE products 
         SET type = ${updateFields.type}, updated_at = (NOW() + INTERVAL '9 hours')
-        WHERE id = ANY(${ids}::int[])
+        WHERE id = ANY(${ids}::int[]) AND company_id = ${companyId}
         RETURNING id
       `;
       result.forEach((row: any) => updatedIdsSet.add(row.id));
@@ -155,7 +165,7 @@ export async function PUT(request: NextRequest) {
       const result = await sql`
         UPDATE products 
         SET post_type = ${updateFields.post_type}, updated_at = (NOW() + INTERVAL '9 hours')
-        WHERE id = ANY(${ids}::int[])
+        WHERE id = ANY(${ids}::int[]) AND company_id = ${companyId}
         RETURNING id
       `;
       result.forEach((row: any) => updatedIdsSet.add(row.id));
@@ -164,7 +174,7 @@ export async function PUT(request: NextRequest) {
       const result = await sql`
         UPDATE products 
         SET pkg = ${updateFields.pkg}, updated_at = (NOW() + INTERVAL '9 hours')
-        WHERE id = ANY(${ids}::int[])
+        WHERE id = ANY(${ids}::int[]) AND company_id = ${companyId}
         RETURNING id
       `;
       result.forEach((row: any) => updatedIdsSet.add(row.id));
@@ -173,7 +183,7 @@ export async function PUT(request: NextRequest) {
       const result = await sql`
         UPDATE products 
         SET price = ${updateFields.price}, updated_at = (NOW() + INTERVAL '9 hours')
-        WHERE id = ANY(${ids}::int[])
+        WHERE id = ANY(${ids}::int[]) AND company_id = ${companyId}
         RETURNING id
       `;
       result.forEach((row: any) => updatedIdsSet.add(row.id));
@@ -182,7 +192,7 @@ export async function PUT(request: NextRequest) {
       const result = await sql`
         UPDATE products 
         SET sale_price = ${updateFields.sale_price}, updated_at = (NOW() + INTERVAL '9 hours')
-        WHERE id = ANY(${ids}::int[])
+        WHERE id = ANY(${ids}::int[]) AND company_id = ${companyId}
         RETURNING id
       `;
       result.forEach((row: any) => updatedIdsSet.add(row.id));
@@ -191,7 +201,7 @@ export async function PUT(request: NextRequest) {
       const result = await sql`
         UPDATE products 
         SET post_fee = ${updateFields.post_fee}, updated_at = (NOW() + INTERVAL '9 hours')
-        WHERE id = ANY(${ids}::int[])
+        WHERE id = ANY(${ids}::int[]) AND company_id = ${companyId}
         RETURNING id
       `;
       result.forEach((row: any) => updatedIdsSet.add(row.id));
@@ -200,7 +210,7 @@ export async function PUT(request: NextRequest) {
       const result = await sql`
         UPDATE products 
         SET purchase = ${updateFields.purchase}, updated_at = (NOW() + INTERVAL '9 hours')
-        WHERE id = ANY(${ids}::int[])
+        WHERE id = ANY(${ids}::int[]) AND company_id = ${companyId}
         RETURNING id
       `;
       result.forEach((row: any) => updatedIdsSet.add(row.id));
@@ -209,7 +219,7 @@ export async function PUT(request: NextRequest) {
       const result = await sql`
         UPDATE products 
         SET bill_type = ${updateFields.bill_type}, updated_at = (NOW() + INTERVAL '9 hours')
-        WHERE id = ANY(${ids}::int[])
+        WHERE id = ANY(${ids}::int[]) AND company_id = ${companyId}
         RETURNING id
       `;
       result.forEach((row: any) => updatedIdsSet.add(row.id));
@@ -218,7 +228,7 @@ export async function PUT(request: NextRequest) {
       const result = await sql`
         UPDATE products 
         SET category = ${updateFields.category}, updated_at = (NOW() + INTERVAL '9 hours')
-        WHERE id = ANY(${ids}::int[])
+        WHERE id = ANY(${ids}::int[]) AND company_id = ${companyId}
         RETURNING id
       `;
       result.forEach((row: any) => updatedIdsSet.add(row.id));
@@ -227,7 +237,7 @@ export async function PUT(request: NextRequest) {
       const result = await sql`
         UPDATE products 
         SET product_type = ${updateFields.product_type}, updated_at = (NOW() + INTERVAL '9 hours')
-        WHERE id = ANY(${ids}::int[])
+        WHERE id = ANY(${ids}::int[]) AND company_id = ${companyId}
         RETURNING id
       `;
       result.forEach((row: any) => updatedIdsSet.add(row.id));
@@ -236,7 +246,7 @@ export async function PUT(request: NextRequest) {
       const result = await sql`
         UPDATE products 
         SET sabang_name = ${updateFields.sabang_name}, updated_at = (NOW() + INTERVAL '9 hours')
-        WHERE id = ANY(${ids}::int[])
+        WHERE id = ANY(${ids}::int[]) AND company_id = ${companyId}
         RETURNING id
       `;
       result.forEach((row: any) => updatedIdsSet.add(row.id));
@@ -245,7 +255,7 @@ export async function PUT(request: NextRequest) {
       const result = await sql`
         UPDATE products 
         SET etc = ${updateFields.etc}, updated_at = (NOW() + INTERVAL '9 hours')
-        WHERE id = ANY(${ids}::int[])
+        WHERE id = ANY(${ids}::int[]) AND company_id = ${companyId}
         RETURNING id
       `;
       result.forEach((row: any) => updatedIdsSet.add(row.id));

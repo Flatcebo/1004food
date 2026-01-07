@@ -1,5 +1,6 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
+import {getCompanyIdFromRequest} from "@/lib/company";
 import ExcelJS from "exceljs";
 import {mapDataToTemplate, sortExcelData} from "@/utils/excelDataMapping";
 import {copyCellStyle, applyHeaderStyle} from "@/utils/excelStyles";
@@ -12,6 +13,15 @@ import {
 // 템플릿 양식으로 엑셀 다운로드
 export async function POST(request: NextRequest) {
   try {
+    // company_id 추출
+    const companyId = await getCompanyIdFromRequest(request);
+    if (!companyId) {
+      return NextResponse.json(
+        {success: false, error: "company_id가 필요합니다."},
+        {status: 400}
+      );
+    }
+
     const body = await request.json();
     const {templateId, rowIds, filters, isInhouse, preferSabangName} = body;
 
@@ -22,11 +32,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 템플릿 정보 조회
+    // 템플릿 정보 조회 (company_id 필터링)
     const templateResult = await sql`
       SELECT template_data
       FROM upload_templates
-      WHERE id = ${templateId}
+      WHERE id = ${templateId} AND company_id = ${companyId}
     `;
 
     if (!templateResult.length) {

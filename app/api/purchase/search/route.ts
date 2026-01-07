@@ -1,8 +1,18 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
+import {getCompanyIdFromRequest} from "@/lib/company";
 
 export async function POST(request: NextRequest) {
   try {
+    // company_id 추출
+    const companyId = await getCompanyIdFromRequest(request);
+    if (!companyId) {
+      return NextResponse.json(
+        {success: false, error: "company_id가 필요합니다."},
+        {status: 400}
+      );
+    }
+
     const body = await request.json();
     const {query} = body;
 
@@ -13,12 +23,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // purchase 테이블에서 name에 검색어가 포함된 항목 조회 (대소문자 구분 없음)
+    // purchase 테이블에서 name에 검색어가 포함된 항목 조회 (대소문자 구분 없음, company_id 필터링)
     const searchPattern = `%${query}%`;
     const results = await sql`
       SELECT id, name
       FROM purchase
-      WHERE name ILIKE ${searchPattern}
+      WHERE name ILIKE ${searchPattern} AND company_id = ${companyId}
       ORDER BY name
       LIMIT 20
     `;
@@ -35,4 +45,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

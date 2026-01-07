@@ -1,5 +1,7 @@
 "use client";
 
+import MultiSelectDropdown from "./MultiSelectDropdown";
+
 /**
  * 공통 필터 컴포넌트
  */
@@ -19,8 +21,8 @@ interface BaseFilterProps {
   selectedType: string;
   selectedPostType: string;
   selectedCategory?: string;
-  selectedCompany?: string;
-  selectedVendor?: string;
+  selectedCompany?: string[];
+  selectedVendor?: string[];
   selectedOrderStatus?: string;
   searchField: string;
   searchValue: string;
@@ -31,8 +33,8 @@ interface BaseFilterProps {
   onTypeChange: (type: string) => void;
   onPostTypeChange: (postType: string) => void;
   onCategoryChange?: (category: string) => void;
-  onCompanyChange?: (company: string) => void;
-  onVendorChange?: (vendor: string) => void;
+  onCompanyChange?: (companies: string[]) => void;
+  onVendorChange?: (vendors: string[]) => void;
   onOrderStatusChange?: (status: string) => void;
   onSearchFieldChange: (field: string) => void;
   onSearchValueChange: (value: string) => void;
@@ -54,8 +56,8 @@ export default function BaseFilter({
   selectedType,
   selectedPostType,
   selectedCategory = "",
-  selectedCompany = "",
-  selectedVendor = "",
+  selectedCompany = [],
+  selectedVendor = [],
   selectedOrderStatus = "",
   searchField,
   searchValue,
@@ -91,7 +93,7 @@ export default function BaseFilter({
     <div className="mb-4 flex flex-col gap-4">
       {/* 첫 번째 줄: 기본 필터 */}
       <div className="flex gap-4 items-center flex-wrap">
-        <label className="text-sm font-medium">
+        <label className="text-sm font-medium flex items-center">
           내외주:
           <select
             className="ml-2 px-2 py-1 border border-gray-300 rounded"
@@ -103,7 +105,7 @@ export default function BaseFilter({
             <option value="외주">외주</option>
           </select>
         </label>
-        <label className="text-sm font-medium">
+        <label className="text-sm font-medium flex items-center">
           택배사:
           <select
             className="ml-2 px-2 py-1 border border-gray-300 rounded"
@@ -138,38 +140,22 @@ export default function BaseFilter({
           </label>
         )}
         {showCompany && onCompanyChange && (
-          <label className="text-sm font-medium">
-            업체명 :
-            <select
-              className="ml-2 px-2 py-1 border border-gray-300 rounded"
-              value={selectedCompany}
-              onChange={(e) => onCompanyChange(e.target.value)}
-            >
-              <option value="">전체</option>
-              {filters.companies?.map((company) => (
-                <option key={company} value={company}>
-                  {company}
-                </option>
-              ))}
-            </select>
-          </label>
+          <MultiSelectDropdown
+            label="업체명"
+            options={filters.companies || []}
+            selectedValues={selectedCompany}
+            onChange={(values) => onCompanyChange(values.map(v => String(v)))}
+            placeholder="전체"
+          />
         )}
         {showVendor && onVendorChange && (
-          <label className="text-sm font-medium">
-            매입처명 :
-            <select
-              className="ml-2 px-2 py-1 border border-gray-300 rounded"
-              value={selectedVendor}
-              onChange={(e) => onVendorChange(e.target.value)}
-            >
-              <option value="">전체</option>
-              {filters.vendors?.map((vendor) => (
-                <option key={vendor} value={vendor}>
-                  {vendor}
-                </option>
-              ))}
-            </select>
-          </label>
+          <MultiSelectDropdown
+            label="매입처명"
+            options={filters.vendors || []}
+            selectedValues={selectedVendor}
+            onChange={(values) => onVendorChange(values.map(v => String(v)))}
+            placeholder="전체"
+          />
         )}
         {showOrderStatus && onOrderStatusChange && (
           <label className="text-sm font-medium">

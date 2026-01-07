@@ -6,6 +6,7 @@ import {
   detectHeaderRowByRequiredHeaders,
   normalizeHeader,
 } from "@/utils/excelHeaderDetection";
+import {getCompanyIdFromRequest} from "@/lib/company";
 
 // 한국 시간(KST, UTC+9)을 반환하는 함수
 function getKoreaTime(): Date {
@@ -17,6 +18,15 @@ function getKoreaTime(): Date {
 
 export async function POST(request: NextRequest) {
   try {
+    // company_id 추출
+    const companyId = await getCompanyIdFromRequest(request);
+    if (!companyId) {
+      return NextResponse.json(
+        {success: false, error: "company_id가 필요합니다."},
+        {status: 400}
+      );
+    }
+
     const formData = await request.formData();
     const file = formData.get("file") as File;
 
@@ -313,12 +323,15 @@ export async function POST(request: NextRequest) {
         const update = deliveryUpdates[i];
 
         try {
-          // 주문번호 또는 내부코드로 해당 데이터 찾기
+          // 주문번호 또는 내부코드로 해당 데이터 찾기 (company_id 필터링)
           // 먼저 주문번호로 검색
           let existingOrder = await sql`
-            SELECT id, row_data FROM upload_rows
-            WHERE row_data->>'주문번호' = ${update.orderNumber}
-            ORDER BY id DESC
+            SELECT ur.id, ur.row_data 
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE ur.row_data->>'주문번호' = ${update.orderNumber}
+            AND u.company_id = ${companyId}
+            ORDER BY ur.id DESC
             LIMIT 1
           `;
 
@@ -327,9 +340,12 @@ export async function POST(request: NextRequest) {
           // 주문번호로 찾지 못하면 내부코드로 검색
           if (existingOrder.length === 0) {
             existingOrder = await sql`
-              SELECT id, row_data FROM upload_rows
-              WHERE row_data->>'내부코드' = ${update.orderNumber}
-              ORDER BY id DESC
+              SELECT ur.id, ur.row_data 
+              FROM upload_rows ur
+              INNER JOIN uploads u ON ur.upload_id = u.id
+              WHERE ur.row_data->>'내부코드' = ${update.orderNumber}
+              AND u.company_id = ${companyId}
+              ORDER BY ur.id DESC
               LIMIT 1
             `;
             if (existingOrder.length > 0) {

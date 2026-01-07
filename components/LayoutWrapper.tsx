@@ -10,14 +10,18 @@ export default function LayoutWrapper({children}: {children: React.ReactNode}) {
   const isViewPage = pathname?.startsWith("/upload/view");
   const isPreviewPage = pathname?.startsWith("/upload/preview");
   const isLoginPage = pathname === "/login";
+  const isRegisterPage = pathname === "/register";
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [isMobile, setIsMobile] = useState(false);
+  const [isMobile, setIsMobile] = useState<boolean | null>(null); // null로 초기화하여 hydration mismatch 방지
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
       // 모바일에서는 기본적으로 사이드바 닫힘
-      if (window.innerWidth < 768) {
+      if (mobile) {
         setIsSidebarOpen(false);
       } else {
         setIsSidebarOpen(true);
@@ -33,8 +37,23 @@ export default function LayoutWrapper({children}: {children: React.ReactNode}) {
     setIsSidebarOpen(!isSidebarOpen);
   };
 
-  if (isViewPage || isPreviewPage || isLoginPage) {
+  if (isViewPage || isPreviewPage || isLoginPage || isRegisterPage) {
     return <>{children}</>;
+  }
+
+  // Hydration mismatch 방지: 마운트 전에는 기본 레이아웃 렌더링
+  if (!mounted || isMobile === null) {
+    return (
+      <div className="w-full h-screen flex overflow-hidden">
+        <div className="transition-all duration-300 w-60 overflow-hidden">
+          <SideBar />
+        </div>
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <Header onToggleSidebar={toggleSidebar} isSidebarOpen={isSidebarOpen} />
+          <div className="flex-1 overflow-auto">{children}</div>
+        </div>
+      </div>
+    );
   }
 
   return (

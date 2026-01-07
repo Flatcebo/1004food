@@ -1,6 +1,7 @@
 "use client";
 
 import {useState, useEffect} from "react";
+import {getAuthHeaders} from "@/utils/api";
 
 interface Template {
   id: number;
@@ -19,7 +20,10 @@ export default function TemplatesPage() {
   const fetchTemplates = async () => {
     try {
       setLoading(true);
-      const response = await fetch("/api/upload/template");
+      const headers = getAuthHeaders();
+      const response = await fetch("/api/upload/template", {
+        headers,
+      });
       const result = await response.json();
       if (result.success) {
         setTemplates(result.templates);
@@ -58,8 +62,13 @@ export default function TemplatesPage() {
       formData.append("file", file);
       formData.append("templateName", templateName);
 
+      // FormData를 사용할 때는 Content-Type을 제거해야 함 (브라우저가 자동 설정)
+      const headers = getAuthHeaders();
+      const {["Content-Type"]: _, ...headersWithoutContentType} = headers as any;
+      
       const response = await fetch("/api/upload/template", {
         method: "POST",
+        headers: headersWithoutContentType,
         body: formData,
       });
 
@@ -86,8 +95,10 @@ export default function TemplatesPage() {
 
     setDeletingId(id);
     try {
+      const headers = getAuthHeaders();
       const response = await fetch(`/api/upload/template?id=${id}`, {
         method: "DELETE",
+        headers,
       });
 
       const result = await response.json();
