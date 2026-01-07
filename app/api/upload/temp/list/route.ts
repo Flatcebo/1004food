@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
             table_data as "tableData",
             header_index as "headerIndex",
             product_code_map as "productCodeMap",
+            product_id_map as "productIdMap",
             validation_status as "validationStatus",
             is_confirmed as "isConfirmed",
             vendor_name as "vendorName",

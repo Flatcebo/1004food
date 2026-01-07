@@ -87,6 +87,7 @@ export async function PUT(request: NextRequest) {
           product_code_map = ${JSON.stringify(productCodeMap)},
           product_id_map = ${JSON.stringify(productIdMap || {})},
           validation_status = ${JSON.stringify(validationResult)},
+          vendor_name = ${vendorName || null},
           is_confirmed = ${isConfirmed ?? false},
               updated_at = ${now.toISOString()}
         WHERE file_id = ${fileId}
