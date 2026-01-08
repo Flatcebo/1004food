@@ -335,12 +335,20 @@ const SavedDataTable = memo(function SavedDataTable({
       return;
     }
 
-    let rowIdsToDownload =
-      selectedRows.size > 0 ? Array.from(selectedRows) : null;
+    // 체크박스 선택 여부에 따라 다운로드 방식 결정
+    // - 체크박스가 선택되지 않으면: 필터링된 전체 데이터 다운로드 (rowIds = null, filters 사용)
+    // - 체크박스가 선택되면: 선택된 항목만 다운로드 (rowIds 사용, filters 무시)
+    let rowIdsToDownload: number[] | null = null;
+    if (selectedRows.size > 0) {
+      // 체크박스가 선택된 경우: 선택된 행 ID만 사용
+      rowIdsToDownload = Array.from(selectedRows);
+    }
+    // 체크박스가 선택되지 않은 경우: rowIdsToDownload는 null로 유지하여 필터 사용
 
     setIsDownloading(true);
     try {
       // 현재 적용된 필터 정보를 다운로드 요청에 포함
+      // 체크박스가 선택되지 않은 경우에만 사용됨
       let filters = {
         type: appliedType || undefined,
         postType: appliedPostType || undefined,
@@ -433,15 +441,33 @@ const SavedDataTable = memo(function SavedDataTable({
         : "/api/upload/download";
 
       const headers = getAuthHeaders();
+
+      // 다운로드 요청 본문 구성
+      // - 체크박스 선택됨: rowIds만 전달, filters는 undefined
+      // - 체크박스 선택 안됨: rowIds는 null, filters 전달 (필터링된 전체 데이터)
+      const requestBody: any = {
+        templateId: selectedTemplate,
+        preferSabangName: useSabangName,
+      };
+
+      if (rowIdsToDownload && rowIdsToDownload.length > 0) {
+        // 체크박스가 선택된 경우: 선택된 항목만 다운로드
+        requestBody.rowIds = rowIdsToDownload;
+        requestBody.filters = undefined;
+      } else {
+        // 체크박스가 선택되지 않은 경우: 필터링된 전체 데이터 다운로드
+        requestBody.rowIds = null;
+        // 필터가 실제로 적용되어 있는지 확인 (모든 값이 undefined가 아닌 필터만 전달)
+        const hasActiveFilters = Object.values(filters).some(
+          (value) => value !== undefined
+        );
+        requestBody.filters = hasActiveFilters ? filters : undefined;
+      }
+
       const response = await fetch(apiUrl, {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          templateId: selectedTemplate,
-          rowIds: rowIdsToDownload,
-          filters: rowIdsToDownload ? undefined : filters, // 선택된 행이 있으면 필터 무시, 없으면 필터 적용
-          preferSabangName: useSabangName,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
