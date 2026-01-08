@@ -705,12 +705,39 @@ export default function UsersPage() {
                 <div className="w-full">
                   <MultiSelectDropdown
                     label="담당 납품업체"
-                    options={vendors
-                      .filter((v) => v.companyId === editingUser?.companyId)
-                      .map((vendor) => ({
-                        value: vendor.id,
-                        label: vendor.name,
-                      }))}
+                    options={(() => {
+                      // 현재 편집 중인 사용자를 제외한 다른 사용자들에게 이미 할당된 vendor ID 수집
+                      const assignedVendorIds = new Set<number>();
+                      users.forEach((user) => {
+                        // 현재 편집 중인 사용자는 제외
+                        if (user.id !== editingUser?.id && user.assignedVendorIds) {
+                          user.assignedVendorIds.forEach((vendorId) => {
+                            assignedVendorIds.add(vendorId);
+                          });
+                        }
+                      });
+
+                      // 현재 사용자가 이미 선택한 vendor는 포함 (자신이 선택한 것은 유지)
+                      const currentSelectedIds = new Set(editFormData.assignedVendorIds || []);
+
+                      // 사용 가능한 vendors: 같은 회사이고, 다른 사용자에게 할당되지 않은 것들
+                      // 또는 현재 사용자가 이미 선택한 것들
+                      return vendors
+                        .filter((v) => {
+                          if (v.companyId !== editingUser?.companyId) {
+                            return false;
+                          }
+                          // 이미 다른 사용자에게 할당되었고, 현재 사용자가 선택하지 않은 경우 제외
+                          if (assignedVendorIds.has(v.id) && !currentSelectedIds.has(v.id)) {
+                            return false;
+                          }
+                          return true;
+                        })
+                        .map((vendor) => ({
+                          value: vendor.id,
+                          label: vendor.name,
+                        }));
+                    })()}
                     selectedValues={(editFormData.assignedVendorIds || []) as (string | number)[]}
                     onChange={(values) => {
                       setEditFormData((prev) => ({
