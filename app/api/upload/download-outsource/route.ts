@@ -97,9 +97,29 @@ export async function POST(request: NextRequest) {
 
     const templateData = templateResult[0].template_data;
 
-    const headers = Array.isArray(templateData.headers)
+    let headers = Array.isArray(templateData.headers)
       ? templateData.headers
       : [];
+    
+    // 상품명과 주소 헤더 사이에 빈 칼럼 추가
+    const productNameIndex = headers.findIndex((h: any) => {
+      const headerStr = typeof h === "string" ? h : String(h || "");
+      return headerStr.includes("상품명");
+    });
+    const addressIndex = headers.findIndex((h: any) => {
+      const headerStr = typeof h === "string" ? h : String(h || "");
+      return headerStr.includes("주소") && !headerStr.includes("우편");
+    });
+    
+    // 상품명이 주소보다 앞에 있고, 바로 다음이 아닌 경우에만 빈 칼럼 추가
+    if (productNameIndex !== -1 && addressIndex !== -1 && productNameIndex < addressIndex && addressIndex - productNameIndex === 1) {
+      headers = [
+        ...headers.slice(0, addressIndex),
+        "", // 빈 칼럼 추가
+        ...headers.slice(addressIndex),
+      ];
+    }
+    
     const columnOrder = Array.isArray(templateData.columnOrder)
       ? templateData.columnOrder
       : headers;
@@ -564,6 +584,11 @@ export async function POST(request: NextRequest) {
           // header를 문자열로 변환
           const headerStr =
             typeof header === "string" ? header : String(header || "");
+
+          // 빈 헤더인 경우 빈 값 반환
+          if (!headerStr || headerStr.trim() === "") {
+            return "";
+          }
 
           let value = mapDataToTemplate(row, headerStr, {
             templateName: templateData.name,
@@ -1076,6 +1101,11 @@ export async function POST(request: NextRequest) {
             const headerStr =
               typeof header === "string" ? header : String(header || "");
 
+            // 빈 헤더인 경우 빈 값 반환
+            if (!headerStr || headerStr.trim() === "") {
+              return "";
+            }
+
             let value = mapDataToTemplate(row, headerStr, {
               templateName: templateData.name,
               formatPhone: true, // 외주 발주서에서는 전화번호에 하이픈 추가
@@ -1383,6 +1413,11 @@ export async function POST(request: NextRequest) {
         // header를 문자열로 변환
         const headerStr =
           typeof header === "string" ? header : String(header || "");
+
+        // 빈 헤더인 경우 빈 값 반환
+        if (!headerStr || headerStr.trim() === "") {
+          return "";
+        }
 
         let value = mapDataToTemplate(row, headerStr, {
           templateName: templateData.name,

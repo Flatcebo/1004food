@@ -63,27 +63,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const headers = raw[0].filter(
-      (h: any) => h !== null && h !== undefined && String(h).trim() !== ""
-    ) as string[];
+    // 빈 헤더도 포함하여 모든 헤더 추출 (null/undefined는 빈 문자열로 변환)
+    const headers = raw[0].map((h: any) => {
+      if (h === null || h === undefined) {
+        return "";
+      }
+      return String(h);
+    }) as string[];
 
+    // 최소 하나의 칼럼이 있는지 확인 (빈 헤더만 있어도 허용)
     if (headers.length === 0) {
       return NextResponse.json(
-        {success: false, error: "유효한 헤더가 없습니다."},
+        {success: false, error: "헤더가 없습니다."},
         {status: 400}
       );
     }
 
-    // 셀 너비 정보 추출
+    // 셀 너비 정보 추출 (빈 헤더도 포함)
     const columnWidths: {[key: string]: number} = {};
     if (worksheet["!cols"]) {
       worksheet["!cols"].forEach((col: any, idx: number) => {
-        if (headers[idx]) {
-          columnWidths[headers[idx]] = col.wch || 15;
+        if (idx < headers.length) {
+          // 빈 헤더도 빈 문자열로 저장
+          const headerKey = headers[idx];
+          columnWidths[headerKey] = col.wch || 15;
         }
       });
     } else {
       headers.forEach((header) => {
+        // 빈 헤더도 빈 문자열로 저장
         columnWidths[header] = 15;
       });
     }

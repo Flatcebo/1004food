@@ -124,6 +124,7 @@ export default function SideBar() {
                 return (
                   <>
                     <Link
+                      key={key}
                       href={menu.path}
                       className={`w-full px-4 py-2 rounded-lg transition-all duration-200 ${
                         pathname === menu.path
