@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     // company_id 추출 (쿼리 파라미터 또는 헤더에서)
     const {searchParams} = new URL(request.url);
     const companyIdParam = searchParams.get("company_id");
-    
+
     let companyId: number | null = null;
     if (companyIdParam) {
       companyId = parseInt(companyIdParam, 10);
@@ -36,6 +36,9 @@ export async function GET(request: NextRequest) {
           v.username,
           v.name,
           v.template,
+          v.phone,
+          v.contact_person as "contactPerson",
+          v.email,
           v.created_at as "createdAt",
           v.updated_at as "updatedAt",
           c.name as "companyName"
@@ -53,6 +56,9 @@ export async function GET(request: NextRequest) {
           v.username,
           v.name,
           v.template,
+          v.phone,
+          v.contact_person as "contactPerson",
+          v.email,
           v.created_at as "createdAt",
           v.updated_at as "updatedAt",
           c.name as "companyName"
@@ -82,12 +88,8 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const {
-      companyId,
-      username,
-      password,
-      name,
-    } = body;
+    const {companyId, username, password, name, email, phone, contactPerson} =
+      body;
 
     // 필수 필드 검증
     if (!companyId || !username || !password || !name) {
@@ -108,6 +110,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 이메일 형식 검증 (입력된 경우)
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      return NextResponse.json(
+        {success: false, error: "올바른 이메일 형식을 입력해주세요."},
+        {status: 400}
+      );
+    }
+
     // 회사 존재 여부 확인
     const company = await sql`
       SELECT id FROM companies WHERE id = ${companyId}
@@ -123,16 +133,24 @@ export async function POST(request: NextRequest) {
     // 비밀번호 해싱
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // 전화번호, 담당자명, 이메일 처리 (입력값이 있으면 사용, 없으면 기본값 생성)
+    const finalPhone = phone?.trim() || null;
+    const finalContactPerson = contactPerson?.trim() || null;
+    const finalEmail = email?.trim() || null;
+
     // 납품업체 생성
     const result = await sql`
       INSERT INTO vendors (
-        company_id, username, password, name
+        company_id, username, password, name, phone, contact_person, email
       )
       VALUES (
         ${companyId},
         ${username.trim()},
         ${hashedPassword},
-        ${name.trim()}
+        ${name.trim()},
+        ${finalPhone},
+        ${finalContactPerson},
+        ${finalEmail}
       )
       RETURNING 
         id,
@@ -140,6 +158,9 @@ export async function POST(request: NextRequest) {
         username,
         name,
         template,
+        phone,
+        contact_person as "contactPerson",
+        email,
         created_at as "createdAt",
         updated_at as "updatedAt"
     `;
@@ -150,7 +171,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error("납품업체 생성 실패:", error);
-    
+
     // UNIQUE 제약조건 위반
     if (error.message && error.message.includes("unique")) {
       return NextResponse.json(

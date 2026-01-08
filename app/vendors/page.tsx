@@ -11,6 +11,9 @@ interface Vendor {
   username: string;
   name: string;
   template: string | null;
+  phone: string | null;
+  contactPerson: string | null;
+  email: string | null;
   createdAt: string;
   updatedAt: string;
   companyName: string;
@@ -38,6 +41,9 @@ export default function VendorsPage() {
     password: "",
     confirmPassword: "",
     name: "",
+    email: "",
+    phone: "",
+    contactPerson: "",
   });
   const [editFormData, setEditFormData] = useState({
     name: "",
@@ -61,7 +67,7 @@ export default function VendorsPage() {
   const fetchVendors = async () => {
     try {
       setIsLoading(true);
-      
+
       const headers = getAuthHeaders();
       const response = await fetch("/api/vendors", {
         headers,
@@ -116,8 +122,19 @@ export default function VendorsPage() {
     setError("");
 
     // 유효성 검증
-    if (!formData.companyId || !formData.username || !formData.password || !formData.name) {
+    if (
+      !formData.companyId ||
+      !formData.username ||
+      !formData.password ||
+      !formData.name
+    ) {
       setError("필수 항목을 모두 입력해주세요.");
+      return;
+    }
+
+    // 이메일 형식 검증 (입력된 경우)
+    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      setError("올바른 이메일 형식을 입력해주세요.");
       return;
     }
 
@@ -144,6 +161,9 @@ export default function VendorsPage() {
           username: formData.username,
           password: formData.password,
           name: formData.name,
+          email: formData.email || null,
+          phone: formData.phone || null,
+          contactPerson: formData.contactPerson || null,
         }),
       });
 
@@ -162,6 +182,9 @@ export default function VendorsPage() {
         password: "",
         confirmPassword: "",
         name: "",
+        email: "",
+        phone: "",
+        contactPerson: "",
       });
       fetchVendors();
     } catch (err: any) {
@@ -313,6 +336,9 @@ export default function VendorsPage() {
                 회사
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                담당자
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 템플릿
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -326,7 +352,7 @@ export default function VendorsPage() {
           <tbody className="bg-white divide-y divide-gray-200">
             {vendors.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-4 text-center text-gray-500">
+                <td colSpan={7} className="px-6 py-4 text-center text-gray-500">
                   납품업체가 없습니다.
                 </td>
               </tr>
@@ -341,6 +367,18 @@ export default function VendorsPage() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {vendor.companyName}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-500">
+                    <div className="space-y-1">
+                      {vendor.contactPerson && (
+                        <div>담당자: {vendor.contactPerson}</div>
+                      )}
+                      {vendor.phone && <div>전화번호: {vendor.phone}</div>}
+                      {vendor.email && <div>이메일: {vendor.email}</div>}
+                      {!vendor.contactPerson &&
+                        !vendor.phone &&
+                        !vendor.email && <div>-</div>}
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">
                     {vendor.template ? "있음" : "-"}
@@ -398,6 +436,52 @@ export default function VendorsPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                  납품업체명 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) =>
+                    setFormData({...formData, name: e.target.value})
+                  }
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="납품업체명을 입력하세요"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  담당자명
+                </label>
+                <input
+                  type="text"
+                  value={formData.contactPerson}
+                  onChange={(e) =>
+                    setFormData({...formData, contactPerson: e.target.value})
+                  }
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="담당자명을 입력하세요 (선택사항)"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  전화번호
+                </label>
+                <input
+                  type="tel"
+                  value={formData.phone}
+                  onChange={(e) =>
+                    setFormData({...formData, phone: e.target.value})
+                  }
+                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="전화번호를 입력하세요 (선택사항)"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   아이디 <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -447,17 +531,16 @@ export default function VendorsPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  납품업체명 <span className="text-red-500">*</span>
+                  이메일
                 </label>
                 <input
-                  type="text"
-                  value={formData.name}
+                  type="email"
+                  value={formData.email}
                   onChange={(e) =>
-                    setFormData({...formData, name: e.target.value})
+                    setFormData({...formData, email: e.target.value})
                   }
                   className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="납품업체명을 입력하세요"
-                  required
+                  placeholder="이메일을 입력하세요 (선택사항)"
                 />
               </div>
 

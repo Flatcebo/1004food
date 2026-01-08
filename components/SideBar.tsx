@@ -122,19 +122,17 @@ export default function SideBar() {
             {isAdmin &&
               adminMenuNames.map((menu, key) => {
                 return (
-                  <>
-                    <Link
-                      key={key}
-                      href={menu.path}
-                      className={`w-full px-4 py-2 rounded-lg transition-all duration-200 ${
-                        pathname === menu.path
-                          ? "text-[#888eab]"
-                          : "hover:bg-gray-700 hover:translate-x-1 active:scale-95 text-white"
-                      }`}
-                    >
-                      <span>{menu.name}</span>
-                    </Link>
-                  </>
+                  <Link
+                    key={key}
+                    href={menu.path}
+                    className={`w-full px-4 py-2 rounded-lg transition-all duration-200 ${
+                      pathname === menu.path
+                        ? "text-[#888eab]"
+                        : "hover:bg-gray-700 hover:translate-x-1 active:scale-95 text-white"
+                    }`}
+                  >
+                    <span>{menu.name}</span>
+                  </Link>
                 );
               })}
           </div>

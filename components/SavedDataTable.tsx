@@ -336,8 +336,8 @@ const SavedDataTable = memo(function SavedDataTable({
     }
 
     // 체크박스 선택 여부에 따라 다운로드 방식 결정
-    // - 체크박스가 선택되지 않으면: 필터링된 전체 데이터 다운로드 (rowIds = null, filters 사용)
-    // - 체크박스가 선택되면: 선택된 항목만 다운로드 (rowIds 사용, filters 무시)
+    // - 체크박스가 선택되지 않으면: 현재 적용된 필터로 검색된 전체 데이터 다운로드 (필터 전달)
+    // - 체크박스가 선택되면: 선택된 항목만 다운로드 (rowIds 전달)
     let rowIdsToDownload: number[] | null = null;
     if (selectedRows.size > 0) {
       // 체크박스가 선택된 경우: 선택된 행 ID만 사용
@@ -347,9 +347,8 @@ const SavedDataTable = memo(function SavedDataTable({
 
     setIsDownloading(true);
     try {
-      // 현재 적용된 필터 정보를 다운로드 요청에 포함
-      // 체크박스가 선택되지 않은 경우에만 사용됨
-      let filters = {
+      // 현재 적용된 필터 정보 (체크박스가 선택되지 않은 경우 전체 데이터 조회용)
+      const filters = {
         type: appliedType || undefined,
         postType: appliedPostType || undefined,
         company: appliedCompany || undefined,
@@ -379,10 +378,10 @@ const SavedDataTable = memo(function SavedDataTable({
       // 사방넷 등록 양식인지 확인
       const isSabangnet = templateName.includes("사방넷");
 
-      // 내주 발주서인 경우: 내외주가 "내주"인 것만 필터링
-      if (isInhouse) {
-        if (rowIdsToDownload) {
-          // 선택된 행 중 내외주가 "내주"인 것만 필터링
+      // 체크박스가 선택된 경우에만 테이블 데이터로 필터링
+      if (rowIdsToDownload) {
+        // 내주 발주서인 경우: 내외주가 "내주"인 것만 필터링
+        if (isInhouse) {
           const filteredRows = tableRows.filter(
             (row: any) =>
               rowIdsToDownload!.includes(row.id) &&
@@ -396,19 +395,10 @@ const SavedDataTable = memo(function SavedDataTable({
             setIsDownloading(false);
             return;
           }
-        } else {
-          // 필터에 내외주 "내주" 조건 추가
-          filters = {
-            ...filters,
-            type: "내주",
-          };
         }
-      }
 
-      // 외주 발주서인 경우: 내외주가 "외주"인 것만 필터링
-      if (isOutsource) {
-        if (rowIdsToDownload) {
-          // 선택된 행 중 내외주가 "외주"인 것만 필터링
+        // 외주 발주서인 경우: 내외주가 "외주"인 것만 필터링
+        if (isOutsource) {
           const filteredRows = tableRows.filter(
             (row: any) =>
               rowIdsToDownload!.includes(row.id) &&
@@ -423,38 +413,33 @@ const SavedDataTable = memo(function SavedDataTable({
             setIsDownloading(false);
             return;
           }
-        } else {
-          // 필터에 내외주 "외주" 조건 추가
-          filters = {
-            ...filters,
-            type: "외주",
-          };
         }
-      }
 
-      // CJ외주 발주서인 경우: 매핑코드 106464만 필터링
-      if (isCJOutsource) {
-        // 선택된 행이 있으면 그 중에서 106464만, 없으면 필터에 매핑코드 조건 추가
-        if (rowIdsToDownload) {
-          // 선택된 행 중 매핑코드가 106464인 것만 필터링
+        // CJ외주 발주서인 경우: 매핑코드 106464 제외
+        if (isCJOutsource) {
           const filteredRows = tableRows.filter(
             (row: any) =>
-              rowIdsToDownload!.includes(row.id) && row.매핑코드 === "106464"
+              rowIdsToDownload!.includes(row.id) &&
+              row.내외주?.trim() === "외주" &&
+              row.매핑코드 !== "106464"
           );
           rowIdsToDownload = filteredRows.map((row: any) => row.id);
 
           if (rowIdsToDownload.length === 0) {
-            alert("선택된 행 중 매핑코드가 106464인 데이터가 없습니다.");
+            alert("선택된 행 중 CJ외주 데이터가 없습니다.");
             setIsDownloading(false);
             return;
           }
-        } else {
-          // 필터에 매핑코드 106464 조건 추가
-          filters = {
-            ...filters,
-            searchField: "매핑코드",
-            searchValue: "106464",
-          };
+        }
+      } else {
+        // 체크박스가 선택되지 않은 경우: 필터에 발주서 타입 조건 추가
+        if (isInhouse) {
+          filters.type = "내주";
+        } else if (isOutsource) {
+          filters.type = "외주";
+        } else if (isCJOutsource) {
+          filters.searchField = "매핑코드";
+          filters.searchValue = "106464";
         }
       }
 
@@ -471,7 +456,7 @@ const SavedDataTable = memo(function SavedDataTable({
 
       // 다운로드 요청 본문 구성
       // - 체크박스 선택됨: rowIds만 전달, filters는 undefined
-      // - 체크박스 선택 안됨: rowIds는 null, filters 전달 (필터링된 전체 데이터)
+      // - 체크박스 선택 안됨: rowIds는 null, filters 전달 (검색된 전체 데이터)
       const requestBody: any = {
         templateId: selectedTemplate,
         preferSabangName: useSabangName,
@@ -482,26 +467,13 @@ const SavedDataTable = memo(function SavedDataTable({
         requestBody.rowIds = rowIdsToDownload;
         requestBody.filters = undefined;
       } else {
-        // 체크박스가 선택되지 않은 경우: 필터링된 전체 데이터 다운로드
+        // 체크박스가 선택되지 않은 경우: 필터로 검색된 전체 데이터 다운로드
         requestBody.rowIds = null;
-        // 필터가 실제로 적용되어 있는지 확인 (모든 값이 undefined가 아닌 필터만 전달)
-        // 외주/내주 발주서의 경우 type 필터가 추가되므로 항상 필터가 있음
+        // 필터가 실제로 적용되어 있는지 확인
         const hasActiveFilters = Object.values(filters).some(
           (value) => value !== undefined
         );
-        // 필터가 있거나, 외주/내주/CJ외주 발주서 또는 사방넷 등록 양식인 경우 필터 전달
-        // (외주/내주/CJ외주는 type 필터가 추가됨, 사방넷은 필터링된 전체 데이터 다운로드)
-        if (
-          hasActiveFilters ||
-          isOutsource ||
-          isInhouse ||
-          isCJOutsource ||
-          isSabangnet
-        ) {
-          requestBody.filters = filters;
-        } else {
-          requestBody.filters = undefined;
-        }
+        requestBody.filters = hasActiveFilters ? filters : undefined;
       }
 
       const response = await fetch(apiUrl, {
@@ -554,14 +526,6 @@ const SavedDataTable = memo(function SavedDataTable({
   }, [
     selectedTemplate,
     selectedRows,
-    selectedType,
-    selectedPostType,
-    selectedVendor,
-    selectedOrderStatus,
-    appliedSearchField,
-    appliedSearchValue,
-    uploadTimeFrom,
-    uploadTimeTo,
     templates,
     tableRows,
     onDataUpdate,
@@ -571,6 +535,8 @@ const SavedDataTable = memo(function SavedDataTable({
     appliedCompany,
     appliedVendor,
     appliedOrderStatus,
+    appliedSearchField,
+    appliedSearchValue,
     appliedUploadTimeFrom,
     appliedUploadTimeTo,
   ]);

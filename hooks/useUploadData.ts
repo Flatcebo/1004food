@@ -122,15 +122,30 @@ export function useUploadData() {
     setAppliedUploadTimeTo(todayDate);
     setAppliedOrderStatus("공급중");
     setAppliedItemsPerPage(20);
-    
-    // 납품업체 grade인 경우 assigned_vendor_ids를 기본값으로 설정
-    const loadUserVendors = async () => {
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // filters가 로드된 후 assigned_vendor_ids 기반으로 업체명 필터 설정
+  useEffect(() => {
+    // filters가 아직 로드되지 않았거나 companies가 비어있으면 스킵
+    if (!filters.companies || filters.companies.length === 0) {
+      return;
+    }
+
+    // 이미 업체명이 설정되어 있으면 스킵 (사용자가 수동으로 변경한 경우)
+    // selectedCompany도 체크하여 초기 로드 시에만 실행되도록 함
+    if (selectedCompany.length > 0 || appliedCompany.length > 0) {
+      return;
+    }
+
+    const loadUserCompanies = async () => {
       try {
         const stored = localStorage.getItem("auth-storage");
         if (stored) {
           const parsed = JSON.parse(stored);
           const user = parsed.state?.user;
-          if (user?.grade === "납품업체" && user?.assignedVendorIds && user.assignedVendorIds.length > 0) {
+          if (user?.assignedVendorIds && user.assignedVendorIds.length > 0) {
+            console.log("assignedVendorIds 발견:", user.assignedVendorIds);
             // vendors API를 호출하여 ID를 이름으로 변환
             const headers: HeadersInit = {};
             if (user?.companyId) {
@@ -146,21 +161,40 @@ export function useUploadData() {
                 .filter((v: any) => user.assignedVendorIds.includes(v.id))
                 .map((v: any) => v.name);
               
+              console.log("vendorNames:", vendorNames);
+              console.log("filters.companies:", filters.companies);
+              
               if (vendorNames.length > 0) {
-                setSelectedVendor(vendorNames);
-                setAppliedVendor(vendorNames);
+                // 실제 업체명 필터 옵션과 일치하는 것만 필터링
+                const validCompanyNames = vendorNames.filter((name: string) =>
+                  filters.companies.includes(name)
+                );
+                
+                if (validCompanyNames.length > 0) {
+                  console.log("업체명 필터 자동 설정:", validCompanyNames);
+                  // 드롭다운에 표시되도록 selectedCompany 먼저 설정
+                  setSelectedCompany(validCompanyNames);
+                  // 필터 적용을 위해 appliedCompany도 설정
+                  setAppliedCompany(validCompanyNames);
+                } else {
+                  console.log("업체명 필터 옵션과 일치하는 vendor name이 없습니다:", {
+                    vendorNames,
+                    availableCompanies: filters.companies,
+                  });
+                }
               }
             }
+          } else {
+            console.log("assignedVendorIds가 없거나 비어있습니다:", user);
           }
         }
       } catch (error) {
-        console.error("유저 vendors 로드 실패:", error);
+        console.error("유저 업체명 로드 실패:", error);
       }
     };
     
-    loadUserVendors();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    loadUserCompanies();
+  }, [filters.companies, selectedCompany, appliedCompany]);
 
   // 필터 변경 시 첫 페이지로 이동하고 데이터 조회
   useEffect(() => {

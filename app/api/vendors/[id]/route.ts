@@ -28,6 +28,9 @@ export async function GET(
         v.username,
         v.name,
         v.template,
+        v.phone,
+        v.contact_person as "contactPerson",
+        v.email,
         v.created_at as "createdAt",
         v.updated_at as "updatedAt",
         c.name as "companyName"
@@ -76,10 +79,7 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const {
-      name,
-      password,
-    } = body;
+    const {name, password} = body;
 
     // 사용자 존재 여부 확인
     const existing = await sql`
@@ -138,6 +138,9 @@ export async function PUT(
       username,
       name,
       template,
+      phone,
+      contact_person as "contactPerson",
+      email,
       created_at as "createdAt",
       updated_at as "updatedAt"
     `;
@@ -150,7 +153,7 @@ export async function PUT(
     });
   } catch (error: any) {
     console.error("납품업체 수정 실패:", error);
-    
+
     // UNIQUE 제약조건 위반
     if (error.message && error.message.includes("unique")) {
       return NextResponse.json(

@@ -57,6 +57,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // assigned_vendor_ids를 배열로 변환 (JSONB 타입 처리)
+    let assignedVendorIds: number[] = [];
+    if (user.assigned_vendor_ids) {
+      try {
+        // JSONB가 이미 파싱된 객체인 경우
+        if (Array.isArray(user.assigned_vendor_ids)) {
+          assignedVendorIds = user.assigned_vendor_ids;
+        } else if (typeof user.assigned_vendor_ids === 'string') {
+          // 문자열인 경우 JSON 파싱
+          assignedVendorIds = JSON.parse(user.assigned_vendor_ids);
+        }
+      } catch (e) {
+        console.error("assigned_vendor_ids 파싱 실패:", e);
+        assignedVendorIds = [];
+      }
+    }
+
     // 로그인 성공 - 민감한 정보 제외하고 반환
     return NextResponse.json({
       success: true,
@@ -68,7 +85,7 @@ export async function POST(request: NextRequest) {
         grade: user.grade,
         position: user.position,
         role: user.role,
-        assignedVendorIds: user.assigned_vendor_ids || [],
+        assignedVendorIds: assignedVendorIds,
       },
     });
   } catch (error: any) {
