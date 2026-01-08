@@ -405,6 +405,33 @@ const SavedDataTable = memo(function SavedDataTable({
         }
       }
 
+      // 외주 발주서인 경우: 내외주가 "외주"인 것만 필터링
+      if (isOutsource) {
+        if (rowIdsToDownload) {
+          // 선택된 행 중 내외주가 "외주"인 것만 필터링
+          const filteredRows = tableRows.filter(
+            (row: any) =>
+              rowIdsToDownload!.includes(row.id) &&
+              row.내외주?.trim() === "외주" &&
+              row.매핑코드 !== "106464" &&
+              !row.업체명?.includes("CJ")
+          );
+          rowIdsToDownload = filteredRows.map((row: any) => row.id);
+
+          if (rowIdsToDownload.length === 0) {
+            alert("선택된 행 중 외주 데이터가 없습니다.");
+            setIsDownloading(false);
+            return;
+          }
+        } else {
+          // 필터에 내외주 "외주" 조건 추가
+          filters = {
+            ...filters,
+            type: "외주",
+          };
+        }
+      }
+
       // CJ외주 발주서인 경우: 매핑코드 106464만 필터링
       if (isCJOutsource) {
         // 선택된 행이 있으면 그 중에서 106464만, 없으면 필터에 매핑코드 조건 추가
@@ -458,10 +485,23 @@ const SavedDataTable = memo(function SavedDataTable({
         // 체크박스가 선택되지 않은 경우: 필터링된 전체 데이터 다운로드
         requestBody.rowIds = null;
         // 필터가 실제로 적용되어 있는지 확인 (모든 값이 undefined가 아닌 필터만 전달)
+        // 외주/내주 발주서의 경우 type 필터가 추가되므로 항상 필터가 있음
         const hasActiveFilters = Object.values(filters).some(
           (value) => value !== undefined
         );
-        requestBody.filters = hasActiveFilters ? filters : undefined;
+        // 필터가 있거나, 외주/내주/CJ외주 발주서 또는 사방넷 등록 양식인 경우 필터 전달
+        // (외주/내주/CJ외주는 type 필터가 추가됨, 사방넷은 필터링된 전체 데이터 다운로드)
+        if (
+          hasActiveFilters ||
+          isOutsource ||
+          isInhouse ||
+          isCJOutsource ||
+          isSabangnet
+        ) {
+          requestBody.filters = filters;
+        } else {
+          requestBody.filters = undefined;
+        }
       }
 
       const response = await fetch(apiUrl, {

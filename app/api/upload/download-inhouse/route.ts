@@ -232,38 +232,78 @@ export async function POST(request: NextRequest) {
       }));
       dataRows = dataRowsWithIds.map((r: any) => r.row_data);
     } else {
-      // 조건 없으면 모든 데이터 조회
-      const allData = await sql`
-        SELECT ${
-          !rowIds || rowIds.length === 0 ? sql`ur.id,` : sql``
-        } ur.row_data
-        FROM upload_rows ur
-        INNER JOIN uploads u ON ur.upload_id = u.id
-        ORDER BY u.created_at DESC, ur.id DESC
-      `;
-      // ID와 row_data를 함께 저장
-      dataRowsWithIds = allData.map((r: any) => ({
-        id: r.id,
-        row_data: r.row_data || {},
-      }));
-      dataRows = dataRowsWithIds.map((r: any) => r.row_data);
+      // 템플릿명 확인 (내주 발주서인지 체크)
+      const templateName = (templateData.name || "").normalize("NFC").trim();
+      const isInhouseTemplate = templateName.includes("내주");
 
-      // 전체 다운로드 시 주문상태 업데이트 (rowIds가 없을 때)
-      if (!rowIds || rowIds.length === 0) {
-        try {
-          const idsToUpdate = allData.map((r: any) => r.id);
+      // 내주 발주서인 경우: 필터가 없어도 "내주"만 조회
+      if (isInhouseTemplate) {
+        const allData = await sql`
+          SELECT ur.id, ur.row_data
+          FROM upload_rows ur
+          INNER JOIN uploads u ON ur.upload_id = u.id
+          WHERE ur.row_data->>'내외주' = '내주'
+          ORDER BY u.created_at DESC, ur.id DESC
+        `;
+        // ID와 row_data를 함께 저장
+        dataRowsWithIds = allData.map((r: any) => ({
+          id: r.id,
+          row_data: r.row_data || {},
+        }));
+        dataRows = dataRowsWithIds.map((r: any) => r.row_data);
 
-          if (idsToUpdate.length > 0) {
-            // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
-            await sql`
-              UPDATE upload_rows
-              SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
-              WHERE id = ANY(${idsToUpdate})
-            `;
+        // 전체 다운로드 시 주문상태 업데이트 (rowIds가 없을 때)
+        if (!rowIds || rowIds.length === 0) {
+          try {
+            const idsToUpdate = allData.map((r: any) => r.id);
+
+            if (idsToUpdate.length > 0) {
+              // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
+              await sql`
+                UPDATE upload_rows
+                SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
+                WHERE id = ANY(${idsToUpdate})
+              `;
+            }
+          } catch (updateError) {
+            console.error("주문상태 업데이트 실패:", updateError);
+            // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리
           }
-        } catch (updateError) {
-          console.error("주문상태 업데이트 실패:", updateError);
-          // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리
+        }
+      } else {
+        // 내주 발주서가 아닌 경우: 모든 데이터 조회
+        const allData = await sql`
+          SELECT ${
+            !rowIds || rowIds.length === 0 ? sql`ur.id,` : sql``
+          } ur.row_data
+          FROM upload_rows ur
+          INNER JOIN uploads u ON ur.upload_id = u.id
+          ORDER BY u.created_at DESC, ur.id DESC
+        `;
+        // ID와 row_data를 함께 저장
+        dataRowsWithIds = allData.map((r: any) => ({
+          id: r.id,
+          row_data: r.row_data || {},
+        }));
+        dataRows = dataRowsWithIds.map((r: any) => r.row_data);
+
+        // 전체 다운로드 시 주문상태 업데이트 (rowIds가 없을 때)
+        if (!rowIds || rowIds.length === 0) {
+          try {
+            const idsToUpdate = allData.map((r: any) => r.id);
+
+            if (idsToUpdate.length > 0) {
+              // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
+              await sql`
+                UPDATE upload_rows
+                SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
+                WHERE id = ANY(${idsToUpdate})
+              `;
+            }
+          } catch (updateError) {
+            console.error("주문상태 업데이트 실패:", updateError);
+            // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리
+          }
         }
       }
     }

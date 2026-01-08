@@ -306,18 +306,59 @@ export async function POST(request: NextRequest) {
       }));
       dataRows = dataRowsWithIds.map((r: any) => r.row_data);
     } else {
-      // 조건 없으면 모든 데이터 조회
-      const allData = await sql`
-        SELECT ur.id, ur.row_data
-        FROM upload_rows ur
-        INNER JOIN uploads u ON ur.upload_id = u.id
-        ORDER BY u.created_at DESC, ur.id DESC
-      `;
-      dataRowsWithIds = allData.map((r: any) => ({
-        id: r.id,
-        row_data: r.row_data || {},
-      }));
-      dataRows = dataRowsWithIds.map((r: any) => r.row_data);
+      // 템플릿명 확인 (외주 발주서인지 체크)
+      const templateName = (templateData.name || "").normalize("NFC").trim();
+      const isOutsourceTemplate = templateName.includes("외주");
+      const isCJOutsourceTemplate = templateName.includes("CJ");
+      
+      // 외주 발주서인 경우: 필터가 없어도 "외주"만 조회
+      if (isOutsourceTemplate) {
+        // CJ외주 발주서인 경우: 매핑코드 106464 제외
+        if (isCJOutsourceTemplate) {
+          const allData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE ur.row_data->>'내외주' = '외주'
+              AND (ur.row_data->>'매핑코드' IS NULL OR ur.row_data->>'매핑코드' != '106464')
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+          dataRowsWithIds = allData.map((r: any) => ({
+            id: r.id,
+            row_data: r.row_data || {},
+          }));
+          dataRows = dataRowsWithIds.map((r: any) => r.row_data);
+        } else {
+          // 일반 외주 발주서: CJ 제외
+          const allData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE ur.row_data->>'내외주' = '외주'
+              AND (ur.row_data->>'매핑코드' IS NULL OR ur.row_data->>'매핑코드' != '106464')
+              AND (ur.row_data->>'업체명' IS NULL OR ur.row_data->>'업체명' NOT LIKE '%CJ%')
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+          dataRowsWithIds = allData.map((r: any) => ({
+            id: r.id,
+            row_data: r.row_data || {},
+          }));
+          dataRows = dataRowsWithIds.map((r: any) => r.row_data);
+        }
+      } else {
+        // 외주 발주서가 아닌 경우: 모든 데이터 조회
+        const allData = await sql`
+          SELECT ur.id, ur.row_data
+          FROM upload_rows ur
+          INNER JOIN uploads u ON ur.upload_id = u.id
+          ORDER BY u.created_at DESC, ur.id DESC
+        `;
+        dataRowsWithIds = allData.map((r: any) => ({
+          id: r.id,
+          row_data: r.row_data || {},
+        }));
+        dataRows = dataRowsWithIds.map((r: any) => r.row_data);
+      }
     }
 
     // 템플릿명 확인 (외주 발주서인지 체크)
