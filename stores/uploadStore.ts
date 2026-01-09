@@ -333,40 +333,12 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
   setSelectedSessionId: (sessionId) => set({selectedSessionId: sessionId}),
 
   loadSessions: async () => {
-    try {
-      const {user} = useAuthStore.getState();
-      const sessions = await getAllSessions(user?.id);
-      const currentSession = getCurrentSession();
-      const currentSessionId = await getCurrentSessionId();
-
-      // 현재 세션이 목록에 없으면 추가
-      let updatedSessions = [...sessions];
-      if (
-        currentSession &&
-        !sessions.find((s) => s.sessionId === currentSession.sessionId)
-      ) {
-        updatedSessions.push(currentSession);
-      }
-
-      // localStorage에서 이전에 선택한 세션 불러오기
-      let finalSelectedId: string | null = currentSessionId; // 기본값은 현재 세션
-      if (typeof window !== "undefined") {
-        const savedSelectedId = localStorage.getItem("selected_session_id");
-        if (savedSelectedId === "all") {
-          finalSelectedId = null; // 모든 세션
-        } else if (savedSelectedId && savedSelectedId !== "null") {
-          finalSelectedId = savedSelectedId; // 특정 세션
-        }
-      }
-
-      set({
-        availableSessions: updatedSessions,
-        currentSession: currentSession,
-        selectedSessionId: finalSelectedId,
-      });
-    } catch (error) {
-      console.error("세션 로드 실패:", error);
-    }
+    // 세션 기능 제거로 인해 빈 함수
+    set({
+      availableSessions: [],
+      currentSession: null,
+      selectedSessionId: null, // "all"을 의미
+    });
   },
 
   createSession: async (sessionName: string) => {
@@ -385,59 +357,25 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
   },
 
   switchToSession: (session: UploadSession) => {
-    switchSession(session);
+    // 세션 기능 제거로 인해 빈 함수
     set({
-      currentSession: session,
-      selectedSessionId: session.sessionId,
+      currentSession: null,
+      selectedSessionId: null, // "all"을 의미
     });
-    // 세션 변경 시 파일 목록 다시 로드
     get().loadFilesFromServer();
   },
 
   selectSession: (sessionId: string | null) => {
-    const {availableSessions} = get();
-
-    // 선택된 세션을 localStorage에 저장
-    if (typeof window !== "undefined") {
-      localStorage.setItem("selected_session_id", sessionId || "all");
-    }
-
-    if (sessionId === null) {
-      // 모든 세션 선택
-      set({
-        selectedSessionId: null,
-        currentSession: null,
-      });
-    } else {
-      // 특정 세션 선택
-      const session = availableSessions.find((s) => s.sessionId === sessionId);
-      if (session) {
-        get().switchToSession(session);
-      }
-    }
-    // 세션 변경 시 파일 목록 다시 로드
+    // 세션 기능 제거로 인해 항상 "all"로 설정
+    set({
+      selectedSessionId: null, // "all"을 의미
+      currentSession: null,
+    });
     get().loadFilesFromServer();
   },
 
   deleteCurrentSession: async () => {
-    const currentSession = get().currentSession;
-    if (!currentSession) return false;
-
-    try {
-      const success = await deleteSession(currentSession.sessionId);
-      if (success) {
-        // 세션 목록 다시 로드
-        await get().loadSessions();
-        // 기본 세션으로 전환
-        const sessions = get().availableSessions;
-        if (sessions.length > 0) {
-          get().switchToSession(sessions[0]);
-        }
-        return true;
-      }
-    } catch (error) {
-      console.error("세션 삭제 실패:", error);
-    }
+    // 세션 기능 제거로 인해 항상 false 반환
     return false;
   },
 
@@ -554,10 +492,9 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     const {setUploadedFiles, confirmFile, selectedSessionId, uploadedFiles} =
       get();
 
+    // 세션 기능 제거로 인해 항상 "all" 사용
     const sessionId =
-      selectedSessionId === null
-        ? "all"
-        : selectedSessionId || (await getCurrentSessionId());
+      selectedSessionId === null ? "all" : selectedSessionId || "all";
 
     try {
       // company-id, user-id 헤더 포함

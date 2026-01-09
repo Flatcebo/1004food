@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
             // productId 추가 (productIdMap에서 가져오기)
             // 여러 키 변형으로 시도 (정확한 매칭, 공백 제거 등)
             let productId = null;
-            
+
             // 1순위: 정확한 상품명으로 매칭
             if (productIdMap[productName]) {
               productId = productIdMap[productName];
@@ -193,7 +193,7 @@ export async function POST(request: NextRequest) {
                 }
               }
             }
-            
+
             if (productId) {
               rowObj["productId"] = productId;
             } else {

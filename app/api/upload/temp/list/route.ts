@@ -16,6 +16,21 @@ export async function GET(request: NextRequest) {
     // user_id 추출
     const userId = await getUserIdFromRequest(request);
 
+    // 관리자 권한 확인
+    let isAdmin = false;
+    if (userId) {
+      try {
+        const userResult = await sql`
+          SELECT grade FROM users WHERE id = ${userId} AND company_id = ${companyId}
+        `;
+        if (userResult.length > 0 && userResult[0].grade === "관리자") {
+          isAdmin = true;
+        }
+      } catch (error) {
+        console.error("사용자 권한 확인 실패:", error);
+      }
+    }
+
     const {searchParams} = new URL(request.url);
     const sessionId = searchParams.get("sessionId");
 
@@ -51,8 +66,31 @@ export async function GET(request: NextRequest) {
     let files: any[] = [];
     try {
       if (sessionId === "all") {
-        // 모든 세션의 파일 조회 (company_id, user_id 필터링)
-        if (userId) {
+        // 모든 세션의 파일 조회
+        // 관리자는 모든 파일 조회, 일반 사용자는 본인 파일만 조회
+        if (isAdmin) {
+          // 관리자: company_id만 필터링하여 모든 파일 조회
+          files = (await sql`
+            SELECT
+              file_id as id,
+              file_name as "fileName",
+              'all-sessions' as "sessionId",
+              row_count as "rowCount",
+              table_data as "tableData",
+              header_index as "headerIndex",
+              product_code_map as "productCodeMap",
+              product_id_map as "productIdMap",
+              validation_status as "validationStatus",
+              is_confirmed as "isConfirmed",
+              vendor_name as "vendorName",
+              created_at as "createdAt",
+              updated_at
+            FROM temp_files
+            WHERE company_id = ${companyId}
+            ORDER BY created_at DESC
+          `) as any[];
+        } else if (userId) {
+          // 일반 사용자: 본인 파일만 조회
           files = (await sql`
             SELECT
               file_id as id,
@@ -73,6 +111,7 @@ export async function GET(request: NextRequest) {
             ORDER BY created_at DESC
           `) as any[];
         } else {
+          // user_id가 없는 경우: company_id만 필터링
           files = (await sql`
             SELECT
               file_id as id,
@@ -94,8 +133,32 @@ export async function GET(request: NextRequest) {
           `) as any[];
         }
       } else if (sessionId) {
-        // 특정 세션의 파일 조회 (company_id, user_id 필터링)
-        if (userId) {
+        // 특정 세션의 파일 조회
+        // 관리자는 모든 파일 조회, 일반 사용자는 본인 파일만 조회
+        if (isAdmin) {
+          // 관리자: company_id와 session_id만 필터링하여 모든 파일 조회
+          files = (await sql`
+            SELECT
+              file_id as id,
+              file_name as "fileName",
+              COALESCE(session_id, 'default-session') as "sessionId",
+              row_count as "rowCount",
+              table_data as "tableData",
+              header_index as "headerIndex",
+              product_code_map as "productCodeMap",
+              product_id_map as "productIdMap",
+              validation_status as "validationStatus",
+              is_confirmed as "isConfirmed",
+              vendor_name as "vendorName",
+              created_at as "createdAt",
+              updated_at
+            FROM temp_files
+            WHERE company_id = ${companyId}
+            AND COALESCE(session_id, 'default-session') = ${sessionId}
+            ORDER BY created_at DESC
+          `) as any[];
+        } else if (userId) {
+          // 일반 사용자: 본인 파일만 조회
           files = (await sql`
             SELECT
               file_id as id,
@@ -118,6 +181,7 @@ export async function GET(request: NextRequest) {
             ORDER BY created_at DESC
           `) as any[];
         } else {
+          // user_id가 없는 경우: company_id와 session_id만 필터링
           files = (await sql`
             SELECT
               file_id as id,
@@ -147,7 +211,7 @@ export async function GET(request: NextRequest) {
         (error.message.includes('column "validation_status" does not exist') ||
          error.message.includes('column "user_id" does not exist'))
       ) {
-        // user_id 컬럼이 없으면 user_id 필터링 없이 조회
+        // user_id 컬럼이 없으면 user_id 필터링 없이 조회 (관리자 권한과 관계없이 company_id만 필터링)
         if (sessionId === "all") {
           files = (await sql`
             SELECT
