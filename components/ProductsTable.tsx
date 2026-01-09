@@ -239,8 +239,8 @@ const ProductsTable = memo(function ProductsTable({
     "상품명",
     "매핑코드",
     "사방넷명",
-    "합포수량",
     "원가",
+    "판매가",
     "공급단가",
     "택배비",
     "매입처",
@@ -358,9 +358,6 @@ const ProductsTable = memo(function ProductsTable({
                     {product.sabangName || ""}
                   </td>
                   <td className="border px-2 py-1 border-gray-300 text-xs text-right">
-                    {product.pkg || ""}
-                  </td>
-                  <td className="border px-2 py-1 border-gray-300 text-xs text-right">
                     {typeof product.price === "number"
                       ? product.price.toLocaleString()
                       : ""}
@@ -368,6 +365,11 @@ const ProductsTable = memo(function ProductsTable({
                   <td className="border px-2 py-1 border-gray-300 text-xs text-right">
                     {typeof product.salePrice === "number"
                       ? product.salePrice.toLocaleString()
+                      : ""}
+                  </td>
+                  <td className="border px-2 py-1 border-gray-300 text-xs text-right">
+                    {typeof product.supplyPrice === "number"
+                      ? product.supplyPrice.toLocaleString()
                       : ""}
                   </td>
                   <td className="border px-2 py-1 border-gray-300 text-xs text-right">

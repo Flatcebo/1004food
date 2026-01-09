@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
         pkg,
         price,
         sale_price as "salePrice",
+        supply_price as "supplyPrice",
         post_fee as "postFee",
         purchase,
         bill_type as "billType",

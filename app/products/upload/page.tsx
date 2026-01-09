@@ -13,6 +13,7 @@ const COMPANY_ID: number | null = 1; // 예: 1, 2, 3 등 숫자로 입력하거�
 function ProductUploadPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const batchFileInputRef = useRef<HTMLInputElement>(null);
+  const priceUpdateFileInputRef = useRef<HTMLInputElement>(null);
   const [uploadStatus, setUploadStatus] = useState<{
     message: string;
     type: "success" | "error" | "";
@@ -118,6 +119,55 @@ function ProductUploadPage() {
     batchFileInputRef.current?.click();
   };
 
+  const handlePriceUpdateUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    setUploadStatus({message: "", type: ""});
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const response = await fetch("/api/products/update-price-excel", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setUploadStatus({
+          message: result.message || "가격 업데이트 성공!",
+          type: "success",
+        });
+      } else {
+        setUploadStatus({
+          message: result.error || "가격 업데이트 실패",
+          type: "error",
+        });
+      }
+    } catch (error: any) {
+      setUploadStatus({
+        message: error.message || "가격 업데이트 중 오류가 발생했습니다.",
+        type: "error",
+      });
+    } finally {
+      setIsUploading(false);
+      // input 초기화
+      if (priceUpdateFileInputRef.current) {
+        priceUpdateFileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const handlePriceUpdateUploadClick = () => {
+    priceUpdateFileInputRef.current?.click();
+  };
+
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="mb-8">
@@ -212,6 +262,59 @@ function ProductUploadPage() {
               }`}
             >
               {isUploading ? "업로드 중..." : "📁 배치 업로드"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 공급단가 업데이트 섹션 */}
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">
+          💰 공급단가 업데이트
+        </h2>
+
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm text-gray-600 mb-3">
+              엑셀 파일의 상품코드와 공급단가를 읽어 기존 상품의 판매가를 일괄
+              업데이트합니다.
+              <br />
+              <strong>필수 헤더:</strong> 상품코드, 공급단가
+              <br />
+              <strong>특징:</strong>
+              <br />
+              • 상품코드에서 맨 뒤의 "-0001"은 자동으로 제거됩니다
+              <br />
+              • 엑셀 파일 내의 상품코드 중복은 자동으로 필터링됩니다 (첫 번째 값
+              사용)
+              <br />
+              • DB의 products 테이블 code 컬럼과 매칭하여 supply_price를
+              업데이트합니다
+              <br />
+              <strong>💡 배치 처리:</strong> 대량 업데이트를 위해 배치 방식으로
+              효율적으로 처리됩니다.
+            </p>
+          </div>
+
+          <div className="flex gap-4">
+            <input
+              ref={priceUpdateFileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handlePriceUpdateUpload}
+              className="hidden"
+            />
+
+            <button
+              onClick={handlePriceUpdateUploadClick}
+              disabled={isUploading}
+              className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+                isUploading
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-green-600 hover:bg-green-700 text-white"
+              }`}
+            >
+              {isUploading ? "업데이트 중..." : "💰 공급단가 업데이트"}
             </button>
           </div>
         </div>

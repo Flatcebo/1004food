@@ -18,6 +18,7 @@ export interface Product {
   pkg: string | null;
   price: number | null;
   salePrice: number | null;
+  supplyPrice: number | null;
   postFee: number | null;
   purchase: string | null;
   billType: string | null;

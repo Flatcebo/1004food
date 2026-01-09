@@ -1,25 +1,6 @@
 import {useState, useEffect, useCallback, useMemo} from "react";
 import {fetchProducts} from "@/utils/api";
-
-interface Product {
-  id: number;
-  type: string | null;
-  postType: string | null;
-  name: string;
-  code: string;
-  pkg: string | null;
-  price: number | null;
-  salePrice: number | null;
-  postFee: number | null;
-  purchase: string | null;
-  billType: string | null;
-  category: string | null;
-  productType: string | null;
-  sabangName: string | null;
-  etc: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
+import type {Product} from "@/types/api";
 
 interface Filters {
   types: string[];
@@ -52,7 +33,10 @@ export function useProducts() {
       const result = await fetchProducts();
 
       if (result.success) {
-        const data = result.data || [];
+        const data = (result.data || []).map((product) => ({
+          ...product,
+          supplyPrice: product.supplyPrice ?? null,
+        }));
         setProducts(data);
 
         // 필터 옵션 추출 (최적화: 한 번의 순회로 처리)

@@ -1,5 +1,6 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
+import {getCompanyIdFromRequest} from "@/lib/company";
 import * as XLSX from "xlsx";
 
 // 한국 시간(KST, UTC+9)을 반환하는 함수
@@ -23,17 +24,19 @@ const REQUIRED_HEADERS = {
   post_fee: ["배송비"],
 };
 
-// 헤더를 찾아서 인덱스 반환 (정확한 매칭만)
+// 헤더를 찾아서 인덱스 반환 (완전 일치만)
 function findHeaderIndex(headers: string[], possibleNames: string[]): number | null {
   for (let i = 0; i < headers.length; i++) {
-    const header = headers[i];
-    const normalizedHeader = header.replace(/\s+/g, "").toLowerCase();
+    const header = String(headers[i]).trim();
 
     for (const name of possibleNames) {
-      const normalizedName = name.replace(/\s+/g, "").toLowerCase();
+      // 공백 제거 후 완전 일치 비교 (대소문자 구분 없음)
+      const normalizedHeader = header.replace(/\s+/g, "");
+      const normalizedName = name.replace(/\s+/g, "");
 
-      // 정확히 일치하는 경우만
-      if (normalizedHeader === normalizedName) {
+      // 완전 일치하는 경우만 (원가2는 원가와 매칭되지 않음)
+      if (normalizedHeader.toLowerCase() === normalizedName.toLowerCase() && 
+          normalizedHeader.length === normalizedName.length) {
         return i;
       }
     }
@@ -45,6 +48,15 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
   try {
+    // company_id 추출
+    const companyId = await getCompanyIdFromRequest(request);
+    if (!companyId) {
+      return NextResponse.json(
+        {success: false, error: "company_id가 필요합니다."},
+        {status: 400}
+      );
+    }
+
     const formData = await request.formData();
     const file = formData.get("file") as File;
 
@@ -118,13 +130,21 @@ export async function POST(request: NextRequest) {
         console.log(`✓ 매칭 성공: ${dbColumn} -> "${headers[index]}" (인덱스: ${index})`);
       } else {
         console.log(`✗ 매칭 실패: ${dbColumn} -> 가능한 이름들: ${possibleNames.join(", ")}`);
+        // 원가 헤더 매칭 실패 시 디버깅 정보 출력
+        if (dbColumn === "price") {
+          console.log(`  원가 헤더 디버깅:`, {
+            headers: headers,
+            원가헤더들: headers.filter(h => String(h).includes("원가")),
+            원가2헤더들: headers.filter(h => String(h).includes("원가2")),
+          });
+        }
       }
     }
 
     console.log("최종 매칭 결과:", columnMapping);
 
-    // 필수 칼럼 확인 (모든 필수 헤더가 있어야 함)
-    const requiredFields = Object.keys(REQUIRED_HEADERS);
+    // 필수 칼럼 확인 (price는 선택사항이므로 제외)
+    const requiredFields = Object.keys(REQUIRED_HEADERS).filter(field => field !== "price");
     const missingFields = requiredFields.filter(field => columnMapping[field] === undefined);
 
     if (missingFields.length > 0) {
@@ -158,17 +178,36 @@ export async function POST(request: NextRequest) {
 
       // 각 필드 매핑
       console.log(`행 ${i} 데이터 파싱 시작:`, row);
+      console.log(`현재 columnMapping:`, columnMapping);
       for (const [dbColumn, index] of Object.entries(columnMapping)) {
         const value = row[index];
-        console.log(`  ${dbColumn} (인덱스 ${index}): "${value}"`);
-        if (value !== undefined && value !== null && value !== "") {
-          // 숫자 타입 필드 처리
-          if (["sale_price", "price", "post_fee"].includes(dbColumn)) {
-            const numValue = Number(value);
-            if (!isNaN(numValue)) {
-              product[dbColumn] = numValue;
+        console.log(`  ${dbColumn} (인덱스 ${index}): "${value}" (타입: ${typeof value})`);
+        
+        // 숫자 타입 필드 처리 (price, sale_price, post_fee는 0도 유효한 값)
+        if (["sale_price", "price", "post_fee"].includes(dbColumn)) {
+          // 값이 있으면 숫자로 변환 (0도 유효한 값)
+          if (value !== undefined && value !== null) {
+            // 빈 문자열도 체크 (공백 제거 후)
+            const trimmedValue = String(value).trim();
+            // 빈 문자열이 아니고, "-", "N/A"가 아닌 경우에만 처리
+            if (trimmedValue !== "" && trimmedValue !== "-" && trimmedValue !== "N/A" && trimmedValue.toLowerCase() !== "null") {
+              const numValue = Number(trimmedValue);
+              if (!isNaN(numValue)) {
+                product[dbColumn] = numValue;
+                console.log(`    -> ${dbColumn} 저장됨: ${numValue}`);
+              } else {
+                console.log(`    -> ${dbColumn} 숫자 변환 실패: "${trimmedValue}" (원본: ${value})`);
+              }
+            } else {
+              console.log(`    -> ${dbColumn} 값이 비어있거나 유효하지 않음: "${trimmedValue}" (원본: ${value})`);
             }
           } else {
+            console.log(`    -> ${dbColumn} 값이 undefined 또는 null (인덱스 ${index}, row 길이: ${row.length})`);
+            // price는 필수는 아니지만, 값이 없으면 null로 명시적으로 설정하지 않음 (undefined 상태 유지)
+          }
+        } else {
+          // 문자열 필드는 빈 값 제외
+          if (value !== undefined && value !== null && value !== "") {
             product[dbColumn] = String(value).trim();
           }
         }
@@ -195,6 +234,8 @@ export async function POST(request: NextRequest) {
       if (product.name && product.code) {
         // code에서 하이픈 이후 제거
         product.code = String(product.code).trim().split("-")[0].trim();
+        // post_type이 없으면 빈 문자열로 설정 (NULL 방지)
+        product.post_type = product.post_type || "";
         products.push(product);
       }
     }
@@ -244,28 +285,63 @@ export async function POST(request: NextRequest) {
         const batchStartTime = Date.now();
 
         // 배치 내의 쿼리들을 병렬로 실행
-        const insertPromises = batch.map((product, idx) => {
+        // 중복 체크: name, code, sabang_name, post_type이 모두 일치하면 업데이트
+        const insertPromises = batch.map(async (product, idx) => {
           console.log(`배치 상품 ${idx + 1}:`, product);
-          return sql`
-            INSERT INTO products (
-              type, name, sabang_name, code, category, bill_type, purchase,
-              product_type, sale_price, price, post_fee, created_at, updated_at
-            ) VALUES (
-              ${product.type || null},
-              ${product.name},
-              ${product.sabang_name},  -- 상품명과 동일하게 저장
-              ${product.code},
-              ${product.category || null},
-              ${product.bill_type || null},
-              ${product.purchase || null},
-              ${product.product_type || null},
-              ${product.sale_price !== undefined ? product.sale_price : null},
-              ${product.price !== undefined ? product.price : null},
-              ${product.post_fee !== undefined ? product.post_fee : null},
-              ${koreaTime.toISOString()}::timestamp,
-              ${koreaTime.toISOString()}::timestamp
-            )
+          const normalizedPostType = product.post_type || "";
+          
+          // 먼저 중복 체크: name, code, sabang_name, post_type이 모두 일치하는 상품이 있는지 확인
+          const existingProduct = await sql`
+            SELECT id FROM products 
+            WHERE company_id = ${companyId}
+              AND name = ${product.name}
+              AND code = ${product.code}
+              AND sabang_name = ${product.sabang_name}
+              AND post_type = ${normalizedPostType}
+            LIMIT 1
           `;
+          
+          if (existingProduct.length > 0) {
+            // 중복이 있으면 업데이트
+            await sql`
+              UPDATE products 
+              SET 
+                type = ${product.type || null},
+                category = ${product.category || null},
+                bill_type = ${product.bill_type || null},
+                purchase = ${product.purchase || null},
+                product_type = ${product.product_type || null},
+                sale_price = ${product.sale_price !== undefined ? product.sale_price : null},
+                price = ${product.price !== undefined && product.price !== null ? product.price : null},
+                post_fee = ${product.post_fee !== undefined ? product.post_fee : null},
+                updated_at = ${koreaTime.toISOString()}::timestamp
+              WHERE id = ${existingProduct[0].id}
+            `;
+          } else {
+            // 중복이 없으면 INSERT
+            await sql`
+              INSERT INTO products (
+                company_id, type, name, sabang_name, code, category, bill_type, purchase,
+                product_type, sale_price, price, post_fee, post_type, created_at, updated_at
+              ) VALUES (
+                ${companyId},
+                ${product.type || null},
+                ${product.name},
+                ${product.sabang_name},
+                ${product.code},
+                ${product.category || null},
+                ${product.bill_type || null},
+                ${product.purchase || null},
+                ${product.product_type || null},
+                ${product.sale_price !== undefined ? product.sale_price : null},
+                ${product.price !== undefined && product.price !== null ? product.price : null},
+                ${product.post_fee !== undefined ? product.post_fee : null},
+                ${normalizedPostType},
+                ${koreaTime.toISOString()}::timestamp,
+                ${koreaTime.toISOString()}::timestamp
+              )
+            `;
+          }
         });
 
         await Promise.all(insertPromises);
