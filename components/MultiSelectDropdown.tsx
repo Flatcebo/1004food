@@ -48,6 +48,11 @@ export default function MultiSelectDropdown({
     setIsOpen(!isOpen);
   };
 
+  const handleClearAll = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onChange([]);
+  };
+
   // options가 string[]인지 Option[]인지 확인하고 정규화
   const normalizedOptions: Option[] = options.map((opt: string | Option) => {
     if (typeof opt === "string") {
@@ -105,30 +110,63 @@ export default function MultiSelectDropdown({
       <div className={`flex items-center ${showSelectedTags ? "mb-2" : ""}`}>
         <label className="mr-0">{label} :</label>
         <div className={`relative ml-2 ${showSelectedTags ? "flex-1" : ""}`}>
-          <button
-            type="button"
+          <div
             className={`px-2 py-1 border border-gray-300 rounded bg-white text-left ${
               showSelectedTags ? "w-full" : "min-w-[150px]"
-            } flex items-center justify-between hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500`}
-            onClick={toggleDropdown}
+            } flex items-center justify-between hover:border-gray-400 focus-within:ring-2 focus-within:ring-blue-500`}
           >
-            <span className="truncate">{displayText}</span>
-            <svg
-              className={`w-4 h-4 ml-2 transition-transform ${
-                isOpen ? "rotate-180" : ""
-              }`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+            <button
+              type="button"
+              onClick={toggleDropdown}
+              className="flex-1 text-left flex items-center justify-between focus:outline-none"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 9l-7 7-7-7"
-              />
-            </svg>
-          </button>
+              <span className="truncate">{displayText}</span>
+            </button>
+            {isOpen && selectedValues.length > 0 ? (
+              <button
+                type="button"
+                onClick={handleClearAll}
+                className="w-4 h-4 ml-2 flex items-center justify-center text-gray-500 hover:text-red-600 transition-colors shrink-0"
+                title="전체 해제"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={toggleDropdown}
+                className="w-4 h-4 ml-2 flex items-center justify-center shrink-0 focus:outline-none"
+              >
+                <svg
+                  className={`w-4 h-4 transition-transform ${
+                    isOpen ? "rotate-180" : ""
+                  }`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
+                </svg>
+              </button>
+            )}
+          </div>
           {isOpen && (
             <div className="absolute z-9999 mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-48 overflow-y-auto min-w-[150px]">
               {normalizedOptions && normalizedOptions.length > 0 ? (

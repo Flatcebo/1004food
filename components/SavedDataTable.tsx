@@ -1489,6 +1489,7 @@ const SavedDataTable = memo(function SavedDataTable({
     uploadTimeTo,
     selectedType,
     selectedPostType,
+    selectedCompany,
     selectedVendor,
     selectedOrderStatus,
     appliedSearchField,
@@ -1513,30 +1514,37 @@ const SavedDataTable = memo(function SavedDataTable({
       <>
         <div
           className="sticky top-0 z-20 bg-white mb-2 text-sm 
-        text-gray-600 flex items-center justify-between py-3 px-2"
+        text-gray-600 flex items-center justify-between py-3 px-2 gap-4"
         >
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="py-1.5">총 {tableRows.length}건</span>
+          <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+            <span className="py-1.5 shrink-0">총 {tableRows.length}건</span>
             {activeFilters.length > 0 && (
-              <div className="flex items-center gap-1 flex-wrap">
+              <div className="flex items-center gap-1 flex-wrap min-w-0 flex-1">
                 <span className="text-gray-400">|</span>
-                {activeFilters.map((filter, idx) => (
-                  <span key={idx} className="flex items-center gap-1">
-                    <button
-                      onClick={() => onRemoveFilter?.(filter.type)}
-                      className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs hover:bg-blue-200 transition-colors flex items-center gap-1"
-                      title="클릭하여 필터 제거"
-                    >
-                      <span>
-                        {filter.label}: {filter.value}
-                      </span>
-                      <span className="text-blue-500">×</span>
-                    </button>
-                    {idx < activeFilters.length - 1 && (
-                      <span className="text-gray-300">·</span>
-                    )}
-                  </span>
-                ))}
+                {activeFilters.map((filter, idx) => {
+                  // 업체명과 매입처명(업체명)은 width 제한 적용
+                  const isLongFilter =
+                    filter.type === "company" || filter.type === "vendor";
+                  const maxWidthClass = isLongFilter ? "max-w-[200px]" : "";
+
+                  return (
+                    <span key={idx} className="flex items-center gap-1">
+                      <button
+                        onClick={() => onRemoveFilter?.(filter.type)}
+                        className={`px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs hover:bg-blue-200 transition-colors flex items-center gap-1 ${maxWidthClass}`}
+                        title={`${filter.label}: ${filter.value} (클릭하여 필터 제거)`}
+                      >
+                        <span className={`${isLongFilter ? "truncate" : ""}`}>
+                          {filter.label}: {filter.value}
+                        </span>
+                        <span className="text-blue-500 shrink-0">×</span>
+                      </button>
+                      {idx < activeFilters.length - 1 && (
+                        <span className="text-gray-300">·</span>
+                      )}
+                    </span>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1552,16 +1560,18 @@ const SavedDataTable = memo(function SavedDataTable({
     <>
       <div
         className="sticky top-0 z-20 bg-white mb-2 text-sm text-gray-600 
-      flex items-center justify-between py-3 px-2"
+      flex items-center justify-between py-3 px-2 gap-4"
       >
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="py-1.5">
+        <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+          <span className="py-1.5 shrink-0">
             총 {totalCount}건 (페이지 {currentPage} / {totalPages})
           </span>
-          <ActiveFilters
-            filters={activeFilters}
-            onRemoveFilter={onRemoveFilter || (() => {})}
-          />
+          <div className="flex items-center gap-1 flex-wrap min-w-0 flex-1">
+            <ActiveFilters
+              filters={activeFilters}
+              onRemoveFilter={onRemoveFilter || (() => {})}
+            />
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {selectedRows.size > 0 && (

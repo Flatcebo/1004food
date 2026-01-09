@@ -1,4 +1,4 @@
-import {useState, useEffect, useCallback, useMemo} from "react";
+import {useState, useEffect, useCallback, useMemo, useRef} from "react";
 import {getTodayDate} from "@/utils/date";
 import {getAuthHeaders} from "@/utils/api";
 
@@ -20,6 +20,7 @@ export function useUploadData() {
   const [selectedType, setSelectedType] = useState<string>("");
   const [selectedPostType, setSelectedPostType] = useState<string>("");
   const [selectedCompany, setSelectedCompany] = useState<string[]>([]);
+  const prevSelectedCompanyRef = useRef<string[]>([]);
   const [selectedVendor, setSelectedVendor] = useState<string[]>([]);
   const [selectedOrderStatus, setSelectedOrderStatus] =
     useState<string>("공급중");
@@ -49,6 +50,11 @@ export function useUploadData() {
   const [currentPage, setCurrentPage] = useState(1);
 
   const [totalCount, setTotalCount] = useState(0);
+
+  // 자동 필터링이 실행되었는지 추적하는 ref
+  const autoFilterAppliedRef = useRef(false);
+  // 사용자가 수동으로 필터를 해제했는지 추적하는 ref
+  const userClearedFilterRef = useRef(false);
 
   // 저장된 데이터 조회
   const fetchSavedData = useCallback(async () => {
@@ -125,6 +131,19 @@ export function useUploadData() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 사용자가 수동으로 필터를 해제했는지 감지
+  useEffect(() => {
+    // 자동 필터링이 적용된 상태에서 사용자가 빈 배열로 변경한 경우
+    if (
+      autoFilterAppliedRef.current &&
+      prevSelectedCompanyRef.current.length > 0 &&
+      selectedCompany.length === 0
+    ) {
+      userClearedFilterRef.current = true;
+    }
+    prevSelectedCompanyRef.current = selectedCompany;
+  }, [selectedCompany]);
+
   // filters가 로드된 후 assigned_vendor_ids 기반으로 업체명 필터 설정
   useEffect(() => {
     // filters가 아직 로드되지 않았거나 companies가 비어있으면 스킵
@@ -132,9 +151,19 @@ export function useUploadData() {
       return;
     }
 
+    // 사용자가 수동으로 필터를 해제한 경우 자동 필터링 실행하지 않음
+    if (userClearedFilterRef.current) {
+      return;
+    }
+
     // 이미 업체명이 설정되어 있으면 스킵 (사용자가 수동으로 변경한 경우)
     // selectedCompany도 체크하여 초기 로드 시에만 실행되도록 함
     if (selectedCompany.length > 0 || appliedCompany.length > 0) {
+      return;
+    }
+
+    // 이미 자동 필터링이 실행된 경우 스킵
+    if (autoFilterAppliedRef.current) {
       return;
     }
 
@@ -172,6 +201,8 @@ export function useUploadData() {
                 
                 if (validCompanyNames.length > 0) {
                   console.log("업체명 필터 자동 설정:", validCompanyNames);
+                  // 자동 필터링 실행 플래그 설정
+                  autoFilterAppliedRef.current = true;
                   // 드롭다운에 표시되도록 selectedCompany 먼저 설정
                   setSelectedCompany(validCompanyNames);
                   // 필터 적용을 위해 appliedCompany도 설정
@@ -365,6 +396,10 @@ export function useUploadData() {
     setAppliedUploadTimeTo(todayDate);
     setAppliedItemsPerPage(20);
     setCurrentPage(1);
+    // 필터 초기화 시 자동 필터링 플래그도 리셋
+    autoFilterAppliedRef.current = false;
+    userClearedFilterRef.current = false;
+    prevSelectedCompanyRef.current = [];
   }, [todayDate]);
 
   return {
