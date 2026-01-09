@@ -65,11 +65,12 @@ export async function POST(request: NextRequest) {
     // 선택된 행 데이터 조회
     let rows: any[] = [];
     if (rowIds && rowIds.length > 0) {
-      // 선택된 행이 있으면 해당 ID들만 조회 (필터 무시)
+      // 선택된 행이 있으면 해당 ID들만 조회 (company_id 필터링 포함)
       const rowData = await sql`
-        SELECT row_data
-        FROM upload_rows
-        WHERE id = ANY(${rowIds})
+        SELECT ur.row_data
+        FROM upload_rows ur
+        INNER JOIN uploads u ON ur.upload_id = u.id
+        WHERE ur.id = ANY(${rowIds}) AND u.company_id = ${companyId}
       `;
       rows = rowData.map((r: any) => {
         const rowData = r.row_data || {};
@@ -89,6 +90,7 @@ export async function POST(request: NextRequest) {
           type,
           postType,
           vendor,
+          company,
           orderStatus,
           searchField,
           searchValue,
@@ -106,20 +108,30 @@ export async function POST(request: NextRequest) {
         const dbField = searchField ? fieldMap[searchField] : null;
         const searchPattern = searchValue ? `%${searchValue}%` : null;
 
-        // WHERE 조건 구성
-        const conditions: any[] = [];
+        // WHERE 조건 구성 (company_id 필수)
+        const conditions: any[] = [sql`u.company_id = ${companyId}`];
         if (type) {
           conditions.push(sql`ur.row_data->>'내외주' = ${type}`);
         }
         if (postType) {
           conditions.push(sql`ur.row_data->>'택배사' = ${postType}`);
         }
+        // vendor가 배열인 경우 처리
         if (vendor) {
-          conditions.push(sql`ur.row_data->>'업체명' = ${vendor}`);
+          if (Array.isArray(vendor) && vendor.length > 0) {
+            conditions.push(sql`ur.row_data->>'업체명' = ANY(${vendor})`);
+          } else if (typeof vendor === "string") {
+            conditions.push(sql`ur.row_data->>'업체명' = ${vendor}`);
+          }
         }
-        // if (company) {
-        //   conditions.push(sql`ur.row_data->>'업체명' = ${company}`);
-        // }
+        // company가 배열인 경우 처리
+        if (company) {
+          if (Array.isArray(company) && company.length > 0) {
+            conditions.push(sql`ur.row_data->>'업체명' = ANY(${company})`);
+          } else if (typeof company === "string") {
+            conditions.push(sql`ur.row_data->>'업체명' = ${company}`);
+          }
+        }
         if (orderStatus) {
           conditions.push(sql`ur.row_data->>'주문상태' = ${orderStatus}`);
         }
@@ -137,15 +149,6 @@ export async function POST(request: NextRequest) {
 
         // 조건부 쿼리 구성
         const buildQuery = (includeId: boolean = false) => {
-          if (conditions.length === 0) {
-            return sql`
-              SELECT ${includeId ? sql`ur.id,` : sql``} ur.row_data
-              FROM upload_rows ur
-              INNER JOIN uploads u ON ur.upload_id = u.id
-              ORDER BY u.created_at DESC, ur.id DESC
-            `;
-          }
-
           // 첫 번째 조건으로 WHERE 시작
           let query = sql`
             SELECT ${includeId ? sql`ur.id,` : sql``} ur.row_data
@@ -184,47 +187,38 @@ export async function POST(request: NextRequest) {
           // 주문상태 업데이트를 비동기로 처리하여 다운로드 속도 향상
           setImmediate(async () => {
             try {
-              if (conditions.length === 0) {
-                // 조건이 없으면 전체 업데이트
-                await sql`
-                  UPDATE upload_rows
-                  SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
-                  WHERE EXISTS (
-                    SELECT 1 FROM uploads u WHERE u.id = upload_rows.upload_id
-                  )
-                `;
-              } else {
-                // 기존 조건을 재사용하여 직접 UPDATE
-                let updateQuery = sql`
-                  UPDATE upload_rows
-                  SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
-                  FROM uploads u
-                  WHERE upload_rows.upload_id = u.id
-                `;
+              // 기존 조건을 재사용하여 직접 UPDATE
+              let updateQuery = sql`
+                UPDATE upload_rows
+                SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
+                FROM uploads u
+                WHERE upload_rows.upload_id = u.id
+              `;
 
-                // 기존 조건들을 AND로 연결
-                for (let i = 0; i < conditions.length; i++) {
-                  const condition = conditions[i];
-                  // ur. -> upload_rows., u. -> u. 로 변경
-                  const modifiedCondition = condition
-                    .replace(/ur\.row_data/g, "upload_rows.row_data")
-                    .replace(/u\.created_at/g, "u.created_at");
-                  updateQuery = sql`${updateQuery} AND ${modifiedCondition}`;
-                }
-
-                await updateQuery;
+              // 기존 조건들을 AND로 연결
+              for (let i = 0; i < conditions.length; i++) {
+                const condition = conditions[i];
+                // ur. -> upload_rows., u. -> u. 로 변경
+                const modifiedCondition = condition
+                  .replace(/ur\.row_data/g, "upload_rows.row_data")
+                  .replace(/u\.created_at/g, "u.created_at");
+                updateQuery = sql`${updateQuery} AND ${modifiedCondition}`;
               }
+
+              await updateQuery;
             } catch (updateError) {
               console.error("주문상태 업데이트 실패:", updateError);
             }
           });
         }
       } else {
-        // 필터가 없으면 모든 데이터 조회
+        // 필터가 없으면 company_id로 필터링된 모든 데이터 조회
         const allData = await sql`
-          SELECT ${!rowIds || rowIds.length === 0 ? sql`id,` : sql``} row_data
-          FROM upload_rows
-          ORDER BY id DESC
+          SELECT ${!rowIds || rowIds.length === 0 ? sql`ur.id,` : sql``} ur.row_data
+          FROM upload_rows ur
+          INNER JOIN uploads u ON ur.upload_id = u.id
+          WHERE u.company_id = ${companyId}
+          ORDER BY u.created_at DESC, ur.id DESC
         `;
         rows = allData.map((r: any) => {
           const rowData = r.row_data || {};

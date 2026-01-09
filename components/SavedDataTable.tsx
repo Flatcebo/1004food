@@ -351,8 +351,12 @@ const SavedDataTable = memo(function SavedDataTable({
       const filters = {
         type: appliedType || undefined,
         postType: appliedPostType || undefined,
-        company: appliedCompany || undefined,
-        vendor: appliedVendor || undefined,
+        company:
+          appliedCompany && appliedCompany.length > 0
+            ? appliedCompany
+            : undefined,
+        vendor:
+          appliedVendor && appliedVendor.length > 0 ? appliedVendor : undefined,
         orderStatus: appliedOrderStatus || undefined,
         searchField: appliedSearchField || undefined,
         searchValue: appliedSearchValue || undefined,
