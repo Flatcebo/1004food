@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
     let headers = Array.isArray(templateData.headers)
       ? templateData.headers
       : [];
-    
+
     // 상품명과 주소 헤더 사이에 빈 칼럼 추가
     const productNameIndex = headers.findIndex((h: any) => {
       const headerStr = typeof h === "string" ? h : String(h || "");
@@ -110,16 +110,21 @@ export async function POST(request: NextRequest) {
       const headerStr = typeof h === "string" ? h : String(h || "");
       return headerStr.includes("주소") && !headerStr.includes("우편");
     });
-    
+
     // 상품명이 주소보다 앞에 있고, 바로 다음이 아닌 경우에만 빈 칼럼 추가
-    if (productNameIndex !== -1 && addressIndex !== -1 && productNameIndex < addressIndex && addressIndex - productNameIndex === 1) {
+    if (
+      productNameIndex !== -1 &&
+      addressIndex !== -1 &&
+      productNameIndex < addressIndex &&
+      addressIndex - productNameIndex === 1
+    ) {
       headers = [
         ...headers.slice(0, addressIndex),
         "", // 빈 칼럼 추가
         ...headers.slice(addressIndex),
       ];
     }
-    
+
     const columnOrder = Array.isArray(templateData.columnOrder)
       ? templateData.columnOrder
       : headers;
@@ -310,7 +315,7 @@ export async function POST(request: NextRequest) {
       const templateName = (templateData.name || "").normalize("NFC").trim();
       const isOutsourceTemplate = templateName.includes("외주");
       const isCJOutsourceTemplate = templateName.includes("CJ");
-      
+
       // 외주 발주서인 경우: 필터가 없어도 "외주"만 조회
       if (isOutsourceTemplate) {
         // CJ외주 발주서인 경우: 매핑코드 106464 제외
@@ -421,6 +426,9 @@ export async function POST(request: NextRequest) {
         });
         dataRows = processedRowsWithIds.map((item: any) => item.row_data);
         downloadedRowIds = processedRowsWithIds.map((item: any) => item.id);
+        console.log(
+          `CJ외주 발주서: downloadedRowIds 설정됨 - ${downloadedRowIds.length}건 (dataRowsWithIds: ${dataRowsWithIds.length}건, filteredRowsWithIds: ${filteredRowsWithIds.length}건)`
+        );
       } else {
         // rows가 직접 전달된 경우
         dataRows = dataRows.filter(
@@ -800,12 +808,42 @@ export async function POST(request: NextRequest) {
 
       // CJ외주 발주서 다운로드가 성공하면 주문상태 업데이트
       // CJ외주 발주서인 경우 필터링된 데이터의 실제 다운로드된 행들만 업데이트
-      const idsToUpdate =
-        downloadedRowIds.length > 0
-          ? downloadedRowIds
-          : rowIds && rowIds.length > 0
-          ? rowIds
-          : [];
+      let idsToUpdate: number[] = [];
+
+      // downloadedRowIds가 설정되어 있으면 우선 사용 (375-477 라인에서 필터링된 ID)
+      if (downloadedRowIds.length > 0) {
+        idsToUpdate = downloadedRowIds;
+        console.log(
+          `CJ외주 발주서: downloadedRowIds 사용 - ${idsToUpdate.length}건`
+        );
+      } else if (rowIds && rowIds.length > 0) {
+        // 선택된 행 ID 사용
+        idsToUpdate = rowIds;
+        console.log(`CJ외주 발주서: rowIds 사용 - ${idsToUpdate.length}건`);
+      } else if (dataRowsWithIds.length > 0) {
+        // 전체 다운로드이거나 필터 조건이 있는 경우: dataRowsWithIds에서 CJ외주 조건에 맞는 ID만 추출
+        // 전체 다운로드 시 dataRowsWithIds는 이미 CJ외주 조건으로 필터링되어 있음 (313-335 라인)
+        // 하지만 안전을 위해 다시 필터링 (NULL 값 처리 포함)
+        // 전체 다운로드 시 dataRowsWithIds의 모든 ID를 사용 (이미 필터링됨)
+        const filteredIds = dataRowsWithIds
+          .filter(
+            (item: any) =>
+              item &&
+              item.id &&
+              item.row_data &&
+              item.row_data.내외주 === "외주" &&
+              (item.row_data.매핑코드 === null ||
+                item.row_data.매핑코드 === undefined ||
+                item.row_data.매핑코드 !== "106464")
+          )
+          .map((item: any) => item.id)
+          .filter((id: any) => id !== null && id !== undefined);
+        idsToUpdate = filteredIds;
+        console.log(
+          `CJ외주 발주서: dataRowsWithIds에서 필터링 - ${idsToUpdate.length}건 (전체: ${dataRowsWithIds.length}건)`
+        );
+      }
+
       if (idsToUpdate && idsToUpdate.length > 0) {
         try {
           // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
@@ -826,7 +864,9 @@ export async function POST(request: NextRequest) {
           "CJ외주 발주서 다운로드: 업데이트할 ID가 없습니다. downloadedRowIds:",
           downloadedRowIds,
           "rowIds:",
-          rowIds
+          rowIds,
+          "dataRowsWithIds.length:",
+          dataRowsWithIds.length
         );
       }
 

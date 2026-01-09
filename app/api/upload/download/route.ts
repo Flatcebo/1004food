@@ -187,22 +187,47 @@ export async function POST(request: NextRequest) {
           // 주문상태 업데이트를 비동기로 처리하여 다운로드 속도 향상
           setImmediate(async () => {
             try {
-              // 기존 조건을 재사용하여 직접 UPDATE
+              // 조건을 직접 재구성하여 UPDATE 쿼리 작성
               let updateQuery = sql`
                 UPDATE upload_rows
                 SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
                 FROM uploads u
                 WHERE upload_rows.upload_id = u.id
+                  AND u.company_id = ${companyId}
               `;
 
-              // 기존 조건들을 AND로 연결
-              for (let i = 0; i < conditions.length; i++) {
-                const condition = conditions[i];
-                // ur. -> upload_rows., u. -> u. 로 변경
-                const modifiedCondition = condition
-                  .replace(/ur\.row_data/g, "upload_rows.row_data")
-                  .replace(/u\.created_at/g, "u.created_at");
-                updateQuery = sql`${updateQuery} AND ${modifiedCondition}`;
+              // 기존 조건들을 직접 재구성하여 추가 (ur. -> upload_rows.로 변경)
+              if (type) {
+                updateQuery = sql`${updateQuery} AND upload_rows.row_data->>'내외주' = ${type}`;
+              }
+              if (postType) {
+                updateQuery = sql`${updateQuery} AND upload_rows.row_data->>'택배사' = ${postType}`;
+              }
+              if (vendor) {
+                if (Array.isArray(vendor) && vendor.length > 0) {
+                  updateQuery = sql`${updateQuery} AND upload_rows.row_data->>'업체명' = ANY(${vendor})`;
+                } else if (typeof vendor === "string") {
+                  updateQuery = sql`${updateQuery} AND upload_rows.row_data->>'업체명' = ${vendor}`;
+                }
+              }
+              if (company) {
+                if (Array.isArray(company) && company.length > 0) {
+                  updateQuery = sql`${updateQuery} AND upload_rows.row_data->>'업체명' = ANY(${company})`;
+                } else if (typeof company === "string") {
+                  updateQuery = sql`${updateQuery} AND upload_rows.row_data->>'업체명' = ${company}`;
+                }
+              }
+              if (orderStatus) {
+                updateQuery = sql`${updateQuery} AND upload_rows.row_data->>'주문상태' = ${orderStatus}`;
+              }
+              if (dbField && searchPattern) {
+                updateQuery = sql`${updateQuery} AND upload_rows.row_data->>${dbField} ILIKE ${searchPattern}`;
+              }
+              if (uploadTimeFrom) {
+                updateQuery = sql`${updateQuery} AND u.created_at >= ${uploadTimeFrom}::date`;
+              }
+              if (uploadTimeTo) {
+                updateQuery = sql`${updateQuery} AND u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')`;
               }
 
               await updateQuery;
