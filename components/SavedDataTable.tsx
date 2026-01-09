@@ -378,60 +378,9 @@ const SavedDataTable = memo(function SavedDataTable({
       // 사방넷 등록 양식인지 확인
       const isSabangnet = templateName.includes("사방넷");
 
-      // 체크박스가 선택된 경우에만 테이블 데이터로 필터링
-      if (rowIdsToDownload) {
-        // 내주 발주서인 경우: 내외주가 "내주"인 것만 필터링
-        if (isInhouse) {
-          const filteredRows = tableRows.filter(
-            (row: any) =>
-              rowIdsToDownload!.includes(row.id) &&
-              row.내외주?.trim() === "내주" &&
-              row.매핑코드 !== "106464"
-          );
-          rowIdsToDownload = filteredRows.map((row: any) => row.id);
-
-          if (rowIdsToDownload.length === 0) {
-            alert("선택된 행 중 내주 데이터가 없습니다.");
-            setIsDownloading(false);
-            return;
-          }
-        }
-
-        // 외주 발주서인 경우: 내외주가 "외주"인 것만 필터링
-        if (isOutsource) {
-          const filteredRows = tableRows.filter(
-            (row: any) =>
-              rowIdsToDownload!.includes(row.id) &&
-              row.내외주?.trim() === "외주" &&
-              row.매핑코드 !== "106464" &&
-              !row.업체명?.includes("CJ")
-          );
-          rowIdsToDownload = filteredRows.map((row: any) => row.id);
-
-          if (rowIdsToDownload.length === 0) {
-            alert("선택된 행 중 외주 데이터가 없습니다.");
-            setIsDownloading(false);
-            return;
-          }
-        }
-
-        // CJ외주 발주서인 경우: 매핑코드 106464 제외
-        if (isCJOutsource) {
-          const filteredRows = tableRows.filter(
-            (row: any) =>
-              rowIdsToDownload!.includes(row.id) &&
-              row.내외주?.trim() === "외주" &&
-              row.매핑코드 !== "106464"
-          );
-          rowIdsToDownload = filteredRows.map((row: any) => row.id);
-
-          if (rowIdsToDownload.length === 0) {
-            alert("선택된 행 중 CJ외주 데이터가 없습니다.");
-            setIsDownloading(false);
-            return;
-          }
-        }
-      } else {
+      // 체크박스가 선택된 경우: rowIds를 직접 API에 전달 (API에서 내주/외주 필터링 처리)
+      // 전체 다운로드인 경우: 필터를 전달하여 페이지네이션 무시하고 전체 데이터 조회
+      if (!rowIdsToDownload) {
         // 체크박스가 선택되지 않은 경우: 필터에 발주서 타입 조건 추가
         if (isInhouse) {
           filters.type = "내주";
@@ -527,7 +476,6 @@ const SavedDataTable = memo(function SavedDataTable({
     selectedTemplate,
     selectedRows,
     templates,
-    tableRows,
     onDataUpdate,
     useSabangName,
     appliedType,
