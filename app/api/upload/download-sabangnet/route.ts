@@ -4,6 +4,11 @@ import {getCompanyIdFromRequest} from "@/lib/company";
 import * as Excel from "exceljs";
 import {mapDataToTemplate, sortExcelData} from "@/utils/excelDataMapping";
 import JSZip from "jszip";
+import {
+  buildFilterConditions,
+  buildFilterQuery,
+  UploadFilters,
+} from "@/utils/uploadFilters";
 
 export async function POST(request: NextRequest) {
   try {
@@ -86,102 +91,8 @@ export async function POST(request: NextRequest) {
       downloadedRowIds = rowIds;
     } else if (filters && Object.keys(filters).length > 0) {
       // 필터 조건으로 조회
-      const {
-        type,
-        postType,
-        vendor,
-        orderStatus,
-        searchField,
-        searchValue,
-        uploadTimeFrom,
-        uploadTimeTo,
-      } = filters;
-
-      const fieldMap: {[key: string]: string} = {
-        수취인명: "수취인명",
-        주문자명: "주문자명",
-        상품명: "상품명",
-        매핑코드: "매핑코드",
-      };
-      const dbField = searchField ? fieldMap[searchField] : null;
-      const searchPattern = searchValue ? `%${searchValue}%` : null;
-
-      const conditions: any[] = [];
-      const updateConditions: any[] = []; // UPDATE 쿼리용 조건 (별도 생성)
-
-      if (type) {
-        conditions.push(sql`ur.row_data->>'내외주' = ${type}`);
-        updateConditions.push(sql`upload_rows.row_data->>'내외주' = ${type}`);
-      }
-      if (postType) {
-        conditions.push(sql`ur.row_data->>'택배사' = ${postType}`);
-        updateConditions.push(
-          sql`upload_rows.row_data->>'택배사' = ${postType}`
-        );
-      }
-      if (vendor) {
-        conditions.push(sql`ur.row_data->>'업체명' = ${vendor}`);
-        updateConditions.push(sql`upload_rows.row_data->>'업체명' = ${vendor}`);
-      }
-      if (filters.company) {
-        conditions.push(sql`ur.row_data->>'업체명' = ${filters.company}`);
-        updateConditions.push(
-          sql`upload_rows.row_data->>'업체명' = ${filters.company}`
-        );
-      }
-      if (orderStatus) {
-        conditions.push(sql`ur.row_data->>'주문상태' = ${orderStatus}`);
-        updateConditions.push(
-          sql`upload_rows.row_data->>'주문상태' = ${orderStatus}`
-        );
-      }
-
-      if (dbField && searchPattern) {
-        conditions.push(sql`ur.row_data->>${dbField} ILIKE ${searchPattern}`);
-        updateConditions.push(
-          sql`upload_rows.row_data->>${dbField} ILIKE ${searchPattern}`
-        );
-      }
-      if (uploadTimeFrom) {
-        conditions.push(sql`u.created_at >= ${uploadTimeFrom}::date`);
-        updateConditions.push(sql`u.created_at >= ${uploadTimeFrom}::date`);
-      }
-      if (uploadTimeTo) {
-        conditions.push(
-          sql`u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')`
-        );
-        updateConditions.push(
-          sql`u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')`
-        );
-      }
-
-      const buildQuery = (includeId: boolean = false) => {
-        if (conditions.length === 0) {
-          return sql`
-            SELECT ${includeId ? sql`ur.id,` : sql``} ur.row_data
-            FROM upload_rows ur
-            INNER JOIN uploads u ON ur.upload_id = u.id
-            ORDER BY u.created_at DESC, ur.id DESC
-          `;
-        }
-
-        let query = sql`
-          SELECT ${includeId ? sql`ur.id,` : sql``} ur.row_data
-          FROM upload_rows ur
-          INNER JOIN uploads u ON ur.upload_id = u.id
-          WHERE ${conditions[0]}
-        `;
-
-        for (let i = 1; i < conditions.length; i++) {
-          query = sql`${query} AND ${conditions[i]}`;
-        }
-
-        query = sql`${query} ORDER BY u.created_at DESC, ur.id DESC`;
-        return query;
-      };
-
-      // 필터링된 데이터 조회 시 ID도 함께 조회 (주문상태 업데이트를 위해)
-      const filteredData = await buildQuery(true);
+      const {conditions} = buildFilterConditions(filters as UploadFilters);
+      const filteredData = await buildFilterQuery(conditions, true);
       // ID와 row_data를 함께 저장하여 주문상태 업데이트 시 사용
       dataRowsWithIds = filteredData.map((r: any) => ({
         id: r.id,
@@ -286,8 +197,11 @@ export async function POST(request: NextRequest) {
           if (productSalePriceMap[row.productId] !== undefined) {
             const salePrice = productSalePriceMap[row.productId];
             if (salePrice !== null) {
-              row["판매가"] = salePrice;
-              row["sale_price"] = salePrice;
+              // 수량을 고려한 판매가 계산: (공급가 * 수량) - (4000 * (수량 - 1))
+              const quantity = Number(row["수량"] || row["개수"] || row["quantity"] || 1) || 1;
+              const calculatedPrice = salePrice * quantity - 4000 * (quantity - 1);
+              row["판매가"] = calculatedPrice;
+              row["sale_price"] = calculatedPrice;
             }
           }
           // 사방넷명 설정: productSabangNameMap에 있으면 사용, 없으면 null로 설정 (상품명으로 fallback)
@@ -319,8 +233,11 @@ export async function POST(request: NextRequest) {
           if (productSalePriceMapByCode[row.매핑코드] !== undefined) {
             const salePrice = productSalePriceMapByCode[row.매핑코드];
             if (salePrice !== null) {
-              row["판매가"] = salePrice;
-              row["sale_price"] = salePrice;
+              // 수량을 고려한 판매가 계산: (공급가 * 수량) - (4000 * (수량 - 1))
+              const quantity = Number(row["수량"] || row["개수"] || row["quantity"] || 1) || 1;
+              const calculatedPrice = salePrice * quantity - 4000 * (quantity - 1);
+              row["판매가"] = calculatedPrice;
+              row["sale_price"] = calculatedPrice;
             }
           }
           // 사방넷명 설정: productSabangNameMapByCode에 있으면 사용

@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const {fileName, rowCount, data} = body;
+    const {fileName, rowCount, data, vendorName} = body;
 
     if (!fileName || !data || !Array.isArray(data)) {
       return NextResponse.json(
@@ -23,26 +23,116 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // uploads 테이블에 vendor_name 컬럼이 있는지 확인하고 없으면 추가
+    try {
+      const vendorNameColumnExists = await sql`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'uploads' 
+        AND column_name = 'vendor_name'
+      `;
+      
+      if (vendorNameColumnExists.length === 0) {
+        await sql`
+          ALTER TABLE uploads 
+          ADD COLUMN vendor_name VARCHAR(255)
+        `;
+        console.log("✅ uploads 테이블에 vendor_name 컬럼 추가 완료");
+      }
+    } catch (error) {
+      console.error("vendor_name 컬럼 확인/추가 실패:", error);
+    }
+
+    // upload_rows 테이블에 mall_id 컬럼이 있는지 확인하고 없으면 추가
+    try {
+      const mallIdColumnExists = await sql`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'upload_rows' 
+        AND column_name = 'mall_id'
+      `;
+      
+      if (mallIdColumnExists.length === 0) {
+        await sql`
+          ALTER TABLE upload_rows 
+          ADD COLUMN mall_id INTEGER REFERENCES mall(id) ON DELETE SET NULL
+        `;
+        console.log("✅ upload_rows 테이블에 mall_id 컬럼 추가 완료");
+        
+        // 인덱스 생성
+        await sql`
+          CREATE INDEX IF NOT EXISTS idx_upload_rows_mall_id ON upload_rows(mall_id)
+        `;
+        console.log("✅ upload_rows 테이블에 mall_id 인덱스 생성 완료");
+      }
+    } catch (error) {
+      console.error("mall_id 컬럼 확인/추가 실패:", error);
+    }
+
     // 한국 시간(KST) 생성 - NOW()에 9시간 추가 (company_id 포함)
     const uploadResult = await sql`
-      INSERT INTO uploads (file_name, row_count, data, company_id, created_at)
+      INSERT INTO uploads (file_name, row_count, data, company_id, vendor_name, created_at)
       VALUES (${fileName}, ${rowCount}, ${JSON.stringify(
       data
-    )}, ${companyId}, (NOW() + INTERVAL '9 hours'))
+    )}, ${companyId}, ${vendorName || null}, (NOW() + INTERVAL '9 hours'))
       RETURNING id, created_at
     `;
 
     const uploadId = uploadResult[0].id;
     const createdAt = uploadResult[0].created_at;
+    console.log(`✅ uploads 저장 완료: upload_id=${uploadId}, vendor_name=${vendorName || null}`);
+
+    // 업체명으로 mall 테이블에서 해당 mall 찾기
+    let mallId: number | null = null;
+    if (vendorName) {
+      try {
+        const trimmedVendorName = vendorName.trim();
+        const mallResult = await sql`
+          SELECT id FROM mall 
+          WHERE name = ${trimmedVendorName}
+          LIMIT 1
+        `;
+        if (mallResult.length > 0) {
+          mallId = mallResult[0].id;
+          console.log(`✅ 업체명 "${trimmedVendorName}"에 해당하는 mall 찾음: mall_id=${mallId}`);
+        } else {
+          console.warn(`⚠️ 업체명 "${trimmedVendorName}"에 해당하는 mall을 찾을 수 없습니다.`);
+        }
+      } catch (error) {
+        console.error("mall 조회 실패:", error);
+      }
+    } else {
+      console.warn("⚠️ vendorName이 없습니다.");
+    }
+
+    // upload_rows 테이블에 vendor_name 컬럼이 있는지 확인하고 없으면 추가
+    try {
+      const vendorNameColumnExists = await sql`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'upload_rows' 
+        AND column_name = 'vendor_name'
+      `;
+      
+      if (vendorNameColumnExists.length === 0) {
+        await sql`
+          ALTER TABLE upload_rows 
+          ADD COLUMN vendor_name VARCHAR(255)
+        `;
+        console.log("✅ upload_rows 테이블에 vendor_name 컬럼 추가 완료");
+      }
+    } catch (error) {
+      console.error("upload_rows vendor_name 컬럼 확인/추가 실패:", error);
+    }
 
     // 각 행을 개별적으로 저장 (한국 시간, company_id 포함)
     const insertPromises = data.map(
       (row: any) =>
         sql`
-        INSERT INTO upload_rows (upload_id, company_id, row_data, created_at)
+        INSERT INTO upload_rows (upload_id, company_id, row_data, mall_id, vendor_name, created_at)
         VALUES (${uploadId}, ${companyId}, ${JSON.stringify(
           row
-        )}, (NOW() + INTERVAL '9 hours'))
+        )}, ${mallId}, ${vendorName || null}, (NOW() + INTERVAL '9 hours'))
         RETURNING id
       `
     );

@@ -3,6 +3,11 @@ import {NextRequest, NextResponse} from "next/server";
 import {getCompanyIdFromRequest} from "@/lib/company";
 import * as Excel from "exceljs";
 import {mapDataToTemplate, sortExcelData} from "@/utils/excelDataMapping";
+import {
+  buildFilterConditions,
+  buildFilterQuery,
+  UploadFilters,
+} from "@/utils/uploadFilters";
 
 export async function POST(request: NextRequest) {
   try {
@@ -149,82 +154,8 @@ export async function POST(request: NextRequest) {
       downloadedRowIds = rowIds;
     } else if (filters && Object.keys(filters).length > 0) {
       // 필터 조건으로 조회
-      const {
-        type,
-        postType,
-        vendor,
-        orderStatus,
-        searchField,
-        searchValue,
-        uploadTimeFrom,
-        uploadTimeTo,
-      } = filters;
-
-      const fieldMap: {[key: string]: string} = {
-        수취인명: "수취인명",
-        주문자명: "주문자명",
-        상품명: "상품명",
-        매핑코드: "매핑코드",
-      };
-      const dbField = searchField ? fieldMap[searchField] : null;
-      const searchPattern = searchValue ? `%${searchValue}%` : null;
-
-      const conditions: any[] = [];
-      if (type) {
-        conditions.push(sql`ur.row_data->>'내외주' = ${type}`);
-      }
-      if (postType) {
-        conditions.push(sql`ur.row_data->>'택배사' = ${postType}`);
-      }
-      if (vendor) {
-        conditions.push(sql`ur.row_data->>'업체명' = ${vendor}`);
-      }
-      if (filters.company) {
-        conditions.push(sql`ur.row_data->>'업체명' = ${filters.company}`);
-      }
-      if (orderStatus) {
-        conditions.push(sql`ur.row_data->>'주문상태' = ${orderStatus}`);
-      }
-
-      if (dbField && searchPattern) {
-        conditions.push(sql`ur.row_data->>${dbField} ILIKE ${searchPattern}`);
-      }
-      if (uploadTimeFrom) {
-        conditions.push(sql`u.created_at >= ${uploadTimeFrom}::date`);
-      }
-      if (uploadTimeTo) {
-        conditions.push(
-          sql`u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')`
-        );
-      }
-
-      const buildQuery = (includeId: boolean = false) => {
-        if (conditions.length === 0) {
-          return sql`
-            SELECT ${includeId ? sql`ur.id,` : sql``} ur.row_data
-            FROM upload_rows ur
-            INNER JOIN uploads u ON ur.upload_id = u.id
-            ORDER BY u.created_at DESC, ur.id DESC
-          `;
-        }
-
-        let query = sql`
-          SELECT ${includeId ? sql`ur.id,` : sql``} ur.row_data
-          FROM upload_rows ur
-          INNER JOIN uploads u ON ur.upload_id = u.id
-          WHERE ${conditions[0]}
-        `;
-
-        for (let i = 1; i < conditions.length; i++) {
-          query = sql`${query} AND ${conditions[i]}`;
-        }
-
-        query = sql`${query} ORDER BY u.created_at DESC, ur.id DESC`;
-        return query;
-      };
-
-      // 필터링된 데이터 조회 시 ID도 함께 조회 (주문상태 업데이트를 위해)
-      const filteredData = await buildQuery(true);
+      const {conditions} = buildFilterConditions(filters as UploadFilters);
+      const filteredData = await buildFilterQuery(conditions, true);
       // ID와 row_data를 함께 저장하여 내주 필터링 후에도 ID 추적 가능하도록 함
       dataRowsWithIds = filteredData.map((r: any) => ({
         id: r.id,

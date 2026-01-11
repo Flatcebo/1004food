@@ -1,5 +1,6 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
+import {getCompanyIdFromRequest} from "@/lib/company";
 import * as XLSX from "xlsx";
 
 // 헤더를 찾아서 인덱스 반환
@@ -34,17 +35,20 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
   try {
-    // supply_price 컬럼이 없으면 추가
-    try {
-      await sql`
-        ALTER TABLE products 
-        ADD COLUMN IF NOT EXISTS supply_price INTEGER
-      `;
-      console.log("supply_price 컬럼 확인 완료");
-    } catch (columnError: any) {
-      // 컬럼이 이미 있거나 다른 에러인 경우 무시
-      console.log("supply_price 컬럼 확인:", columnError.message);
+    // company_id 추출
+    const headerCompanyId = request.headers.get("company-id");
+    console.log("요청 헤더 company-id:", headerCompanyId);
+    
+    const companyId = await getCompanyIdFromRequest(request);
+    console.log("추출된 company_id:", companyId);
+    
+    if (!companyId) {
+      return NextResponse.json(
+        {success: false, error: "company_id가 필요합니다. 로그인 정보를 확인해주세요."},
+        {status: 400}
+      );
     }
+
     const formData = await request.formData();
     const file = formData.get("file") as File;
 
@@ -152,9 +156,10 @@ export async function POST(request: NextRequest) {
     const headers = raw[0] as string[];
     console.log("엑셀 헤더 목록:", headers);
 
-    // 상품코드와 공급단가 헤더 찾기
+    // 상품코드, 공급단가, 수량 헤더 찾기
     const productCodeIndex = findHeaderIndex(headers, ["상품코드", "품번코드", "product_code", "code"]);
     const salePriceIndex = findHeaderIndex(headers, ["공급단가", "sale_price", "판매가"]);
+    const quantityIndex = findHeaderIndex(headers, ["수량", "quantity", "qty"]);
 
     if (productCodeIndex === null) {
       return NextResponse.json(
@@ -180,35 +185,14 @@ export async function POST(request: NextRequest) {
 
     console.log(`상품코드 헤더: "${headers[productCodeIndex]}" (인덱스: ${productCodeIndex})`);
     console.log(`공급단가 헤더: "${headers[salePriceIndex]}" (인덱스: ${salePriceIndex})`);
-
-    // 1단계: 먼저 각 상품코드의 출현 횟수 카운트
-    const codeCountMap = new Map<string, number>(); // code -> 출현 횟수
-    
-    for (let i = 1; i < raw.length; i++) {
-      const row = raw[i];
-      if (!row || row.length === 0) continue;
-
-      const productCode = row[productCodeIndex];
-      if (!productCode || productCode === "") continue;
-
-      // 상품코드 정규화 (-0001 제거)
-      const normalizedCode = normalizeProductCode(String(productCode));
-      if (!normalizedCode) continue;
-
-      // 출현 횟수 카운트
-      codeCountMap.set(normalizedCode, (codeCountMap.get(normalizedCode) || 0) + 1);
+    if (quantityIndex !== null) {
+      console.log(`수량 헤더: "${headers[quantityIndex]}" (인덱스: ${quantityIndex})`);
+    } else {
+      console.log("수량 헤더를 찾을 수 없습니다. 수량 필터링을 건너뜁니다.");
     }
 
-    // 2단계: 수량이 2 이상인 것들 필터링 (제외)
-    const filteredCodes = new Set<string>();
-    for (const [code, count] of codeCountMap.entries()) {
-      if (count >= 2) {
-        filteredCodes.add(code);
-        console.log(`수량 2 이상 필터링: ${code} (${count}회)`);
-      }
-    }
-
-    // 3단계: 필터링된 코드를 제외하고 데이터 파싱 및 중복 제거
+    // 데이터 파싱 및 중복 제거
+    // 1단계: 모든 코드에서 -0001 제거 후 중복 제거 (첫 번째 값 사용)
     const priceMap = new Map<string, number>(); // code -> sale_price 매핑
     const duplicateCodes = new Set<string>(); // 중복된 코드 추적
 
@@ -218,6 +202,7 @@ export async function POST(request: NextRequest) {
 
       const productCode = row[productCodeIndex];
       const salePrice = row[salePriceIndex];
+      const quantity = quantityIndex !== null ? row[quantityIndex] : null;
 
       if (!productCode || productCode === "") continue;
 
@@ -226,41 +211,49 @@ export async function POST(request: NextRequest) {
 
       if (!normalizedCode) continue;
 
-      // 수량이 2 이상인 코드는 제외
-      if (filteredCodes.has(normalizedCode)) {
-        continue;
-      }
-
-      // 공급단가 파싱
-      let priceValue: number | null = null;
-      if (salePrice !== undefined && salePrice !== null && salePrice !== "") {
-        const numValue = Number(salePrice);
-        if (!isNaN(numValue) && numValue >= 0) {
-          priceValue = numValue;
+      // 수량이 2 이상인 행은 제외 (수량 헤더가 있는 경우만)
+      if (quantityIndex !== null && quantity !== undefined && quantity !== null && quantity !== "") {
+        const quantityValue = Number(quantity);
+        if (!isNaN(quantityValue) && quantityValue >= 2) {
+          console.log(`수량 2 이상 필터링: ${normalizedCode} (수량: ${quantityValue})`);
+          continue;
         }
       }
 
-      // 중복 체크 (수량 2 이상 필터링 후 남은 것들 중에서)
+      // 공급단가 파싱 - 공란인 경우 건너뛰기 (NULL 처리하지 않음)
+      let priceValue: number | null = null;
+      if (salePrice !== undefined && salePrice !== null && salePrice !== "") {
+        const trimmedValue = String(salePrice).trim();
+        // 빈 문자열, "-", "N/A" 등은 건너뛰기
+        if (trimmedValue !== "" && trimmedValue !== "-" && trimmedValue !== "N/A" && trimmedValue.toLowerCase() !== "null") {
+          const numValue = Number(trimmedValue);
+          if (!isNaN(numValue) && numValue >= 0) {
+            priceValue = numValue;
+          }
+        }
+      }
+
+      // 공급가가 공란인 경우 건너뛰기 (매핑코드와 공급가가 모두 있어야만 업데이트)
+      if (priceValue === null) {
+        continue;
+      }
+
+      // 중복 체크 - 이미 있으면 첫 번째 값 유지 (중복 제거, 1개는 남김)
       if (priceMap.has(normalizedCode)) {
         duplicateCodes.add(normalizedCode);
         // 중복된 경우 첫 번째 값 유지
         continue;
       }
 
-      if (priceValue !== null) {
-        priceMap.set(normalizedCode, priceValue);
-      }
+      // 매핑코드와 공급가가 모두 값이 있는 경우만 추가
+      priceMap.set(normalizedCode, priceValue);
     }
 
-    // 필터링 및 중복 정보
-    const filteredCount = filteredCodes.size;
+    // 중복 정보
     const duplicateCount = duplicateCodes.size;
     
-    if (filteredCount > 0) {
-      console.warn(`수량 2 이상으로 필터링된 상품코드 ${filteredCount}개:`, Array.from(filteredCodes).slice(0, 10));
-    }
     if (duplicateCount > 0) {
-      console.warn(`중복된 상품코드 ${duplicateCount}개 발견:`, Array.from(duplicateCodes).slice(0, 10));
+      console.warn(`중복된 상품코드 ${duplicateCount}개 발견 (첫 번째 값 사용):`, Array.from(duplicateCodes).slice(0, 10));
     }
 
     if (priceMap.size === 0) {
@@ -307,15 +300,33 @@ export async function POST(request: NextRequest) {
       try {
         const batchStartTime = Date.now();
 
-        // 먼저 해당 코드들이 DB에 존재하는지 확인
+        // 먼저 해당 코드들이 DB에 존재하는지 확인 (company_id 필터링)
+        console.log(`배치 ${batchNum}: company_id=${companyId}, 조회할 코드 수=${batch.length}, 샘플 코드:`, batch.slice(0, 5));
+        
         const matchedProducts = await sql`
           SELECT code FROM products 
-          WHERE code = ANY(${batch})
+          WHERE code = ANY(${batch}) AND company_id = ${companyId}
         `;
+
+        console.log(`배치 ${batchNum}: DB에서 찾은 코드 수=${matchedProducts.length}, 샘플:`, matchedProducts.slice(0, 5).map((p: any) => p.code));
 
         const matchedCodesSet = new Set(matchedProducts.map((p: any) => p.code));
         const batchMatchedCount = matchedCodesSet.size;
         const batchNotFoundCodes = batch.filter(code => !matchedCodesSet.has(code));
+
+        if (batchNotFoundCodes.length > 0) {
+          console.log(`배치 ${batchNum}: DB에 없는 코드 (company_id=${companyId}):`, batchNotFoundCodes.slice(0, 10));
+          
+          // 다른 company_id에 있는지 확인 (디버깅용)
+          const otherCompanyProducts = await sql`
+            SELECT code, company_id FROM products 
+            WHERE code = ANY(${batchNotFoundCodes.slice(0, 10)})
+            LIMIT 20
+          `;
+          if (otherCompanyProducts.length > 0) {
+            console.log(`배치 ${batchNum}: 다른 company_id에 있는 코드들:`, otherCompanyProducts);
+          }
+        }
 
         matchedCount += batchMatchedCount;
         notFoundCodes.push(...batchNotFoundCodes);
@@ -325,24 +336,29 @@ export async function POST(request: NextRequest) {
           const matchedBatch = batch.filter(code => matchedCodesSet.has(code));
           
           // 각 코드에 대해 개별 UPDATE를 실행하되, 병렬로 처리하여 성능 최적화
-          const updatePromises = matchedBatch.map(code => {
+          const updatePromises = matchedBatch.map(async (code) => {
             const price = priceMap.get(code)!;
-            return sql`
+            const result = await sql`
               UPDATE products 
-              SET supply_price = ${price},
+              SET sale_price = ${price},
                   updated_at = NOW()
-              WHERE code = ${code}
+              WHERE code = ${code} AND company_id = ${companyId}
+              RETURNING id
             `;
+            return result.length; // 실제 업데이트된 행 수 반환
           });
 
           // 병렬로 실행하되, 한 번에 너무 많이 실행하지 않도록 제한 (200개씩)
           const PARALLEL_SIZE = 200;
+          let batchUpdatedCount = 0;
           for (let j = 0; j < updatePromises.length; j += PARALLEL_SIZE) {
             const parallelBatch = updatePromises.slice(j, j + PARALLEL_SIZE);
-            await Promise.all(parallelBatch);
+            const results = await Promise.all(parallelBatch);
+            batchUpdatedCount += results.reduce((sum, count) => sum + count, 0);
           }
 
-          updatedCount += matchedBatch.length;
+          updatedCount += batchUpdatedCount;
+          console.log(`배치 ${batchNum}: ${batchUpdatedCount}건 실제 업데이트됨 (매칭: ${batchMatchedCount}건)`);
         }
 
         const batchTime = (Date.now() - batchStartTime) / 1000;
@@ -365,11 +381,8 @@ export async function POST(request: NextRequest) {
 
     // 결과 메시지 구성
     let message = `${updatedCount}개의 상품 가격이 성공적으로 업데이트되었습니다.`;
-    if (filteredCount > 0) {
-      message += ` (수량 2 이상 필터링: ${filteredCount}개)`;
-    }
     if (duplicateCount > 0) {
-      message += ` (중복 제거: ${duplicateCount}개)`;
+      message += ` (중복 제거: ${duplicateCount}개, 첫 번째 값 사용)`;
     }
     if (notFoundCodes.length > 0) {
       message += ` (DB에 없는 상품코드: ${notFoundCodes.length}개)`;
@@ -386,11 +399,9 @@ export async function POST(request: NextRequest) {
       updatedCount,
       totalCodes: codes.length,
       notFoundCount: notFoundCodes.length,
-      filteredCount,
       duplicateCount,
       processingTime: totalTime.toFixed(1),
       notFoundCodes: notFoundCodes.slice(0, 50), // 최대 50개만 반환
-      filteredCodes: Array.from(filteredCodes).slice(0, 50), // 최대 50개만 반환
     });
   } catch (error: any) {
     console.error("공급단가 업데이트 실패:", error);

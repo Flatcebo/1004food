@@ -1,6 +1,14 @@
 "use client";
 
-import {useEffect, useState, useRef, useCallback, useMemo} from "react";
+import {
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+  useMemo,
+  Suspense,
+} from "react";
+import {useSearchParams} from "next/navigation";
 import {useUploadStore} from "@/stores/uploadStore";
 import {useLoadingStore} from "@/stores/loadingStore";
 import {useAuthStore} from "@/stores/authStore";
@@ -27,6 +35,14 @@ import {
 } from "react-icons/io5";
 
 export default function Page() {
+  return (
+    <Suspense fallback={<div>로딩 중...</div>}>
+      <OrderPageContent />
+    </Suspense>
+  );
+}
+
+function OrderPageContent() {
   const [isDeliveryInputMode, setIsDeliveryInputMode] = useState(false);
   const [isDeliveryUploadModalOpen, setIsDeliveryUploadModalOpen] =
     useState(false);
@@ -145,6 +161,38 @@ export default function Page() {
     tableRows,
     fetchSavedData,
   } = useUploadData();
+
+  // URL 쿼리 파라미터 읽기
+  const searchParams = useSearchParams();
+
+  // URL 쿼리 파라미터에서 검색 필터 설정 (페이지 로드 시 한 번만 실행)
+  useEffect(() => {
+    const searchFieldParam = searchParams.get("searchField");
+    const searchValueParam = searchParams.get("searchValue");
+
+    if (searchFieldParam && searchValueParam) {
+      // 검색 필드와 값 설정
+      setSearchField(searchFieldParam);
+      setSearchValue(searchValueParam);
+
+      // 검색 필터 적용
+      if (setAppliedSearchField && setAppliedSearchValue && applySearchFilter) {
+        setAppliedSearchField(searchFieldParam);
+        setAppliedSearchValue(searchValueParam);
+        // 약간의 지연 후 검색 필터 적용 (상태 업데이트 후)
+        setTimeout(() => {
+          applySearchFilter();
+        }, 100);
+      }
+    }
+  }, [
+    searchParams,
+    setSearchField,
+    setSearchValue,
+    setAppliedSearchField,
+    setAppliedSearchValue,
+    applySearchFilter,
+  ]);
 
   // 필터 제거 함수
   const handleRemoveFilter = (filterType: string) => {

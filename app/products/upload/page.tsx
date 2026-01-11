@@ -14,6 +14,7 @@ function ProductUploadPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const batchFileInputRef = useRef<HTMLInputElement>(null);
   const priceUpdateFileInputRef = useRef<HTMLInputElement>(null);
+  const mallUploadFileInputRef = useRef<HTMLInputElement>(null);
   const [uploadStatus, setUploadStatus] = useState<{
     message: string;
     type: "success" | "error" | "";
@@ -132,8 +133,26 @@ function ProductUploadPage() {
       const formData = new FormData();
       formData.append("file", file);
 
+      // company-id 헤더 포함
+      const headers: HeadersInit = {};
+      if (typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem("auth-storage");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            const user = parsed.state?.user;
+            if (user?.companyId) {
+              headers["company-id"] = user.companyId.toString();
+            }
+          }
+        } catch (e) {
+          console.error("인증 정보 로드 실패:", e);
+        }
+      }
+
       const response = await fetch("/api/products/update-price-excel", {
         method: "POST",
+        headers,
         body: formData,
       });
 
@@ -166,6 +185,73 @@ function ProductUploadPage() {
 
   const handlePriceUpdateUploadClick = () => {
     priceUpdateFileInputRef.current?.click();
+  };
+
+  const handleMallUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    setUploadStatus({message: "", type: ""});
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      // company-id 헤더 포함
+      const headers: HeadersInit = {};
+      if (typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem("auth-storage");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            const user = parsed.state?.user;
+            if (user?.companyId) {
+              headers["company-id"] = user.companyId.toString();
+            }
+          }
+        } catch (e) {
+          console.error("인증 정보 로드 실패:", e);
+        }
+      }
+
+      const response = await fetch("/api/mall/upload", {
+        method: "POST",
+        headers,
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setUploadStatus({
+          message: result.message || "쇼핑몰 업로드 성공!",
+          type: "success",
+        });
+      } else {
+        setUploadStatus({
+          message: result.error || "쇼핑몰 업로드 실패",
+          type: "error",
+        });
+      }
+    } catch (error: any) {
+      setUploadStatus({
+        message: error.message || "쇼핑몰 업로드 중 오류가 발생했습니다.",
+        type: "error",
+      });
+    } finally {
+      setIsUploading(false);
+      // input 초기화
+      if (mallUploadFileInputRef.current) {
+        mallUploadFileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const handleMallUploadClick = () => {
+    mallUploadFileInputRef.current?.click();
   };
 
   return (
@@ -288,7 +374,7 @@ function ProductUploadPage() {
               • 엑셀 파일 내의 상품코드 중복은 자동으로 필터링됩니다 (첫 번째 값
               사용)
               <br />
-              • DB의 products 테이블 code 컬럼과 매칭하여 supply_price를
+              • DB의 products 테이블 code 컬럼과 매칭하여 sale_price를
               업데이트합니다
               <br />
               <strong>💡 배치 처리:</strong> 대량 업데이트를 위해 배치 방식으로
@@ -315,6 +401,59 @@ function ProductUploadPage() {
               }`}
             >
               {isUploading ? "업데이트 중..." : "💰 공급단가 업데이트"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 쇼핑몰 리스트 업로드 섹션 */}
+      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">
+          🏪 쇼핑몰 리스트 업로드
+        </h2>
+
+        <div className="space-y-4">
+          <div>
+            <p className="text-sm text-gray-600 mb-3">
+              엑셀 파일을 업로드하여 쇼핑몰 정보를 일괄 등록합니다.
+              <br />
+              <strong>필수 헤더:</strong> 쇼핑몰명
+              <br />
+              <strong>수집 헤더:</strong> 쇼핑몰명, 법인명, 대표자명,
+              사업자번호, 마켓분류, 우편번호, 주소1, 주소2, 업태, 업종, 등록일
+              <br />
+              <strong>특징:</strong>
+              <br />
+              • 각 쇼핑몰에 자동으로 코드가 부여됩니다 (shop0001, shop0002, ...)
+              <br />
+              • 동일한 코드가 있으면 업데이트됩니다
+              <br />
+              • 쇼핑몰명이 비어있는 행은 자동으로 제외됩니다
+              <br />
+              <strong>💡 배치 처리:</strong> 50건씩 배치로 효율적으로
+              저장됩니다.
+            </p>
+          </div>
+
+          <div className="flex gap-4">
+            <input
+              ref={mallUploadFileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleMallUpload}
+              className="hidden"
+            />
+
+            <button
+              onClick={handleMallUploadClick}
+              disabled={isUploading}
+              className={`px-4 py-2 rounded-lg transition-colors flex items-center gap-2 ${
+                isUploading
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-orange-600 hover:bg-orange-700 text-white"
+              }`}
+            >
+              {isUploading ? "업로드 중..." : "🏪 쇼핑몰 리스트 업로드"}
             </button>
           </div>
         </div>

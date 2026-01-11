@@ -13,6 +13,7 @@ import {useUploadStore} from "@/stores/uploadStore";
 import RecommendModal from "@/components/RecommendModal";
 import DirectInputModal from "@/components/DirectInputModal";
 import CodeEditWindow from "@/components/CodeEditWindow";
+import AutocompleteDropdown from "@/components/AutocompleteDropdown";
 import {fieldNameMap} from "@/constants/fieldMappings";
 import {PRODUCT_FIELD_ORDER} from "@/constants/productFields";
 import {useAutoMapping} from "@/hooks/useAutoMapping";
@@ -52,6 +53,8 @@ function FileViewContent() {
   const [tableData, setTableData] = useState<any[][]>([]);
   const [fileName, setFileName] = useState("");
   const [vendorName, setVendorName] = useState("");
+  const [vendorNameOptions, setVendorNameOptions] = useState<string[]>([]);
+  const [confirmedVendorName, setConfirmedVendorName] = useState<string>(""); // 드롭다운에서 선택한 업체명만 저장
   const codesOriginRef = useRef<any[]>([]);
 
   // 원본 배송메시지 저장 (rowIdx -> 원본 메시지, 파일 로드 시점의 메시지)
@@ -573,6 +576,7 @@ function FileViewContent() {
   };
 
   // 업체명만 업데이트하는 함수 (배송메시지는 원본 메시지로 복원)
+  // 이 함수는 드롭다운에서 선택했을 때만 호출됨
   const updateVendorName = (newVendorName: string) => {
     const headerRow = tableData[0];
     const vendorIdx = headerRow.findIndex(
@@ -631,6 +635,19 @@ function FileViewContent() {
       );
       setUploadedFiles(updatedFiles);
     }
+  };
+
+  // 드롭다운에서 업체명 선택 시 호출되는 함수
+  const handleVendorNameSelect = (selectedVendorName: string) => {
+    setConfirmedVendorName(selectedVendorName);
+    setVendorName(selectedVendorName);
+    updateVendorName(selectedVendorName);
+  };
+
+  // 인풋 값 변경 시 (드롭다운 선택이 아닌 직접 입력)
+  const handleVendorNameInputChange = (inputValue: string) => {
+    setVendorName(inputValue);
+    // 드롭다운에서 선택하지 않았으면 테이블에 적용하지 않음
   };
 
   // 매핑코드와 업체명이 모두 입력되었는지 확인
@@ -953,7 +970,7 @@ function FileViewContent() {
           headerIndex: {...headerIndex},
           productCodeMap: {...productCodeMap},
           productIdMap: {...productIdMap}, // 사용자가 선택한 상품 ID 맵도 함께 전송
-          vendorName: vendorName.trim() || null, // 업체명 포함
+          vendorName: confirmedVendorName.trim() || vendorName.trim() || null, // 업체명 포함 (드롭다운에서 선택한 값 우선)
           isConfirmed: true,
         };
 
@@ -996,7 +1013,7 @@ function FileViewContent() {
           return;
         }
         console.log("서버 업데이트 성공", {
-          vendorName: vendorName.trim() || null,
+          vendorName: confirmedVendorName.trim() || vendorName.trim() || null,
           result: result.data,
         });
       } catch (error) {
@@ -1018,7 +1035,7 @@ function FileViewContent() {
             type: "FILE_CONFIRMED",
             fileId: fileId,
             fileData: updatedFile,
-            vendorName: vendorName.trim() || null, // 업체명 명시적으로 전달
+            vendorName: confirmedVendorName.trim() || vendorName.trim() || null, // 업체명 명시적으로 전달 (드롭다운에서 선택한 값 우선)
           },
           window.location.origin
         );
@@ -1139,6 +1156,24 @@ function FileViewContent() {
       })
       .catch((error) => {
         console.error("상품 목록 조회 실패:", error);
+      });
+
+    // 업체명 목록 fetch (mall 테이블에서)
+    fetch("/api/mall?limit=1000", {headers})
+      .then((res) => res.json())
+      .then((result) => {
+        if (result.success && result.data) {
+          // mall 테이블의 name 필드를 업체명으로 사용
+          const mallNames: string[] = result.data
+            .map((mall: any) => String(mall.name || ""))
+            .filter((name: string) => name.trim() !== "");
+          // 중복 제거하여 정렬
+          const uniqueNames: string[] = Array.from(new Set(mallNames)).sort();
+          setVendorNameOptions(uniqueNames);
+        }
+      })
+      .catch((error) => {
+        console.error("업체명 목록 조회 실패:", error);
       });
   }, [setCodes]);
 
@@ -1406,7 +1441,11 @@ function FileViewContent() {
             updatedTableData[1] &&
             updatedTableData[1][vendorIdx]
           ) {
-            setVendorName(String(updatedTableData[1][vendorIdx]).trim());
+            const initialVendorName = String(
+              updatedTableData[1][vendorIdx]
+            ).trim();
+            setVendorName(initialVendorName);
+            setConfirmedVendorName(initialVendorName); // 초기값도 확인된 값으로 설정
           }
         } else {
           setTableData(parsedFile.tableData);
@@ -1763,18 +1802,13 @@ function FileViewContent() {
               >
                 {isEditMode ? "편집 완료" : "편집"}
               </button>
-              <input
-                type="text"
-                placeholder="업체명 입력"
+              <AutocompleteDropdown
                 value={vendorName}
-                onChange={(e) => {
-                  const newValue = e.target.value;
-                  setVendorName(newValue);
-                  // 업체명 변경 시 배송메시지가 변경되지 않도록 보호
-                  updateVendorName(newValue);
-                }}
-                className="border border-gray-300 px-3 py-1 rounded text-sm"
-                style={{minWidth: "150px"}}
+                onChange={handleVendorNameInputChange}
+                onSelect={handleVendorNameSelect}
+                options={vendorNameOptions}
+                placeholder="업체명 입력 또는 선택"
+                className="min-w-[150px]"
               />
               <span>{tableData.length - 1}건</span>
             </div>

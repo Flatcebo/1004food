@@ -15,8 +15,3 @@
 
 utils/vendorMessageUtils.ts
 - 배송메시지 맨 앞에 업체명이 자동으로 입력되게 하는 함수
-
-
-
-
-

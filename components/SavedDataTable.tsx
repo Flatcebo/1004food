@@ -422,10 +422,39 @@ const SavedDataTable = memo(function SavedDataTable({
       } else {
         // 체크박스가 선택되지 않은 경우: 필터로 검색된 전체 데이터 다운로드
         requestBody.rowIds = null;
-        // 필터가 실제로 적용되어 있는지 확인
-        const hasActiveFilters = Object.values(filters).some(
-          (value) => value !== undefined
-        );
+        // 필터가 실제로 적용되어 있는지 확인 (빈 배열, 빈 문자열, undefined, null 제외)
+        const hasActiveFilters = (() => {
+          // type, postType, orderStatus, searchField, searchValue, uploadTimeFrom, uploadTimeTo 체크
+          if (filters.type && filters.type.trim() !== "") return true;
+          if (filters.postType && filters.postType.trim() !== "") return true;
+          if (filters.orderStatus && filters.orderStatus.trim() !== "")
+            return true;
+          if (
+            filters.searchField &&
+            filters.searchField.trim() !== "" &&
+            filters.searchValue &&
+            filters.searchValue.trim() !== ""
+          )
+            return true;
+          if (filters.uploadTimeFrom && filters.uploadTimeFrom.trim() !== "")
+            return true;
+          if (filters.uploadTimeTo && filters.uploadTimeTo.trim() !== "")
+            return true;
+          // company, vendor는 배열이므로 길이 체크
+          if (
+            filters.company &&
+            Array.isArray(filters.company) &&
+            filters.company.length > 0
+          )
+            return true;
+          if (
+            filters.vendor &&
+            Array.isArray(filters.vendor) &&
+            filters.vendor.length > 0
+          )
+            return true;
+          return false;
+        })();
         requestBody.filters = hasActiveFilters ? filters : undefined;
       }
 

@@ -31,6 +31,52 @@ export async function POST(request: NextRequest) {
       console.log("컬럼 확인 실패:", error);
     }
 
+    // uploads 테이블에 vendor_name 컬럼이 있는지 확인하고 없으면 추가
+    try {
+      const vendorNameColumnExists = await sql`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'uploads' 
+        AND column_name = 'vendor_name'
+      `;
+      
+      if (vendorNameColumnExists.length === 0) {
+        await sql`
+          ALTER TABLE uploads 
+          ADD COLUMN vendor_name VARCHAR(255)
+        `;
+        console.log("✅ uploads 테이블에 vendor_name 컬럼 추가 완료");
+      }
+    } catch (error) {
+      console.error("vendor_name 컬럼 확인/추가 실패:", error);
+    }
+
+    // upload_rows 테이블에 mall_id 컬럼이 있는지 확인하고 없으면 추가
+    try {
+      const mallIdColumnExists = await sql`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'upload_rows' 
+        AND column_name = 'mall_id'
+      `;
+      
+      if (mallIdColumnExists.length === 0) {
+        await sql`
+          ALTER TABLE upload_rows 
+          ADD COLUMN mall_id INTEGER REFERENCES mall(id) ON DELETE SET NULL
+        `;
+        console.log("✅ upload_rows 테이블에 mall_id 컬럼 추가 완료");
+        
+        // 인덱스 생성
+        await sql`
+          CREATE INDEX IF NOT EXISTS idx_upload_rows_mall_id ON upload_rows(mall_id)
+        `;
+        console.log("✅ upload_rows 테이블에 mall_id 인덱스 생성 완료");
+      }
+    } catch (error) {
+      console.error("mall_id 컬럼 확인/추가 실패:", error);
+    }
+
     // 확인된 모든 임시 파일들을 조회 (세션 구분 없음, company_id, user_id 필터링)
     let confirmedFiles;
     if (userId && hasUserIdColumn) {
@@ -42,7 +88,8 @@ export async function POST(request: NextRequest) {
           table_data,
           header_index,
           product_code_map,
-          product_id_map
+          product_id_map,
+          vendor_name
         FROM temp_files
         WHERE is_confirmed = true AND company_id = ${companyId} AND user_id = ${userId}
         ORDER BY created_at ASC
@@ -56,7 +103,8 @@ export async function POST(request: NextRequest) {
           table_data,
           header_index,
           product_code_map,
-          product_id_map
+          product_id_map,
+          vendor_name
         FROM temp_files
         WHERE is_confirmed = true AND company_id = ${companyId}
         ORDER BY created_at ASC
@@ -217,27 +265,93 @@ export async function POST(request: NextRequest) {
         return rowObj;
       });
 
+      // 업체명 확인 및 디버깅
+      // file.vendor_name이 없으면 table_data에서 업체명 추출
+      let vendorName = file.vendor_name || null;
+      
+      if (!vendorName || vendorName.trim() === "") {
+        // table_data에서 업체명 추출
+        const vendorIdx = headerRow.findIndex(
+          (h: any) => h === "업체명" || h === "업체"
+        );
+        
+        if (vendorIdx !== -1 && dataRows.length > 0 && dataRows[0][vendorIdx]) {
+          vendorName = String(dataRows[0][vendorIdx]).trim();
+          console.log(`📝 file.vendor_name이 없어서 table_data에서 업체명 추출: "${vendorName}"`);
+        } else if (rowObjects.length > 0 && rowObjects[0]["업체명"]) {
+          vendorName = String(rowObjects[0]["업체명"]).trim();
+          console.log(`📝 file.vendor_name이 없어서 rowObjects에서 업체명 추출: "${vendorName}"`);
+        } else {
+          console.warn(`⚠️ 업체명을 찾을 수 없습니다. file.vendor_name: ${file.vendor_name}, vendorIdx: ${vendorIdx}`);
+        }
+      }
+      
       console.log("💾 저장할 데이터 샘플:", {
         fileName: file.file_name,
         rowCount: rowObjects.length,
-        sampleRow: rowObjects[0],
+        vendorName: vendorName,
+        fileVendorName: file.vendor_name,
         hasInternalCode: !!rowObjects[0]?.["내부코드"],
         hasMappingCode: !!rowObjects[0]?.["매핑코드"],
         hasProductId: !!rowObjects[0]?.["productId"],
         productIdMapSize: Object.keys(productIdMap).length,
-        productIdMapSample: Object.entries(productIdMap).slice(0, 3),
         firstRowProductName: rowObjects[0]?.["상품명"],
         firstRowProductId: rowObjects[0]?.["productId"],
       });
 
-      // uploads 테이블에 저장
+      // 업체명으로 mall 테이블에서 해당 mall 찾기 (uploads 저장 전에 미리 찾기)
+      let mallId: number | null = null;
+      if (vendorName) {
+        try {
+          const trimmedVendorName = vendorName.trim();
+          console.log(`🔍 mall 조회 시작: vendor_name="${trimmedVendorName}"`);
+          
+          // 정확한 매칭 시도
+          let mallResult = await sql`
+            SELECT id, name FROM mall 
+            WHERE name = ${trimmedVendorName}
+            LIMIT 1
+          `;
+          
+          if (mallResult.length > 0) {
+            mallId = mallResult[0].id;
+            console.log(`✅ 업체명 "${trimmedVendorName}"에 해당하는 mall 찾음: mall_id=${mallId}, mall_name="${mallResult[0].name}"`);
+          } else {
+            // 대소문자 구분 없이 매칭 시도
+            mallResult = await sql`
+              SELECT id, name FROM mall 
+              WHERE LOWER(TRIM(name)) = LOWER(${trimmedVendorName})
+              LIMIT 1
+            `;
+            
+            if (mallResult.length > 0) {
+              mallId = mallResult[0].id;
+              console.log(`✅ 업체명 "${trimmedVendorName}"에 해당하는 mall 찾음 (대소문자 무시): mall_id=${mallId}, mall_name="${mallResult[0].name}"`);
+            } else {
+              console.warn(`⚠️ 업체명 "${trimmedVendorName}"에 해당하는 mall을 찾을 수 없습니다.`);
+              // mall 테이블의 모든 name 목록 출력 (디버깅용)
+              const allMalls = await sql`SELECT id, name FROM mall ORDER BY name LIMIT 20`;
+              console.log("mall 테이블 샘플 (처음 20개):", allMalls.map((m: any) => ({id: m.id, name: m.name})));
+            }
+          }
+        } catch (error) {
+          console.error("mall 조회 실패:", error);
+        }
+      } else {
+        console.warn("⚠️ vendor_name이 없습니다. file.vendor_name:", file.vendor_name);
+      }
+      
+      console.log(`📝 저장 전 확인: vendorName="${vendorName}", mallId=${mallId}`);
+
+      // uploads 테이블에 저장 (vendor_name 포함)
       const uploadResult = await sql`
-        INSERT INTO uploads (file_name, row_count, data, company_id, created_at)
+        INSERT INTO uploads (file_name, row_count, data, company_id, vendor_name, created_at)
         VALUES (
           ${file.file_name},
           ${rowObjects.length},
           ${JSON.stringify(rowObjects)},
           ${companyId},
+          ${vendorName},
           ${koreaTime.toISOString()}::timestamp
         )
         RETURNING id, created_at
@@ -245,33 +359,94 @@ export async function POST(request: NextRequest) {
 
       const uploadId = uploadResult[0].id;
       const createdAt = uploadResult[0].created_at;
+      console.log(`✅ uploads 저장 완료: upload_id=${uploadId}, vendor_name=${vendorName}`);
+
+      // upload_rows 테이블에 vendor_name 컬럼이 있는지 확인하고 없으면 추가
+      try {
+        const vendorNameColumnExists = await sql`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'upload_rows' 
+          AND column_name = 'vendor_name'
+        `;
+        
+        if (vendorNameColumnExists.length === 0) {
+          await sql`
+            ALTER TABLE upload_rows 
+            ADD COLUMN vendor_name VARCHAR(255)
+          `;
+          console.log("✅ upload_rows 테이블에 vendor_name 컬럼 추가 완료");
+        }
+      } catch (error) {
+        console.error("upload_rows vendor_name 컬럼 확인/추가 실패:", error);
+      }
 
       // 각 행을 upload_rows에 저장 (객체 형태로)
-      const insertPromises = rowObjects.map((rowObj: any) => {
+      const insertPromises = rowObjects.map((rowObj: any, index: number) => {
         // 쇼핑몰명 추출 (여러 가능한 키에서 찾기)
         const shopName =
           rowObj["쇼핑몰명"] || rowObj["쇼핑몰명(1)"] || rowObj["쇼핑몰"] || "";
 
+        // 첫 번째 row만 상세 로그 출력
+        if (index === 0) {
+          console.log(`📝 upload_rows 저장 시작: upload_id=${uploadId}, mall_id=${mallId}, vendor_name="${vendorName}"`);
+        }
+
         return sql`
-          INSERT INTO upload_rows (upload_id, row_data, shop_name, company_id, created_at)
+          INSERT INTO upload_rows (upload_id, row_data, shop_name, company_id, mall_id, vendor_name, created_at)
           VALUES (
             ${uploadId},
             ${JSON.stringify(rowObj)},
             ${shopName},
             ${companyId},
+            ${mallId},
+            ${vendorName},
             ${koreaTime.toISOString()}::timestamp
           )
-          RETURNING id
+          RETURNING id, mall_id, vendor_name
         `;
       });
 
       const rowResults = await Promise.all(insertPromises);
+      
+      // 저장 후 검증: 실제로 저장된 값 확인
+      if (rowResults.length > 0) {
+        const firstRowResult = rowResults[0][0];
+        console.log(`✅ upload_rows 저장 완료: 첫 번째 row - id=${firstRowResult.id}, mall_id=${firstRowResult.mall_id}, vendor_name="${firstRowResult.vendor_name}"`);
+        
+        // 전체 저장된 row 중 mall_id가 있는지 확인
+        const savedMallIds = rowResults.map((r: any) => r[0].mall_id).filter((id: any) => id !== null);
+        console.log(`📊 저장 통계: 총 ${rowResults.length}개 row 중 ${savedMallIds.length}개에 mall_id가 설정됨`);
+        
+        if (savedMallIds.length === 0 && vendorName) {
+          console.error(`❌ 경고: vendor_name="${vendorName}"이 있지만 mall_id가 저장되지 않았습니다!`);
+        }
+        
+        // DB에서 실제로 저장된 값 다시 조회하여 검증
+        try {
+          const verifyResult = await sql`
+            SELECT id, mall_id, vendor_name 
+            FROM upload_rows 
+            WHERE upload_id = ${uploadId} 
+            LIMIT 5
+          `;
+          console.log(`🔍 DB 검증 결과 (upload_id=${uploadId}):`, verifyResult.map((r: any) => ({
+            id: r.id,
+            mall_id: r.mall_id,
+            vendor_name: r.vendor_name
+          })));
+        } catch (error) {
+          console.error("DB 검증 쿼리 실패:", error);
+        }
+      }
 
       results.push({
         uploadId,
         fileName: file.file_name,
         rowCount: rowObjects.length,
         rowIds: rowResults.map((r) => r[0].id),
+        mallId: mallId, // 결과에 mall_id 포함
+        vendorName: vendorName, // 결과에 vendor_name 포함
       });
     }
 

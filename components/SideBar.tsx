@@ -5,11 +5,23 @@ import Link from "next/link";
 import {usePathname} from "next/navigation";
 import {useAuthStore} from "@/stores/authStore";
 import {useState, useEffect} from "react";
+import {
+  IoList,
+  IoCube,
+  IoDocumentText,
+  IoPricetag,
+  IoStatsChart,
+  IoCloudUpload,
+  IoPeople,
+  IoBusiness,
+} from "react-icons/io5";
+import {IconType} from "react-icons";
 
-const menuNames: {path: string; name: string}[] = [
+const menuNames: {path: string; name: string; icon: IconType}[] = [
   {
     path: "/order",
     name: "주문 리스트",
+    icon: IoList,
   },
   // {
   //   path: "/order/upload",
@@ -18,30 +30,41 @@ const menuNames: {path: string; name: string}[] = [
   {
     path: "/products",
     name: "상품 리스트",
+    icon: IoCube,
   },
   {
     path: "/upload/templates",
     name: "양식 템플릿 관리",
+    icon: IoDocumentText,
   },
 
   {
     path: "/header-aliases",
     name: "헤더 Alias 관리",
+    icon: IoPricetag,
+  },
+  {
+    path: "/analytics/sales-by-mall",
+    name: "매출 정산 관리",
+    icon: IoStatsChart,
   },
 ];
 
-const adminMenuNames: {path: string; name: string}[] = [
+const adminMenuNames: {path: string; name: string; icon: IconType}[] = [
   {
     path: "/products/upload",
     name: "상품 데이터 업로드",
+    icon: IoCloudUpload,
   },
   {
     path: "/users",
     name: "회원 관리",
+    icon: IoPeople,
   },
   {
     path: "/vendors",
     name: "납품업체 관리",
+    icon: IoBusiness,
   },
 ];
 
@@ -105,32 +128,40 @@ export default function SideBar() {
                   ? isHeaderAliasesActive
                   : false;
 
+              const IconComponent = menu.icon;
               return (
                 <Link
                   key={key}
                   href={menu.path}
-                  className={`w-full px-4 py-2 rounded-lg transition-all duration-200 ${
+                  className={`w-full px-4 py-2 rounded-lg transition-all duration-200 flex items-center gap-3 ${
                     isActive
                       ? "text-[#888eab]"
                       : "hover:bg-gray-700 hover:translate-x-1 active:scale-95 text-white"
                   }`}
                 >
+                  <span className="text-xl">
+                    <IconComponent />
+                  </span>
                   <span>{menu.name}</span>
                 </Link>
               );
             })}
             {isAdmin &&
               adminMenuNames.map((menu, key) => {
+                const IconComponent = menu.icon;
                 return (
                   <Link
                     key={key}
                     href={menu.path}
-                    className={`w-full px-4 py-2 rounded-lg transition-all duration-200 ${
+                    className={`w-full px-4 py-2 rounded-lg transition-all duration-200 flex items-center gap-3 ${
                       pathname === menu.path
                         ? "text-[#888eab]"
                         : "hover:bg-gray-700 hover:translate-x-1 active:scale-95 text-white"
                     }`}
                   >
+                    <span className="text-xl">
+                      <IconComponent />
+                    </span>
                     <span>{menu.name}</span>
                   </Link>
                 );
