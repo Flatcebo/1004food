@@ -622,7 +622,9 @@ export default function SalesByMallPage() {
                         onClick={() => handleOrderQuantityClick(settlement)}
                         title="클릭하여 주문 목록 보기"
                       >
-                        {formatNumber(settlement.orderQuantity)}
+                        <span className="text-blue-600 underline hover:text-blue-800">
+                          {formatNumber(settlement.orderQuantity)}
+                        </span>
                       </td>
                       <td className="border border-gray-300 px-4 py-2 text-right">
                         {formatNumber(settlement.orderAmount)}
