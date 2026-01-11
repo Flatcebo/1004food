@@ -830,15 +830,21 @@ export default function SalesByMallPage() {
                         const salePrice = typeof order.salePrice === "number" ? order.salePrice : parseFloat(String(order.salePrice)) || 0;
                         const orderAmount = quantity * salePrice;
                         
-                        // 행 클릭 핸들러: 내부코드로 order page 열기
+                        // 행 클릭 핸들러: 내부코드로 order page 열기 (기간 필터링 포함)
                         const handleRowClick = () => {
                           if (!order.internalCode) {
                             alert("내부코드가 없습니다.");
                             return;
                           }
                           
-                          // 새 윈도우에서 order page 열기 (내부코드 검색 파라미터 포함)
-                          const url = `/order?searchField=내부코드&searchValue=${encodeURIComponent(order.internalCode)}`;
+                          // 새 윈도우에서 order page 열기 (내부코드 검색 파라미터 및 기간 필터링 포함)
+                          const params = new URLSearchParams({
+                            searchField: "내부코드",
+                            searchValue: order.internalCode,
+                            uploadTimeFrom: orderModalData.startDate,
+                            uploadTimeTo: orderModalData.endDate,
+                          });
+                          const url = `/order?${params.toString()}`;
                           const newWindow = window.open(url, "_blank", "width=1200,height=800");
                           if (!newWindow) {
                             alert("팝업이 차단되었습니다. 팝업 차단을 해제해주세요.");
@@ -868,7 +874,9 @@ export default function SalesByMallPage() {
                               {order.internalCode || "-"}
                             </td>
                             <td className="border border-gray-300 px-3 py-2 text-right">
-                              {formatNumber(quantity)}
+                              <span className={`${order.internalCode ? "text-blue-600 underline cursor-pointer hover:text-blue-800" : ""}`}>
+                                {formatNumber(quantity)}
+                              </span>
                             </td>
                             <td className="border border-gray-300 px-3 py-2 text-right">
                               {formatNumber(salePrice)}

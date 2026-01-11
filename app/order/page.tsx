@@ -165,32 +165,57 @@ function OrderPageContent() {
   // URL 쿼리 파라미터 읽기
   const searchParams = useSearchParams();
 
-  // URL 쿼리 파라미터에서 검색 필터 설정 (페이지 로드 시 한 번만 실행)
+  // URL 쿼리 파라미터에서 검색 필터 및 기간 필터 설정 (페이지 로드 시 한 번만 실행)
   useEffect(() => {
     const searchFieldParam = searchParams.get("searchField");
     const searchValueParam = searchParams.get("searchValue");
+    const uploadTimeFromParam = searchParams.get("uploadTimeFrom");
+    const uploadTimeToParam = searchParams.get("uploadTimeTo");
 
+    // 검색 필터 설정
     if (searchFieldParam && searchValueParam) {
       // 검색 필드와 값 설정
       setSearchField(searchFieldParam);
       setSearchValue(searchValueParam);
 
       // 검색 필터 적용
-      if (setAppliedSearchField && setAppliedSearchValue && applySearchFilter) {
+      if (setAppliedSearchField && setAppliedSearchValue) {
         setAppliedSearchField(searchFieldParam);
         setAppliedSearchValue(searchValueParam);
-        // 약간의 지연 후 검색 필터 적용 (상태 업데이트 후)
-        setTimeout(() => {
-          applySearchFilter();
-        }, 100);
       }
+    }
+
+    // 기간 필터 설정
+    if (uploadTimeFromParam && uploadTimeToParam) {
+      setUploadTimeFrom(uploadTimeFromParam);
+      setUploadTimeTo(uploadTimeToParam);
+
+      if (setAppliedUploadTimeFrom && setAppliedUploadTimeTo) {
+        setAppliedUploadTimeFrom(uploadTimeFromParam);
+        setAppliedUploadTimeTo(uploadTimeToParam);
+      }
+    }
+
+    // 검색 필터나 기간 필터가 설정된 경우 적용
+    if (
+      (searchFieldParam && searchValueParam) ||
+      (uploadTimeFromParam && uploadTimeToParam)
+    ) {
+      // 약간의 지연 후 검색 필터 적용 (상태 업데이트 후)
+      setTimeout(() => {
+        applySearchFilter();
+      }, 100);
     }
   }, [
     searchParams,
     setSearchField,
     setSearchValue,
+    setUploadTimeFrom,
+    setUploadTimeTo,
     setAppliedSearchField,
     setAppliedSearchValue,
+    setAppliedUploadTimeFrom,
+    setAppliedUploadTimeTo,
     applySearchFilter,
   ]);
 
