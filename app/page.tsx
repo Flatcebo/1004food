@@ -15,7 +15,7 @@ import {
 } from "chart.js";
 import {Bar, Line, Chart} from "react-chartjs-2";
 
-// Chart.js 등록
+// Chart.js 등록 - 혼합 차트를 위해 모든 필요한 요소 등록
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -57,6 +57,12 @@ export default function App() {
   });
 
   const [loading, setLoading] = useState(true);
+  
+  // Line 컨트롤러 등록을 위해 Line 컴포넌트를 한 번 렌더링 (숨김)
+  useEffect(() => {
+    // Line 컴포넌트가 import되면 자동으로 Line 컨트롤러가 등록됨
+    // 이는 혼합 차트에서 Line 타입을 사용하기 위해 필요
+  }, []);
 
   useEffect(() => {
     // 대시보드 통계 데이터 로드
@@ -376,7 +382,17 @@ export default function App() {
               💰 일일 매출과 이익액
             </h2>
             {chartData.dailySalesProfit.length > 0 ? (
-              <div className="h-[300px]">
+              <div className="h-[300px] relative">
+                {/* Line 컨트롤러 등록을 위한 숨김 Line 차트 */}
+                <div style={{position: "absolute", visibility: "hidden", height: 0}}>
+                  <Line
+                    data={{
+                      labels: [],
+                      datasets: [],
+                    }}
+                    options={{responsive: false}}
+                  />
+                </div>
                 <Chart
                   type="bar"
                   data={{
