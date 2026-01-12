@@ -35,109 +35,101 @@ export async function PUT(request: NextRequest) {
     }
 
     // 업데이트할 필드만 추출 및 정규화
+    // null 값도 업데이트하도록 수정 (빈 문자열은 null로 변환)
     const updateFields: any = {};
 
-    if (
-      updates.type !== undefined &&
-      updates.type !== null &&
-      updates.type !== ""
-    ) {
-      updateFields.type = updates.type;
+    if (updates.type !== undefined) {
+      updateFields.type =
+        updates.type === "" || updates.type === null ? null : updates.type;
     }
-    if (
-      updates.postType !== undefined &&
-      updates.postType !== null &&
-      updates.postType !== ""
-    ) {
-      updateFields.post_type = updates.postType || "";
+    if (updates.postType !== undefined) {
+      updateFields.post_type =
+        updates.postType === "" || updates.postType === null
+          ? ""
+          : updates.postType;
     }
-    if (
-      updates.pkg !== undefined &&
-      updates.pkg !== null &&
-      updates.pkg !== ""
-    ) {
-      updateFields.pkg = updates.pkg;
+    if (updates.pkg !== undefined) {
+      updateFields.pkg =
+        updates.pkg === "" || updates.pkg === null ? null : updates.pkg;
     }
-    if (
-      updates.price !== undefined &&
-      updates.price !== null &&
-      updates.price !== ""
-    ) {
-      const priceValue =
-        typeof updates.price === "number"
-          ? updates.price
-          : parseFloat(String(updates.price));
-      if (!isNaN(priceValue)) {
-        updateFields.price = priceValue;
+    if (updates.price !== undefined) {
+      if (updates.price === "" || updates.price === null) {
+        updateFields.price = null;
+      } else {
+        const priceValue =
+          typeof updates.price === "number"
+            ? updates.price
+            : parseFloat(String(updates.price));
+        if (!isNaN(priceValue)) {
+          updateFields.price = priceValue;
+        } else {
+          updateFields.price = null;
+        }
       }
     }
-    if (
-      updates.salePrice !== undefined &&
-      updates.salePrice !== null &&
-      updates.salePrice !== ""
-    ) {
-      const salePriceValue =
-        typeof updates.salePrice === "number"
-          ? updates.salePrice
-          : parseFloat(String(updates.salePrice));
-      if (!isNaN(salePriceValue)) {
-        updateFields.sale_price = salePriceValue;
+    if (updates.salePrice !== undefined) {
+      if (updates.salePrice === "" || updates.salePrice === null) {
+        updateFields.sale_price = null;
+      } else {
+        const salePriceValue =
+          typeof updates.salePrice === "number"
+            ? updates.salePrice
+            : parseFloat(String(updates.salePrice));
+        if (!isNaN(salePriceValue)) {
+          updateFields.sale_price = salePriceValue;
+        } else {
+          updateFields.sale_price = null;
+        }
       }
     }
-    if (
-      updates.postFee !== undefined &&
-      updates.postFee !== null &&
-      updates.postFee !== ""
-    ) {
-      const postFeeValue =
-        typeof updates.postFee === "number"
-          ? updates.postFee
-          : parseFloat(String(updates.postFee));
-      if (!isNaN(postFeeValue)) {
-        updateFields.post_fee = postFeeValue;
+    if (updates.postFee !== undefined) {
+      if (updates.postFee === "" || updates.postFee === null) {
+        updateFields.post_fee = null;
+      } else {
+        const postFeeValue =
+          typeof updates.postFee === "number"
+            ? updates.postFee
+            : parseFloat(String(updates.postFee));
+        if (!isNaN(postFeeValue)) {
+          updateFields.post_fee = postFeeValue;
+        } else {
+          updateFields.post_fee = null;
+        }
       }
     }
-    if (
-      updates.purchase !== undefined &&
-      updates.purchase !== null &&
-      updates.purchase !== ""
-    ) {
-      updateFields.purchase = updates.purchase;
+    if (updates.purchase !== undefined) {
+      updateFields.purchase =
+        updates.purchase === "" || updates.purchase === null
+          ? null
+          : updates.purchase;
     }
-    if (
-      updates.billType !== undefined &&
-      updates.billType !== null &&
-      updates.billType !== ""
-    ) {
-      updateFields.bill_type = updates.billType;
+    if (updates.billType !== undefined) {
+      updateFields.bill_type =
+        updates.billType === "" || updates.billType === null
+          ? null
+          : updates.billType;
     }
-    if (
-      updates.category !== undefined &&
-      updates.category !== null &&
-      updates.category !== ""
-    ) {
-      updateFields.category = updates.category;
+    if (updates.category !== undefined) {
+      updateFields.category =
+        updates.category === "" || updates.category === null
+          ? null
+          : updates.category;
     }
-    if (
-      updates.productType !== undefined &&
-      updates.productType !== null &&
-      updates.productType !== ""
-    ) {
-      updateFields.product_type = updates.productType;
+    if (updates.productType !== undefined) {
+      updateFields.product_type =
+        updates.productType === "" || updates.productType === null
+          ? null
+          : updates.productType;
     }
-    if (
-      updates.sabangName !== undefined &&
-      updates.sabangName !== null &&
-      updates.sabangName !== ""
-    ) {
-      updateFields.sabang_name = updates.sabangName;
+    if (updates.sabangName !== undefined) {
+      updateFields.sabang_name =
+        updates.sabangName === "" || updates.sabangName === null
+          ? null
+          : updates.sabangName;
     }
-    if (
-      updates.etc !== undefined &&
-      updates.etc !== null &&
-      updates.etc !== ""
-    ) {
-      updateFields.etc = updates.etc;
+    if (updates.etc !== undefined) {
+      updateFields.etc =
+        updates.etc === "" || updates.etc === null ? null : updates.etc;
     }
 
     if (Object.keys(updateFields).length === 0) {

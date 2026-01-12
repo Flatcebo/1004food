@@ -25,6 +25,22 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {templateId, rowIds, filters, isInhouse, preferSabangName} = body;
 
+    // 템플릿명 확인 (CJ외주 발주서인지 체크)
+    const templateResultForCheck = await sql`
+      SELECT template_data
+      FROM upload_templates
+      WHERE id = ${templateId} AND company_id = ${companyId}
+    `;
+    const templateNameForCheck =
+      templateResultForCheck.length > 0
+        ? (templateResultForCheck[0].template_data?.name || "")
+            .normalize("NFC")
+            .trim()
+        : "";
+    const isCJOutsource =
+      templateNameForCheck.includes("CJ") &&
+      templateNameForCheck.includes("외주");
+
     if (!templateId) {
       return NextResponse.json(
         {success: false, error: "템플릿 ID가 필요합니다."},
@@ -64,15 +80,35 @@ export async function POST(request: NextRequest) {
 
     // 선택된 행 데이터 조회
     let rows: any[] = [];
+    let rowIdsWithData: Array<{id: number; row_data: any}> = [];
+
     if (rowIds && rowIds.length > 0) {
       // 선택된 행이 있으면 해당 ID들만 조회 (company_id 필터링 포함)
       const rowData = await sql`
-        SELECT ur.row_data
+        SELECT ur.id, ur.row_data
         FROM upload_rows ur
         INNER JOIN uploads u ON ur.upload_id = u.id
         WHERE ur.id = ANY(${rowIds}) AND u.company_id = ${companyId}
       `;
-      rows = rowData.map((r: any) => {
+      rowIdsWithData = rowData.map((r: any) => ({
+        id: r.id,
+        row_data: r.row_data || {},
+      }));
+
+      // CJ외주 발주서인 경우 필터링 적용
+      if (isCJOutsource) {
+        const allowedCodes = ["106464", "108640", "108788", "108879", "108221"];
+        rowIdsWithData = rowIdsWithData.filter((item: any) => {
+          const mappingCode = String(item.row_data?.매핑코드 || "").trim();
+          const isInhouse = item.row_data?.내외주 === "내주";
+          return isInhouse && allowedCodes.includes(mappingCode);
+        });
+        console.log(
+          `CJ외주 발주서 선택 다운로드: ${rowData.length}건 중 ${rowIdsWithData.length}건 필터링됨`
+        );
+      }
+
+      rows = rowIdsWithData.map((r: any) => {
         const rowData = r.row_data || {};
         // 우편번호를 우편으로 통일
         if (
@@ -135,7 +171,25 @@ export async function POST(request: NextRequest) {
         if (orderStatus) {
           conditions.push(sql`ur.row_data->>'주문상태' = ${orderStatus}`);
         }
-        if (dbField && searchPattern) {
+        // CJ외주 발주서인 경우: 매핑코드 필터를 무시하고 CJ외주 조건을 적용
+        if (isCJOutsource && dbField === "매핑코드") {
+          // 매핑코드 필터 대신 CJ외주 조건을 추가
+          const allowedCodes = [
+            "106464",
+            "108640",
+            "108788",
+            "108879",
+            "108221",
+          ];
+          conditions.push(sql`ur.row_data->>'내외주' = '내주'`);
+          conditions.push(sql`(
+            ur.row_data->>'매핑코드' = '106464'
+            OR ur.row_data->>'매핑코드' = '108640'
+            OR ur.row_data->>'매핑코드' = '108788'
+            OR ur.row_data->>'매핑코드' = '108879'
+            OR ur.row_data->>'매핑코드' = '108221'
+          )`);
+        } else if (dbField && searchPattern) {
           conditions.push(sql`ur.row_data->>${dbField} ILIKE ${searchPattern}`);
         }
         if (uploadTimeFrom) {
@@ -238,14 +292,51 @@ export async function POST(request: NextRequest) {
         }
       } else {
         // 필터가 없으면 company_id로 필터링된 모든 데이터 조회
-        const allData = await sql`
-          SELECT ${!rowIds || rowIds.length === 0 ? sql`ur.id,` : sql``} ur.row_data
-          FROM upload_rows ur
-          INNER JOIN uploads u ON ur.upload_id = u.id
-          WHERE u.company_id = ${companyId}
-          ORDER BY u.created_at DESC, ur.id DESC
-        `;
-        rows = allData.map((r: any) => {
+        let allData: any[];
+
+        // CJ외주 발주서인 경우: 내주이고 지정된 매핑코드만 조회
+        if (isCJOutsource) {
+          const allowedCodes = [
+            "106464",
+            "108640",
+            "108788",
+            "108879",
+            "108221",
+          ];
+          allData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE u.company_id = ${companyId}
+              AND ur.row_data->>'내외주' = '내주'
+              AND (
+                ur.row_data->>'매핑코드' = '106464'
+                OR ur.row_data->>'매핑코드' = '108640'
+                OR ur.row_data->>'매핑코드' = '108788'
+                OR ur.row_data->>'매핑코드' = '108879'
+                OR ur.row_data->>'매핑코드' = '108221'
+              )
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+          console.log(
+            `CJ외주 발주서 전체 다운로드: ${allData.length}건 조회됨`
+          );
+        } else {
+          allData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE u.company_id = ${companyId}
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        }
+
+        rowIdsWithData = allData.map((r: any) => ({
+          id: r.id,
+          row_data: r.row_data || {},
+        }));
+
+        rows = rowIdsWithData.map((r: any) => {
           const rowData = r.row_data || {};
           // 우편번호를 우편으로 통일
           if (
@@ -262,7 +353,7 @@ export async function POST(request: NextRequest) {
         const isPurchaseOrder = templateName.includes("발주");
         if (isPurchaseOrder && (!rowIds || rowIds.length === 0)) {
           try {
-            const idsToUpdate = allData.map((r: any) => r.id);
+            const idsToUpdate = rowIdsWithData.map((r: any) => r.id);
 
             if (idsToUpdate.length > 0) {
               // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
@@ -465,7 +556,8 @@ export async function POST(request: NextRequest) {
         // preferSabangName 옵션에 따라 사방넷명 또는 상품명 사용
         return mapDataToTemplate(row, headerStr, {
           templateName: templateData.name,
-          preferSabangName: preferSabangName !== undefined ? preferSabangName : true,
+          preferSabangName:
+            preferSabangName !== undefined ? preferSabangName : true,
         });
       });
     });
@@ -826,12 +918,20 @@ export async function POST(request: NextRequest) {
 
     if (isPurchaseOrder && rowIds && rowIds.length > 0) {
       try {
-        // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
-        await sql`
-          UPDATE upload_rows
-          SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
-          WHERE id = ANY(${rowIds})
-        `;
+        // CJ외주 발주서인 경우: 필터링된 ID만 업데이트
+        const idsToUpdate =
+          isCJOutsource && rowIdsWithData.length > 0
+            ? rowIdsWithData.map((r: any) => r.id)
+            : rowIds;
+
+        if (idsToUpdate.length > 0) {
+          // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
+          await sql`
+            UPDATE upload_rows
+            SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
+            WHERE id = ANY(${idsToUpdate})
+          `;
+        }
       } catch (updateError) {
         console.error("주문상태 업데이트 실패:", updateError);
         // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리

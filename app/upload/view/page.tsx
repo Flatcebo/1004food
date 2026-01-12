@@ -874,7 +874,9 @@ function FileViewContent() {
   // 상품 수정 저장
   const handleSaveProductEdit = useCallback(async () => {
     const {transformProductData} = await import("@/utils/product");
-    const {createProduct} = await import("@/utils/api");
+    const {createProduct, fetchProducts, batchUpdateProducts} = await import(
+      "@/utils/api"
+    );
     const values = productEditModal.values;
 
     // 필수값: name, code는 필수
@@ -885,21 +887,58 @@ function FileViewContent() {
 
     setSavingProduct(true);
     try {
+      // 먼저 상품 목록을 가져와서 상품명, 사방넷명, 매핑코드가 모두 일치하는 상품 찾기
+      const productsResult = await fetchProducts();
+      if (!productsResult.success || !productsResult.data) {
+        throw new Error("상품 목록을 가져올 수 없습니다.");
+      }
+
+      const productName = String(values.name).trim();
+      const sabangName = values.sabangName
+        ? String(values.sabangName).trim()
+        : null;
+      const code = String(values.code).trim();
+
+      // 상품명, 사방넷명, 매핑코드가 모두 일치하는 상품 찾기
+      const matchingProduct = productsResult.data.find((p: any) => {
+        const pName = String(p.name || "").trim();
+        const pSabangName = p.sabangName ? String(p.sabangName).trim() : null;
+        const pCode = String(p.code || "").trim();
+
+        return (
+          pName === productName && pSabangName === sabangName && pCode === code
+        );
+      });
+
       const requestBody = transformProductData(values);
-      const result = await createProduct(requestBody);
+      let result;
+
+      if (matchingProduct) {
+        // 일치하는 상품이 있으면 업데이트
+        result = await batchUpdateProducts([matchingProduct.id], requestBody);
+        if (result.success) {
+          alert("상품이 성공적으로 수정되었습니다.");
+        } else {
+          throw new Error(result.error || "수정 실패");
+        }
+      } else {
+        // 일치하는 상품이 없으면 새로 생성
+        result = await createProduct(requestBody);
+        if (result.success) {
+          alert("상품이 성공적으로 등록되었습니다.");
+        } else {
+          throw new Error(result.error || "저장 실패");
+        }
+      }
 
       if (result.success) {
-        alert("상품이 성공적으로 수정되었습니다.");
         handleCloseProductEditModal();
 
         // codes 새로고침
-        const {fetchProducts} = await import("@/utils/api");
-        const productsResult = await fetchProducts();
-        if (productsResult.success && productsResult.data) {
-          setCodes(productsResult.data);
+        const refreshResult = await fetchProducts();
+        if (refreshResult.success && refreshResult.data) {
+          setCodes(refreshResult.data);
         }
-      } else {
-        throw new Error(result.error || "저장 실패");
       }
     } catch (error) {
       console.error("저장 실패:", error);
