@@ -249,14 +249,14 @@ export async function POST(request: NextRequest) {
 
       // 외주 발주서인 경우: 필터가 없어도 "외주"만 조회
       if (isOutsourceTemplate) {
-        // CJ외주 발주서인 경우: 매핑코드 106464 제외
+        // CJ외주 발주서인 경우: 매핑코드 106464, 108640, 108788, 108879, 108221 포함
         if (isCJOutsourceTemplate) {
           const allData = await sql`
             SELECT ur.id, ur.row_data
             FROM upload_rows ur
             INNER JOIN uploads u ON ur.upload_id = u.id
             WHERE ur.row_data->>'내외주' = '외주'
-              AND (ur.row_data->>'매핑코드' IS NULL OR ur.row_data->>'매핑코드' != '106464')
+              AND ur.row_data->>'매핑코드' IN ('106464', '108640', '108788', '108879', '108221')
             ORDER BY u.created_at DESC, ur.id DESC
           `;
           dataRowsWithIds = allData.map((r: any) => ({
@@ -306,10 +306,11 @@ export async function POST(request: NextRequest) {
     if (isCJOutsource) {
       // ID와 함께 필터링하여 실제 다운로드된 행의 ID 추적
       if (dataRowsWithIds.length > 0) {
+        const allowedCodes = ["106464", "108640", "108788", "108879", "108221"];
         const filteredRowsWithIds = dataRowsWithIds.filter(
           (item: any) =>
             item.row_data.내외주 === "외주" &&
-            item.row_data.매핑코드 !== "106464"
+            allowedCodes.includes(item.row_data.매핑코드)
         );
         // 전화번호 필드들에 하이픈 추가 가공 (ID 유지)
         const processedRowsWithIds = filteredRowsWithIds.map((item: any) => {
@@ -362,8 +363,10 @@ export async function POST(request: NextRequest) {
         );
       } else {
         // rows가 직접 전달된 경우
+        const allowedCodes = ["106464", "108640", "108788", "108879", "108221"];
         dataRows = dataRows.filter(
-          (row: any) => row.내외주 === "외주" && row.매핑코드 !== "106464"
+          (row: any) =>
+            row.내외주 === "외주" && allowedCodes.includes(row.매핑코드)
         );
 
         // 전화번호 필드들에 하이픈 추가 가공
@@ -756,6 +759,7 @@ export async function POST(request: NextRequest) {
         // 전체 다운로드 시 dataRowsWithIds는 이미 CJ외주 조건으로 필터링되어 있음 (313-335 라인)
         // 하지만 안전을 위해 다시 필터링 (NULL 값 처리 포함)
         // 전체 다운로드 시 dataRowsWithIds의 모든 ID를 사용 (이미 필터링됨)
+        const allowedCodes = ["106464", "108640", "108788", "108879", "108221"];
         const filteredIds = dataRowsWithIds
           .filter(
             (item: any) =>
@@ -763,9 +767,9 @@ export async function POST(request: NextRequest) {
               item.id &&
               item.row_data &&
               item.row_data.내외주 === "외주" &&
-              (item.row_data.매핑코드 === null ||
-                item.row_data.매핑코드 === undefined ||
-                item.row_data.매핑코드 !== "106464")
+              item.row_data.매핑코드 !== null &&
+              item.row_data.매핑코드 !== undefined &&
+              allowedCodes.includes(item.row_data.매핑코드)
           )
           .map((item: any) => item.id)
           .filter((id: any) => id !== null && id !== undefined);
