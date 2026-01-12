@@ -51,6 +51,46 @@ export async function POST(request: NextRequest) {
       console.error("vendor_name 컬럼 확인/추가 실패:", error);
     }
 
+    // uploads 테이블에 header_order 컬럼이 있는지 확인하고 없으면 추가
+    try {
+      const headerOrderColumnExists = await sql`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'uploads' 
+        AND column_name = 'header_order'
+      `;
+      
+      if (headerOrderColumnExists.length === 0) {
+        await sql`
+          ALTER TABLE uploads 
+          ADD COLUMN header_order JSONB
+        `;
+        console.log("✅ uploads 테이블에 header_order 컬럼 추가 완료");
+      }
+    } catch (error) {
+      console.error("header_order 컬럼 확인/추가 실패:", error);
+    }
+
+    // uploads 테이블에 header_format 컬럼이 있는지 확인하고 없으면 추가 (헤더 순서 및 양식 정보 저장)
+    try {
+      const headerFormatColumnExists = await sql`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'uploads' 
+        AND column_name = 'header_format'
+      `;
+      
+      if (headerFormatColumnExists.length === 0) {
+        await sql`
+          ALTER TABLE uploads 
+          ADD COLUMN header_format JSONB
+        `;
+        console.log("✅ uploads 테이블에 header_format 컬럼 추가 완료");
+      }
+    } catch (error) {
+      console.error("header_format 컬럼 확인/추가 실패:", error);
+    }
+
     // upload_rows 테이블에 mall_id 컬럼이 있는지 확인하고 없으면 추가
     try {
       const mallIdColumnExists = await sql`
@@ -89,7 +129,8 @@ export async function POST(request: NextRequest) {
           header_index,
           product_code_map,
           product_id_map,
-          vendor_name
+          vendor_name,
+          original_header
         FROM temp_files
         WHERE is_confirmed = true AND company_id = ${companyId} AND user_id = ${userId}
         ORDER BY created_at ASC
@@ -104,7 +145,8 @@ export async function POST(request: NextRequest) {
           header_index,
           product_code_map,
           product_id_map,
-          vendor_name
+          vendor_name,
+          original_header
         FROM temp_files
         WHERE is_confirmed = true AND company_id = ${companyId}
         ORDER BY created_at ASC
@@ -168,6 +210,7 @@ export async function POST(request: NextRequest) {
     const results = [];
     let globalCodeIndex = 0;
 
+
     for (const file of confirmedFiles) {
       const tableData = file.table_data;
       const productCodeMap = file.product_code_map || {};
@@ -179,8 +222,13 @@ export async function POST(request: NextRequest) {
       }
 
       // 헤더와 데이터 행 분리
+      // 기존 방식대로 tableData[0] 사용 (canonicalHeader)
       const headerRow = tableData[0];
       const dataRows = tableData.slice(1);
+
+      // 디버깅: 각 파일의 헤더 확인
+      console.log(`📋 파일 "${file.file_name}"의 원본 헤더 (DB 저장용):`, file.original_header);
+      console.log(`📋 파일 "${file.file_name}"의 사용할 헤더 (데이터 처리용):`, headerRow);
 
       // 상품명 인덱스 찾기
       const nameIdx = headerRow.findIndex(
@@ -261,6 +309,10 @@ export async function POST(request: NextRequest) {
           rowObj["내부코드"] = internalCodes[globalCodeIndex];
         }
         globalCodeIndex++;
+
+        // 업로드 시 부여된 row 순서 번호 추가 (1부터 시작)
+        rowObj["순서번호"] = rowIndex + 1;
+        rowObj["rowOrder"] = rowIndex + 1;
 
         return rowObj;
       });
@@ -343,19 +395,49 @@ export async function POST(request: NextRequest) {
       
       console.log(`📝 저장 전 확인: vendorName="${vendorName}", mallId=${mallId}`);
 
-      // uploads 테이블에 저장 (vendor_name 포함)
+      // 헤더 순서 및 양식 정보 구성
+      // 원본 헤더는 DB에만 저장하고, 실제 데이터 처리에는 사용하지 않음
+      // header_order: 원본 헤더 순서 (DB 저장용)
+      // header_format: 상세 양식 정보 객체 (원본 헤더 포함)
+      const originalHeader = file.original_header && Array.isArray(file.original_header) && file.original_header.length > 0
+        ? file.original_header
+        : headerRow; // 원본 헤더가 없으면 현재 헤더 사용 (하위 호환성)
+      
+      const headerFormat = {
+        headers: originalHeader, // 원본 헤더 내용 배열 (DB 저장용)
+        headerIndex: file.header_index || {}, // 헤더 인덱스 정보 (예: {nameIdx: 0, ...})
+      };
+
+      // 디버깅: 저장할 헤더 정보 확인
+      console.log(`💾 파일 "${file.file_name}" 저장 시 헤더 정보:`, {
+        originalHeader: originalHeader,
+        headerOrder: originalHeader, // 원본 헤더 순서 저장
+        headerFormat: headerFormat,
+      });
+
+      // uploads 테이블에 저장 (vendor_name, header_order, header_format 포함)
+      // header_order와 header_format에는 원본 헤더 저장
       const uploadResult = await sql`
-        INSERT INTO uploads (file_name, row_count, data, company_id, vendor_name, created_at)
+        INSERT INTO uploads (file_name, row_count, data, company_id, vendor_name, header_order, header_format, created_at)
         VALUES (
           ${file.file_name},
           ${rowObjects.length},
           ${JSON.stringify(rowObjects)},
           ${companyId},
           ${vendorName},
+          ${JSON.stringify(originalHeader)},
+          ${JSON.stringify(headerFormat)},
           ${koreaTime.toISOString()}::timestamp
         )
-        RETURNING id, created_at
+        RETURNING id, created_at, header_order, header_format
       `;
+
+      // 디버깅: 저장된 헤더 정보 확인
+      console.log(`✅ 파일 "${file.file_name}" 저장 완료:`, {
+        uploadId: uploadResult[0].id,
+        savedHeaderOrder: uploadResult[0].header_order,
+        savedHeaderFormat: uploadResult[0].header_format,
+      });
 
       const uploadId = uploadResult[0].id;
       const createdAt = uploadResult[0].created_at;
@@ -381,7 +463,27 @@ export async function POST(request: NextRequest) {
         console.error("upload_rows vendor_name 컬럼 확인/추가 실패:", error);
       }
 
-      // 각 행을 upload_rows에 저장 (객체 형태로)
+      // upload_rows 테이블에 row_order 컬럼이 있는지 확인하고 없으면 추가
+      try {
+        const rowOrderColumnExists = await sql`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'upload_rows' 
+          AND column_name = 'row_order'
+        `;
+        
+        if (rowOrderColumnExists.length === 0) {
+          await sql`
+            ALTER TABLE upload_rows 
+            ADD COLUMN row_order INTEGER
+          `;
+          console.log("✅ upload_rows 테이블에 row_order 컬럼 추가 완료");
+        }
+      } catch (error) {
+        console.error("upload_rows row_order 컬럼 확인/추가 실패:", error);
+      }
+
+      // 각 행을 upload_rows에 저장 (객체 형태로, row_order 포함)
       const insertPromises = rowObjects.map((rowObj: any, index: number) => {
         // 쇼핑몰명 추출 (여러 가능한 키에서 찾기)
         const shopName =
@@ -393,7 +495,7 @@ export async function POST(request: NextRequest) {
         }
 
         return sql`
-          INSERT INTO upload_rows (upload_id, row_data, shop_name, company_id, mall_id, vendor_name, created_at)
+          INSERT INTO upload_rows (upload_id, row_data, shop_name, company_id, mall_id, vendor_name, row_order, created_at)
           VALUES (
             ${uploadId},
             ${JSON.stringify(rowObj)},
@@ -401,9 +503,10 @@ export async function POST(request: NextRequest) {
             ${companyId},
             ${mallId},
             ${vendorName},
+            ${index + 1},
             ${koreaTime.toISOString()}::timestamp
           )
-          RETURNING id, mall_id, vendor_name
+          RETURNING id, mall_id, vendor_name, row_order
         `;
       });
 

@@ -258,11 +258,11 @@ export default function SalesByMallPage() {
   };
 
   // 주문 목록 조회
-  const fetchOrders = useCallback(async (mallId: number, mallName: string, startDate: string, endDate: string) => {
+  const fetchOrders = useCallback(async (settlementId: number, mallId: number, mallName: string, startDate: string, endDate: string) => {
     setOrdersLoading(true);
     setError("");
 
-    console.log("[주문 목록 조회] 요청 파라미터:", {mallId, mallName, startDate, endDate});
+    console.log("[주문 목록 조회] 요청 파라미터:", {settlementId, mallId, mallName, startDate, endDate});
 
     try {
       const headers: HeadersInit = {
@@ -285,10 +285,9 @@ export default function SalesByMallPage() {
         }
       }
 
+      // settlementId를 사용하여 해당 정산에 연결된 주문들만 조회
       const params = new URLSearchParams({
-        mallId: mallId.toString(),
-        startDate,
-        endDate,
+        settlementId: settlementId.toString(),
       });
 
       const url = `/api/analytics/sales-by-mall/orders?${params.toString()}`;
@@ -423,6 +422,7 @@ export default function SalesByMallPage() {
     });
     
     fetchOrders(
+      settlement.id,
       settlement.mallId,
       settlement.mallName,
       startDate,
@@ -436,6 +436,8 @@ export default function SalesByMallPage() {
     setOrderModalData(null);
     setOrders([]);
   }, []);
+
+
 
   // 기간 표시 포맷팅 (시간 포함)
   const formatDateRange = useCallback((startDate: string, endDate: string): string => {
@@ -827,7 +829,13 @@ export default function SalesByMallPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {orders.map((order, index) => {
+                      {[...orders].sort((a, b) => {
+                        const nameA = (a.productName || "").toLowerCase();
+                        const nameB = (b.productName || "").toLowerCase();
+                        if (nameA < nameB) return -1;
+                        if (nameA > nameB) return 1;
+                        return 0;
+                      }).map((order, index) => {
                         const quantity = typeof order.quantity === "number" ? order.quantity : parseFloat(String(order.quantity)) || 1;
                         const salePrice = typeof order.salePrice === "number" ? order.salePrice : parseFloat(String(order.salePrice)) || 0;
                         const orderAmount = quantity * salePrice;
@@ -840,11 +848,13 @@ export default function SalesByMallPage() {
                           }
                           
                           // 새 윈도우에서 order page 열기 (내부코드 검색 파라미터 및 기간 필터링 포함)
+                          // 주문상태 필터를 "전체"로 설정 (빈 문자열)
                           const params = new URLSearchParams({
                             searchField: "내부코드",
                             searchValue: order.internalCode,
                             uploadTimeFrom: orderModalData.startDate,
                             uploadTimeTo: orderModalData.endDate,
+                            orderStatus: "", // 전체로 설정
                           });
                           const url = `/order?${params.toString()}`;
                           const newWindow = window.open(url, "_blank", "width=1200,height=800");

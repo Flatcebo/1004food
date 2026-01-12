@@ -102,48 +102,48 @@ export const useDeliveryUpload = () => {
         },
       ]);
 
-      // 결과를 순차적으로 표시
+      // 결과를 빠르게 표시 (지연 제거로 성능 개선)
+      let currentSuccessCount = 0;
+      let currentFailCount = 0;
+
+      // 모든 결과를 한 번에 표시 (성능 개선)
+      const allResults: DeliveryResult[] = [
+        {
+          type: "init",
+          message: `총 ${data.totalCount}건의 운송장 정보를 처리합니다.`,
+        },
+      ];
+
       for (let i = 0; i < data.results.length; i++) {
         const result = data.results[i];
 
-        // 처리 중 표시
-        setCurrentOrderNumber(result.orderNumber);
-        setUploadProgress(((i + 1) / data.totalCount) * 100);
+        if (result.success) {
+          currentSuccessCount++;
+        } else {
+          currentFailCount++;
+        }
 
-        setDeliveryResults((prev) => [
-          ...prev,
-          {
-            type: "processing",
-            orderNumber: result.orderNumber,
-            currentIndex: i + 1,
-            totalCount: data.totalCount,
-          },
-        ]);
-
-        // 약간의 지연 후 결과 표시
-        await new Promise((resolve) => setTimeout(resolve, 300));
-
-        setDeliveryResults((prev) => [
-          ...prev,
-          {
-            type: "result",
-            orderNumber: result.orderNumber,
-            success: result.success,
-            error: result.error,
-            carrier: result.carrier,
-            trackingNumber: result.trackingNumber,
-            rowNumber: result.rowNumber,
-            currentIndex: i + 1,
-            totalCount: data.totalCount,
-            successCount: result.success
-              ? prev.filter((r) => r.type === "result" && r.success).length + 1
-              : prev.filter((r) => r.type === "result" && r.success).length,
-            failCount: !result.success
-              ? prev.filter((r) => r.type === "result" && !r.success).length + 1
-              : prev.filter((r) => r.type === "result" && !r.success).length,
-          },
-        ]);
+        allResults.push({
+          type: "result",
+          orderNumber: result.orderNumber,
+          success: result.success,
+          error: result.error,
+          carrier: result.carrier,
+          trackingNumber: result.trackingNumber,
+          rowNumber: result.rowNumber,
+          currentIndex: i + 1,
+          totalCount: data.totalCount,
+          successCount: currentSuccessCount,
+          failCount: currentFailCount,
+        });
       }
+
+      // 진행률 업데이트
+      setUploadProgress(100);
+      setCurrentOrderNumber("");
+
+      // 모든 결과 한 번에 설정
+      setDeliveryResults(allResults);
 
       // 최종 결과 설정
       setFinalResult({

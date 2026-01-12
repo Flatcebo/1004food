@@ -208,6 +208,7 @@ export interface UploadedFile {
   uploadTime?: string;
   createdAt?: string; // 업로드 일시 (임시 저장 시 생성)
   vendorName?: string; // 업체명 (파일에서 수집)
+  originalHeader?: string[]; // 원본 파일의 헤더 순서 (정규화 전)
 }
 
 export interface UploadStoreState {
@@ -565,6 +566,12 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
               file.vendorName ||
               file.vendor_name ||
               existingFile?.vendorName ||
+              undefined,
+            // 서버에서 불러온 originalHeader가 있으면 우선 사용, 없으면 기존 originalHeader 유지
+            originalHeader:
+              file.originalHeader ||
+              file.original_header ||
+              existingFile?.originalHeader ||
               undefined,
           };
         });
@@ -1089,6 +1096,23 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             });
           }
 
+          // 원본 헤더 보존 (정규화 전 원본 엑셀 파일의 헤더)
+          // rawHeader는 엑셀 파일에서 직접 추출한 원본 헤더
+          // 빈 문자열도 포함하여 원본 순서 그대로 보존
+          const originalHeader = rawHeader.map((h: any) => {
+            if (h === null || h === undefined) return "";
+            return String(h).trim();
+          });
+          
+          // 디버깅: 원본 헤더 추출 확인
+          console.log(`📋 원본 헤더 추출:`, {
+            fileName: file.name,
+            rawHeaderLength: rawHeader.length,
+            originalHeaderLength: originalHeader.length,
+            originalHeader: originalHeader,
+          });
+          
+          // 데이터는 정규화된 헤더로 저장 (기존 방식 유지)
           let jsonData = [canonicalHeader, ...canonicalRows];
 
           // 수취인명/이름(내부 컬럼 기준) 동명이인 번호 붙이기
@@ -1281,6 +1305,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             userId: useAuthStore.getState().user?.id || "temp-user-001", // 임시: 로그인 기능 미구현 시 임시 사용자 ID 사용
             uploadTime: new Date().toISOString(),
             vendorName: vendorNameStr || undefined, // 업체명 (없으면 undefined)
+            originalHeader: originalHeader, // 원본 파일의 헤더 순서 (정규화 전)
           };
 
           resolve(uploadedFile);

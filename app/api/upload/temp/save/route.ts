@@ -81,12 +81,18 @@ export async function POST(request: NextRequest) {
         productIdMap,
         vendorName,
         userId: fileUserId,
+        originalHeader,
       } = file;
 
       if (!id || !fileName || !tableData) {
         console.warn("파일 데이터가 불완전합니다:", file);
         return null;
       }
+
+      // 디버깅: 원본 헤더 확인
+      console.log(`📋 파일 "${fileName}"의 originalHeader:`, originalHeader);
+      console.log(`📋 파일 "${fileName}"의 originalHeader 타입:`, typeof originalHeader);
+      console.log(`📋 파일 "${fileName}"의 originalHeader 배열 여부:`, Array.isArray(originalHeader));
 
       // 파일 객체의 userId가 있으면 우선 사용, 없으면 헤더의 userId 사용
       const finalUserId = fileUserId || userId;
@@ -125,7 +131,7 @@ export async function POST(request: NextRequest) {
           productCodeMap,
         });
 
-        // validation_status, user_id 컬럼이 없으면 추가
+        // validation_status, user_id, original_header 컬럼이 없으면 추가
         try {
           await sql`
             DO $$
@@ -146,6 +152,10 @@ export async function POST(request: NextRequest) {
                             WHERE table_name = 'temp_files' AND column_name = 'user_id') THEN
                 ALTER TABLE temp_files ADD COLUMN user_id VARCHAR(255);
               END IF;
+              IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                            WHERE table_name = 'temp_files' AND column_name = 'original_header') THEN
+                ALTER TABLE temp_files ADD COLUMN original_header JSONB;
+              END IF;
             END
             $$;
           `;
@@ -161,14 +171,14 @@ export async function POST(request: NextRequest) {
             INSERT INTO temp_files (
               file_id, file_name, session_id, company_id, user_id, row_count,
               table_data, header_index, product_code_map, product_id_map,
-              validation_status, vendor_name, created_at, updated_at
+              validation_status, vendor_name, original_header, created_at, updated_at
             )
             VALUES (
               ${id},
               ${fileName},
               ${sessionId},
               ${companyId},
-              ${userId || null},
+              ${finalUserId || null},
               ${rowCount},
               ${JSON.stringify(tableData)},
               ${JSON.stringify(headerIndex || {})},
@@ -176,6 +186,7 @@ export async function POST(request: NextRequest) {
               ${JSON.stringify(productIdMap || {})},
               ${JSON.stringify(validationResult)},
               ${vendorName || null},
+              ${originalHeader && Array.isArray(originalHeader) ? JSON.stringify(originalHeader) : null},
               ${now.toISOString()}::timestamp,
               ${now.toISOString()}::timestamp
             )
@@ -191,8 +202,9 @@ export async function POST(request: NextRequest) {
               product_id_map = EXCLUDED.product_id_map,
               validation_status = EXCLUDED.validation_status,
               vendor_name = EXCLUDED.vendor_name,
+              original_header = COALESCE(EXCLUDED.original_header, temp_files.original_header),
               updated_at = ${now.toISOString()}::timestamp
-            RETURNING id, created_at
+            RETURNING id, created_at, original_header
           `;
         } catch (error: any) {
           // validation_status 또는 user_id 컬럼이 없으면 다시 시도 (컬럼 추가 후)
@@ -224,7 +236,7 @@ export async function POST(request: NextRequest) {
               INSERT INTO temp_files (
                 file_id, file_name, session_id, company_id, user_id, row_count,
                 table_data, header_index, product_code_map, product_id_map,
-                validation_status, vendor_name, created_at, updated_at
+                validation_status, vendor_name, original_header, created_at, updated_at
               )
               VALUES (
                 ${id},
@@ -239,6 +251,7 @@ export async function POST(request: NextRequest) {
                 ${JSON.stringify(productIdMap || {})},
                 ${JSON.stringify(validationResult)},
                 ${vendorName || null},
+                ${originalHeader && Array.isArray(originalHeader) ? JSON.stringify(originalHeader) : null},
                 ${now.toISOString()}::timestamp,
                 ${now.toISOString()}::timestamp
               )
@@ -254,8 +267,9 @@ export async function POST(request: NextRequest) {
                 product_id_map = EXCLUDED.product_id_map,
                 validation_status = EXCLUDED.validation_status,
                 vendor_name = EXCLUDED.vendor_name,
+                original_header = COALESCE(EXCLUDED.original_header, temp_files.original_header),
                 updated_at = ${now.toISOString()}::timestamp
-              RETURNING id, created_at
+              RETURNING id, created_at, original_header
             `;
           } else if (
             error.message &&
@@ -279,7 +293,7 @@ export async function POST(request: NextRequest) {
                 INSERT INTO temp_files (
                   file_id, file_name, company_id, user_id, row_count,
                   table_data, header_index, product_code_map, product_id_map,
-                  validation_status, vendor_name, created_at, updated_at
+                  validation_status, vendor_name, original_header, created_at, updated_at
                 )
                 VALUES (
                 ${id},
@@ -293,6 +307,7 @@ export async function POST(request: NextRequest) {
                   ${JSON.stringify(productIdMap || {})},
                   ${JSON.stringify(validationResult)},
                   ${vendorName || null},
+                  ${originalHeader && Array.isArray(originalHeader) ? JSON.stringify(originalHeader) : null},
                   ${now.toISOString()}::timestamp,
                   ${now.toISOString()}::timestamp
                 )
@@ -307,15 +322,16 @@ export async function POST(request: NextRequest) {
                   product_id_map = EXCLUDED.product_id_map,
                   validation_status = EXCLUDED.validation_status,
                   vendor_name = EXCLUDED.vendor_name,
+                  original_header = COALESCE(EXCLUDED.original_header, temp_files.original_header),
                   updated_at = ${now.toISOString()}::timestamp
-                RETURNING id, created_at
+                RETURNING id, created_at, original_header
               `;
             } else {
               result = await sql`
                 INSERT INTO temp_files (
                   file_id, file_name, company_id, row_count,
                   table_data, header_index, product_code_map, product_id_map,
-                  validation_status, vendor_name, created_at, updated_at
+                  validation_status, vendor_name, original_header, created_at, updated_at
                 )
                 VALUES (
                   ${id},
@@ -328,6 +344,7 @@ export async function POST(request: NextRequest) {
                   ${JSON.stringify(productIdMap || {})},
                   ${JSON.stringify(validationResult)},
                   ${vendorName || null},
+                  ${originalHeader && Array.isArray(originalHeader) ? JSON.stringify(originalHeader) : null},
                   ${now.toISOString()}::timestamp,
                   ${now.toISOString()}::timestamp
                 )
@@ -341,14 +358,21 @@ export async function POST(request: NextRequest) {
                   product_id_map = EXCLUDED.product_id_map,
                   validation_status = EXCLUDED.validation_status,
                   vendor_name = EXCLUDED.vendor_name,
+                  original_header = COALESCE(EXCLUDED.original_header, temp_files.original_header),
                   updated_at = ${now.toISOString()}::timestamp
-                RETURNING id, created_at
+                RETURNING id, created_at, original_header
               `;
             }
           } else {
             throw error;
           }
         }
+        // 디버깅: 저장된 원본 헤더 확인
+        console.log(`✅ 파일 "${fileName}" 저장 완료:`, {
+          id: result[0].id,
+          savedOriginalHeader: result[0].original_header,
+        });
+
         return {
           ...result[0],
           fileName: fileName,

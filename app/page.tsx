@@ -1,6 +1,44 @@
 "use client";
 
 import {useState, useEffect} from "react";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  PointElement,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement,
+} from "chart.js";
+import {Bar, Line} from "react-chartjs-2";
+
+// Chart.js 등록
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  PointElement,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement
+);
+
+interface DashboardChartData {
+  dailyOrders: {date: string; orderCount: number}[];
+  dailySalesProfit: {date: string; sales: number; profit: number}[];
+  topVendorsByOrders: {vendorName: string; orderCount: number}[];
+  topVendorsBySales: {vendorName: string; sales: number}[];
+  topProductsByOrders: {
+    productCode: string;
+    sabangName: string;
+    orderCount: number;
+  }[];
+}
 
 export default function App() {
   const [stats, setStats] = useState({
@@ -10,9 +48,20 @@ export default function App() {
     pendingOrders: 0,
   });
 
+  const [chartData, setChartData] = useState<DashboardChartData>({
+    dailyOrders: [],
+    dailySalesProfit: [],
+    topVendorsByOrders: [],
+    topVendorsBySales: [],
+    topProductsByOrders: [],
+  });
+
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    // 대시보드 통계 데이터 로드 (나중에 API 연동)
+    // 대시보드 통계 데이터 로드
     loadDashboardStats();
+    loadChartData();
   }, []);
 
   const loadDashboardStats = async () => {
@@ -65,16 +114,69 @@ export default function App() {
     }
   };
 
+  const loadChartData = async () => {
+    try {
+      setLoading(true);
+      const headers: HeadersInit = {};
+
+      if (typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem("auth-storage");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            const user = parsed.state?.user;
+            if (user?.companyId) {
+              headers["company-id"] = user.companyId.toString();
+            }
+          }
+        } catch (e) {
+          console.error("인증 정보 로드 실패:", e);
+        }
+      }
+
+      const response = await fetch("/api/dashboard/stats?days=30&topLimit=10", {
+        headers,
+      });
+      const result = await response.json();
+
+      if (result.success) {
+        setChartData(result.data);
+      }
+    } catch (error) {
+      console.error("차트 데이터 로드 실패:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 날짜 포맷팅 (MM/DD)
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return `${(date.getMonth() + 1).toString().padStart(2, "0")}/${date
+      .getDate()
+      .toString()
+      .padStart(2, "0")}`;
+  };
+
+  // 금액 포맷팅
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat("ko-KR", {
+      style: "currency",
+      currency: "KRW",
+      maximumFractionDigits: 0,
+    }).format(value);
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      <div className="mb-8">
+      {/* <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
           📊 1004 Food 대시보드
         </h1>
         <p className="text-gray-600">
           주문 관리 시스템 현황을 한눈에 확인하세요
         </p>
-      </div>
+      </div> */}
 
       {/* 통계 카드 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -207,6 +309,384 @@ export default function App() {
           </a>
         </div>
       </div>
+
+      {/* 차트 섹션 */}
+      {!loading && (
+        <div className="space-y-6 mb-8">
+          {/* 1. 일일 주문 수량 */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">
+              📈 일일 주문 수량
+            </h2>
+            {chartData.dailyOrders.length > 0 ? (
+              <div className="h-[300px]">
+                <Bar
+                  data={{
+                    labels: chartData.dailyOrders.map((item) =>
+                      formatDate(item.date)
+                    ),
+                    datasets: [
+                      {
+                        label: "주문 수량",
+                        data: chartData.dailyOrders.map(
+                          (item) => item.orderCount
+                        ),
+                        backgroundColor: "#3b82f6",
+                      },
+                    ],
+                  }}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: {
+                        display: true,
+                      },
+                      tooltip: {
+                        callbacks: {
+                          label: function (context) {
+                            return `${context.parsed.y}건`;
+                          },
+                        },
+                      },
+                    },
+                    scales: {
+                      y: {
+                        beginAtZero: true,
+                        ticks: {
+                          callback: function (value) {
+                            return `${value}건`;
+                          },
+                        },
+                      },
+                    },
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                데이터가 없습니다.
+              </div>
+            )}
+          </div>
+
+          {/* 2. 일일 매출과 이익액 */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">
+              💰 일일 매출과 이익액
+            </h2>
+            {chartData.dailySalesProfit.length > 0 ? (
+              <div className="h-[300px]">
+                <Bar
+                  data={{
+                    labels: chartData.dailySalesProfit.map((item) =>
+                      formatDate(item.date)
+                    ),
+                    datasets: [
+                      {
+                        label: "매출",
+                        data: chartData.dailySalesProfit.map(
+                          (item) => item.sales
+                        ),
+                        backgroundColor: "#10b981",
+                        yAxisID: "y",
+                      },
+                      {
+                        label: "이익",
+                        data: chartData.dailySalesProfit.map(
+                          (item) => item.profit
+                        ),
+                        backgroundColor: "#f59e0b",
+                        type: "line" as const,
+                        yAxisID: "y1",
+                        borderColor: "#f59e0b",
+                        borderWidth: 2,
+                        fill: false,
+                      } as any,
+                    ],
+                  }}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: {
+                        display: true,
+                      },
+                      tooltip: {
+                        callbacks: {
+                          label: function (context) {
+                            const value = context.parsed.y ?? 0;
+                            if (context.dataset.label === "매출") {
+                              return `매출: ${formatCurrency(value)}`;
+                            } else if (context.dataset.label === "이익") {
+                              return `이익: ${formatCurrency(value)}`;
+                            }
+                            return `${context.dataset.label}: ${value}`;
+                          },
+                        },
+                      },
+                    },
+                    scales: {
+                      y: {
+                        type: "linear" as const,
+                        display: true,
+                        position: "left" as const,
+                        beginAtZero: true,
+                        ticks: {
+                          callback: function (value) {
+                            return `${(Number(value) / 10000).toFixed(0)}만원`;
+                          },
+                        },
+                      },
+                      y1: {
+                        type: "linear" as const,
+                        display: true,
+                        position: "right" as const,
+                        beginAtZero: true,
+                        grid: {
+                          drawOnChartArea: false,
+                        },
+                        ticks: {
+                          callback: function (value) {
+                            return `${(Number(value) / 10000).toFixed(0)}만원`;
+                          },
+                        },
+                      },
+                    },
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                데이터가 없습니다.
+              </div>
+            )}
+          </div>
+
+          {/* 3. 주문수 많은 업체 Top 10 */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">
+              🏢 주문수 많은 업체 Top 10
+            </h2>
+            {chartData.topVendorsByOrders.length > 0 ? (
+              <div className="h-[400px]">
+                <Bar
+                  data={{
+                    labels: chartData.topVendorsByOrders.map(
+                      (item) => item.vendorName
+                    ),
+                    datasets: [
+                      {
+                        label: "주문 수량",
+                        data: chartData.topVendorsByOrders.map(
+                          (item) => item.orderCount
+                        ),
+                        backgroundColor: chartData.topVendorsByOrders.map(
+                          (_, index) => {
+                            const colors = [
+                              "#8b5cf6",
+                              "#7c3aed",
+                              "#6d28d9",
+                              "#5b21b6",
+                              "#4c1d95",
+                            ];
+                            return colors[index % 5];
+                          }
+                        ),
+                      },
+                    ],
+                  }}
+                  options={{
+                    indexAxis: "y" as const,
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: {
+                        display: true,
+                      },
+                      tooltip: {
+                        callbacks: {
+                          label: function (context) {
+                            return `${context.parsed.x}건`;
+                          },
+                        },
+                      },
+                    },
+                    scales: {
+                      x: {
+                        beginAtZero: true,
+                        ticks: {
+                          callback: function (value) {
+                            return `${value}건`;
+                          },
+                        },
+                      },
+                    },
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                데이터가 없습니다.
+              </div>
+            )}
+          </div>
+
+          {/* 4. 매출 높은 업체 Top 10 */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">
+              💵 매출 높은 업체 Top 10
+            </h2>
+            {chartData.topVendorsBySales.length > 0 ? (
+              <div className="h-[400px]">
+                <Bar
+                  data={{
+                    labels: chartData.topVendorsBySales.map(
+                      (item) => item.vendorName
+                    ),
+                    datasets: [
+                      {
+                        label: "매출",
+                        data: chartData.topVendorsBySales.map(
+                          (item) => item.sales
+                        ),
+                        backgroundColor: chartData.topVendorsBySales.map(
+                          (_, index) => {
+                            const colors = [
+                              "#10b981",
+                              "#059669",
+                              "#047857",
+                              "#065f46",
+                              "#064e3b",
+                            ];
+                            return colors[index % 5];
+                          }
+                        ),
+                      },
+                    ],
+                  }}
+                  options={{
+                    indexAxis: "y" as const,
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: {
+                        display: true,
+                      },
+                      tooltip: {
+                        callbacks: {
+                          label: function (context) {
+                            const value = context.parsed.x ?? 0;
+                            return `매출: ${formatCurrency(value)}`;
+                          },
+                        },
+                      },
+                    },
+                    scales: {
+                      x: {
+                        beginAtZero: true,
+                        ticks: {
+                          callback: function (value) {
+                            return `${(Number(value) / 10000).toFixed(0)}만원`;
+                          },
+                        },
+                      },
+                    },
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                데이터가 없습니다.
+              </div>
+            )}
+          </div>
+
+          {/* 5. 주문수 많은 상품 Top 10 */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">
+              📦 주문수 많은 상품 Top 10
+            </h2>
+            {chartData.topProductsByOrders.length > 0 ? (
+              <div className="h-[400px]">
+                <Bar
+                  data={{
+                    labels: chartData.topProductsByOrders.map(
+                      (item) => item.sabangName
+                    ),
+                    datasets: [
+                      {
+                        label: "주문 수량",
+                        data: chartData.topProductsByOrders.map(
+                          (item) => item.orderCount
+                        ),
+                        backgroundColor: chartData.topProductsByOrders.map(
+                          (_, index) => {
+                            const colors = [
+                              "#ec4899",
+                              "#db2777",
+                              "#be185d",
+                              "#9f1239",
+                              "#831843",
+                            ];
+                            return colors[index % 5];
+                          }
+                        ),
+                      },
+                    ],
+                  }}
+                  options={{
+                    indexAxis: "y" as const,
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: {
+                        display: true,
+                      },
+                      tooltip: {
+                        callbacks: {
+                          label: function (context) {
+                            const dataIndex = context.dataIndex;
+                            const item =
+                              chartData.topProductsByOrders[dataIndex];
+                            return [
+                              `상품코드: ${item.productCode}`,
+                              `사방넷명: ${item.sabangName}`,
+                              `주문 수량: ${context.parsed.x}건`,
+                            ];
+                          },
+                        },
+                      },
+                    },
+                    scales: {
+                      x: {
+                        beginAtZero: true,
+                        ticks: {
+                          callback: function (value) {
+                            return `${value}건`;
+                          },
+                        },
+                      },
+                    },
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                데이터가 없습니다.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {loading && (
+        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+          <div className="text-center py-8 text-gray-500">
+            차트 데이터를 불러오는 중...
+          </div>
+        </div>
+      )}
 
       {/* 최근 활동 */}
       <div className="bg-white rounded-lg shadow-md p-6">

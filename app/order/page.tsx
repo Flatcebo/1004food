@@ -17,6 +17,7 @@ import OrderModalContent from "@/components/OrderModalContent";
 import SavedDataTable from "@/components/SavedDataTable";
 import DataFilters from "@/components/DataFilters";
 import LoadingOverlay from "@/components/LoadingOverlay";
+import DeliveryDownloadModal from "@/components/DeliveryDownloadModal";
 import {useUploadData} from "@/hooks/useUploadData";
 import {useFileValidation} from "@/hooks/useFileValidation";
 import {useFileMessageHandler} from "@/hooks/useFileMessageHandler";
@@ -32,6 +33,9 @@ import {
   IoCheckmarkCircle,
   IoCloseCircle,
   IoTime,
+  IoChevronDown,
+  IoCreate,
+  IoDownload,
 } from "react-icons/io5";
 
 export default function Page() {
@@ -47,6 +51,10 @@ function OrderPageContent() {
   const [isDeliveryUploadModalOpen, setIsDeliveryUploadModalOpen] =
     useState(false);
   const [modalMode, setModalMode] = useState<"excel" | "delivery" | null>(null);
+  const [isDeliveryDownloadModalOpen, setIsDeliveryDownloadModalOpen] =
+    useState(false);
+  const [isDeliveryDropdownOpen, setIsDeliveryDropdownOpen] = useState(false);
+  const deliveryDropdownRef = useRef<HTMLDivElement>(null);
 
   // 운송장 업로드 훅 사용
   const {
@@ -164,13 +172,32 @@ function OrderPageContent() {
 
   // URL 쿼리 파라미터 읽기
   const searchParams = useSearchParams();
+  
+  // URL 파라미터가 이미 처리되었는지 추적하는 ref
+  const urlParamsProcessedRef = useRef(false);
 
   // URL 쿼리 파라미터에서 검색 필터 및 기간 필터 설정 (페이지 로드 시 한 번만 실행)
   useEffect(() => {
+    // 이미 처리된 경우 스킵
+    if (urlParamsProcessedRef.current) return;
+    
     const searchFieldParam = searchParams.get("searchField");
     const searchValueParam = searchParams.get("searchValue");
     const uploadTimeFromParam = searchParams.get("uploadTimeFrom");
     const uploadTimeToParam = searchParams.get("uploadTimeTo");
+    const orderStatusParam = searchParams.get("orderStatus");
+
+    // URL 파라미터가 하나라도 있으면 처리
+    const hasUrlParams = 
+      (searchFieldParam && searchValueParam) ||
+      (uploadTimeFromParam && uploadTimeToParam) ||
+      orderStatusParam !== null;
+
+    if (!hasUrlParams) {
+      // URL 파라미터가 없으면 처리 완료로 표시하고 종료
+      urlParamsProcessedRef.current = true;
+      return;
+    }
 
     // 검색 필터 설정
     if (searchFieldParam && searchValueParam) {
@@ -196,26 +223,33 @@ function OrderPageContent() {
       }
     }
 
-    // 검색 필터나 기간 필터가 설정된 경우 적용
-    if (
-      (searchFieldParam && searchValueParam) ||
-      (uploadTimeFromParam && uploadTimeToParam)
-    ) {
-      // 약간의 지연 후 검색 필터 적용 (상태 업데이트 후)
-      setTimeout(() => {
-        applySearchFilter();
-      }, 100);
+    // 주문상태 필터 설정 (URL 파라미터가 있으면 설정, 빈 문자열이면 "전체"로 설정)
+    if (orderStatusParam !== null) {
+      setSelectedOrderStatus(orderStatusParam);
+      if (setAppliedOrderStatus) {
+        setAppliedOrderStatus(orderStatusParam);
+      }
     }
+
+    // 처리 완료 표시
+    urlParamsProcessedRef.current = true;
+
+    // 약간의 지연 후 검색 필터 적용 (상태 업데이트 후)
+    setTimeout(() => {
+      applySearchFilter();
+    }, 100);
   }, [
     searchParams,
     setSearchField,
     setSearchValue,
     setUploadTimeFrom,
     setUploadTimeTo,
+    setSelectedOrderStatus,
     setAppliedSearchField,
     setAppliedSearchValue,
     setAppliedUploadTimeFrom,
     setAppliedUploadTimeTo,
+    setAppliedOrderStatus,
     applySearchFilter,
   ]);
 
@@ -686,6 +720,26 @@ function OrderPageContent() {
     return checkedFileIds.some((fileId) => !getValidationStatus(fileId));
   }, [confirmedFiles, fileValidationStatus]);
 
+  // 드롭다운 외부 클릭 시 닫기
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        deliveryDropdownRef.current &&
+        !deliveryDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsDeliveryDropdownOpen(false);
+      }
+    };
+
+    if (isDeliveryDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isDeliveryDropdownOpen]);
+
   return (
     <div className="w-full h-full flex flex-col items-start justify-start px-4">
       {/* 업로드 로딩 오버레이 */}
@@ -712,25 +766,58 @@ function OrderPageContent() {
                 발주서 업로드
               </button>
 
-              <button
-                className="px-5 py-2 bg-green-600 text-white text-sm font-bold rounded hover:bg-green-800"
-                onClick={() => {
-                  setModalMode("delivery");
-                }}
-              >
-                운송장 업로드
-              </button>
+              {/* 운송장 드롭다운 버튼 */}
+              <div className="relative" ref={deliveryDropdownRef}>
+                <button
+                  className="px-5 py-2 bg-amber-700 text-white text-sm font-bold rounded hover:bg-amber-800 flex items-center gap-2"
+                  onClick={() => {
+                    setIsDeliveryDropdownOpen(!isDeliveryDropdownOpen);
+                  }}
+                >
+                  운송장
+                  <IoChevronDown
+                    className={`w-4 h-4 transition-transform ${
+                      isDeliveryDropdownOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
 
-              <button
-                className={`px-5 py-2 text-white text-sm font-bold rounded hover:bg-opacity-80 ${
-                  isDeliveryInputMode ? "bg-orange-600" : "bg-amber-700"
-                }`}
-                onClick={() => {
-                  setIsDeliveryInputMode(!isDeliveryInputMode);
-                }}
-              >
-                {isDeliveryInputMode ? "운송장 입력 취소" : "운송장 입력"}
-              </button>
+                {/* 드롭다운 메뉴 */}
+                {isDeliveryDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden">
+                    <button
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 bg-white hover:bg-gray-100 border-b border-gray-200 flex items-center gap-2"
+                      onClick={() => {
+                        setModalMode("delivery");
+                        setIsDeliveryDropdownOpen(false);
+                      }}
+                    >
+                      <IoCloudUpload className="w-4 h-4" />
+                      운송장 업로드
+                    </button>
+                    <button
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 bg-white hover:bg-gray-100 border-b border-gray-200 flex items-center gap-2"
+                      onClick={() => {
+                        setIsDeliveryInputMode(!isDeliveryInputMode);
+                        setIsDeliveryDropdownOpen(false);
+                      }}
+                    >
+                      <IoCreate className="w-4 h-4" />
+                      {isDeliveryInputMode ? "운송장 입력 취소" : "운송장 입력"}
+                    </button>
+                    <button
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 bg-white hover:bg-gray-100 flex items-center gap-2"
+                      onClick={() => {
+                        setIsDeliveryDownloadModalOpen(true);
+                        setIsDeliveryDropdownOpen(false);
+                      }}
+                    >
+                      <IoDownload className="w-4 h-4" />
+                      운송장 다운로드
+                    </button>
+                  </div>
+                )}
+              </div>
 
               <button
                 className="w-[60px] h-[36px] px-0 py-0 text-white text-sm rounded 
@@ -860,6 +947,12 @@ function OrderPageContent() {
           deliveryError={deliveryError}
         />
       </ModalTable>
+
+      {/* 운송장 다운로드 모달 */}
+      <DeliveryDownloadModal
+        open={isDeliveryDownloadModalOpen}
+        onClose={() => setIsDeliveryDownloadModalOpen(false)}
+      />
     </div>
   );
 }

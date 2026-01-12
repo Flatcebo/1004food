@@ -274,10 +274,15 @@ export async function POST(request: NextRequest) {
             AND period_end_date = ${endDate}::date
         `;
 
+        let settlementId: number | null = null;
+        let isIdentical = false;
+
         if (existing.length > 0) {
           const existingData = existing[0];
+          settlementId = existingData.id;
+          
           // 기존 데이터와 모든 값이 일치하는지 확인
-          const isIdentical = 
+          isIdentical = 
             existingData.order_quantity === orderQuantity &&
             existingData.order_amount === orderAmount &&
             existingData.cancel_quantity === cancelQuantity &&
@@ -288,45 +293,59 @@ export async function POST(request: NextRequest) {
             existingData.net_profit_amount === netProfitAmount;
 
           if (isIdentical) {
-            console.log(`[${mallName}] 기존 데이터와 동일하므로 업데이트하지 않음`);
+            console.log(`[${mallName}] 기존 데이터와 동일하므로 업데이트하지 않음 (settlement_id: ${settlementId})`);
+            // 기존 데이터와 동일하더라도 주문 ID는 갱신해야 함 (주문 연결 데이터 업데이트)
             // settlements 배열에는 추가하지 않음 (이미 존재하는 데이터)
-            continue;
+            // continue하지 않고 주문 ID 저장 로직으로 진행
+          } else {
+            // 값이 다르면 업데이트
+            await sql`
+              UPDATE mall_sales_settlements
+              SET
+                order_quantity = ${orderQuantity},
+                order_amount = ${orderAmount},
+                cancel_quantity = ${cancelQuantity},
+                cancel_amount = ${cancelAmount},
+                net_sales_quantity = ${netSalesQuantity},
+                net_sales_amount = ${netSalesAmount},
+                total_profit_amount = ${totalProfitAmount},
+                total_profit_rate = ${totalProfitRate},
+                sales_fee_amount = ${salesFeeAmount},
+                sales_fee_rate = ${salesFeeRate},
+                net_profit_amount = ${netProfitAmount},
+                net_profit_rate = ${netProfitRate},
+                updated_at = CURRENT_TIMESTAMP
+              WHERE id = ${settlementId}
+            `;
+            
+            // 기존 주문 연결 데이터 삭제
+            await sql`
+              DELETE FROM mall_sales_settlement_orders
+              WHERE settlement_id = ${settlementId}
+            `;
+            
+            console.log(`[${mallName}] 기존 데이터 업데이트 완료`);
           }
 
           // 기존 데이터가 있고 주문 건이 0이면 삭제
           if (orderQuantity === 0 && cancelQuantity === 0) {
+            // 기존 주문 연결 데이터도 함께 삭제 (CASCADE로 자동 삭제되지만 명시적으로 삭제)
+            await sql`
+              DELETE FROM mall_sales_settlement_orders
+              WHERE settlement_id = ${settlementId}
+            `;
             await sql`
               DELETE FROM mall_sales_settlements
-              WHERE id = ${existingData.id}
+              WHERE id = ${settlementId}
             `;
             console.log(`[${mallName}] 기존 데이터 삭제 (주문 건 0)`);
             continue;
           }
 
-          // 값이 다르면 업데이트
-          await sql`
-            UPDATE mall_sales_settlements
-            SET
-              order_quantity = ${orderQuantity},
-              order_amount = ${orderAmount},
-              cancel_quantity = ${cancelQuantity},
-              cancel_amount = ${cancelAmount},
-              net_sales_quantity = ${netSalesQuantity},
-              net_sales_amount = ${netSalesAmount},
-              total_profit_amount = ${totalProfitAmount},
-              total_profit_rate = ${totalProfitRate},
-              sales_fee_amount = ${salesFeeAmount},
-              sales_fee_rate = ${salesFeeRate},
-              net_profit_amount = ${netProfitAmount},
-              net_profit_rate = ${netProfitRate},
-              updated_at = CURRENT_TIMESTAMP
-            WHERE id = ${existingData.id}
-          `;
-          console.log(`[${mallName}] 기존 데이터 업데이트 완료`);
         } else {
           // 주문 건이 0이 아니면 삽입
           if (orderQuantity > 0 || cancelQuantity > 0) {
-            await sql`
+            const insertResult = await sql`
               INSERT INTO mall_sales_settlements (
                 company_id,
                 mall_id,
@@ -362,13 +381,64 @@ export async function POST(request: NextRequest) {
                 ${netProfitAmount},
                 ${netProfitRate}
               )
+              RETURNING id
             `;
-            console.log(`[${mallName}] 신규 데이터 삽입 완료`);
+            settlementId = insertResult[0]?.id || null;
+            console.log(`[${mallName}] 신규 데이터 삽입 완료 (settlement_id: ${settlementId})`);
           }
         }
 
-        // settlements 배열에 추가 (주문 건이 0이 아닌 경우만)
-        if (orderQuantity > 0 || cancelQuantity > 0) {
+        // 정산에 사용된 주문 ID들을 중간 테이블에 저장 (기존 데이터와 동일하더라도 갱신)
+        if (settlementId && orders.length > 0) {
+          // 주문 ID 배열을 준비
+          const orderIds = orders.map(order => order.id);
+          
+          console.log(`[${mallName}] 정산에 연결할 주문 ID 개수: ${orderIds.length}, settlement_id: ${settlementId}`);
+          console.log(`[${mallName}] 주문 ID 샘플 (최대 10개):`, orderIds.slice(0, 10));
+          
+          // 기존 주문 연결 데이터 삭제 (갱신을 위해)
+          await sql`
+            DELETE FROM mall_sales_settlement_orders
+            WHERE settlement_id = ${settlementId}
+          `;
+          
+          // 배치로 삽입 (Promise.all을 사용하여 병렬 처리)
+          if (orderIds.length > 0) {
+            try {
+              const insertPromises = orderIds.map(orderId => 
+                sql`
+                  INSERT INTO mall_sales_settlement_orders (settlement_id, order_id)
+                  VALUES (${settlementId}, ${orderId})
+                  ON CONFLICT (settlement_id, order_id) DO NOTHING
+                `
+              );
+              
+              await Promise.all(insertPromises);
+              
+              // 저장 확인
+              const savedCount = await sql`
+                SELECT COUNT(*) as count
+                FROM mall_sales_settlement_orders
+                WHERE settlement_id = ${settlementId}
+              `;
+              
+              console.log(`[${mallName}] ${orderIds.length}개의 주문 ID를 정산 데이터에 연결 완료 (실제 저장된 개수: ${savedCount[0]?.count || 0})`);
+            } catch (error: any) {
+              console.error(`[${mallName}] 주문 ID 연결 중 오류 발생:`, error);
+              throw error;
+            }
+          }
+        } else {
+          if (!settlementId) {
+            console.warn(`[${mallName}] settlementId가 없어서 주문 ID를 연결하지 않습니다.`);
+          }
+          if (orders.length === 0) {
+            console.log(`[${mallName}] 주문이 없어서 주문 ID를 연결하지 않습니다.`);
+          }
+        }
+
+        // settlements 배열에 추가 (주문 건이 0이 아닌 경우만, 기존 데이터와 동일한 경우는 제외)
+        if ((orderQuantity > 0 || cancelQuantity > 0) && !isIdentical) {
           settlements.push({
             mallId,
             mallName,

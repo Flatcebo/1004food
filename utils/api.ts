@@ -27,6 +27,9 @@ export function getAuthHeaders(): HeadersInit {
         if (user?.companyId) {
           headers["company-id"] = user.companyId.toString();
         }
+        if (user?.id) {
+          headers["user-id"] = user.id;
+        }
       }
     } catch (e) {
       console.error("인증 정보 로드 실패:", e);

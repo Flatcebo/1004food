@@ -251,11 +251,6 @@ export async function POST(request: NextRequest) {
     // 헤더 행 다음부터 데이터로 사용
     const dataStartIndex = headerRowIndex + 1;
 
-    // 헤더를 제외한 전체 데이터 행 수 계산 (빈 행 제외)
-    const totalDataRows = raw
-      .slice(dataStartIndex)
-      .filter((row) => row && row.length > 0).length;
-
     for (let i = dataStartIndex; i < raw.length; i++) {
       const row = raw[i];
       if (!row || row.length === 0) continue;
@@ -318,103 +313,186 @@ export async function POST(request: NextRequest) {
       let failCount = 0;
       const results = [];
 
-      // 각 운송장 업데이트 처리 (실시간 효과를 위해 하나씩 처리)
-      for (let i = 0; i < deliveryUpdates.length; i++) {
-        const update = deliveryUpdates[i];
+      // 모든 주문번호 추출
+      const orderNumbers = deliveryUpdates.map((u) => u.orderNumber);
 
-        try {
-          // 주문번호 또는 내부코드로 해당 데이터 찾기 (company_id 필터링)
-          // 먼저 주문번호로 검색
-          let existingOrder = await sql`
-            SELECT ur.id, ur.row_data 
-            FROM upload_rows ur
-            INNER JOIN uploads u ON ur.upload_id = u.id
-            WHERE ur.row_data->>'주문번호' = ${update.orderNumber}
-            AND u.company_id = ${companyId}
-            ORDER BY ur.id DESC
-            LIMIT 1
-          `;
+      // 배치 조회: 주문번호로 한 번에 조회
+      let ordersByOrderNumber: any[] = [];
+      if (orderNumbers.length > 0) {
+        ordersByOrderNumber = await sql`
+          SELECT DISTINCT ON (ur.row_data->>'주문번호') 
+            ur.id, 
+            ur.row_data,
+            ur.row_data->>'주문번호' as order_number
+          FROM upload_rows ur
+          INNER JOIN uploads u ON ur.upload_id = u.id
+          WHERE ur.row_data->>'주문번호' = ANY(${orderNumbers})
+          AND u.company_id = ${companyId}
+          ORDER BY ur.row_data->>'주문번호', ur.id DESC
+        `;
+      }
 
-          let matchType = "주문번호";
+      // 배치 조회: 내부코드로 한 번에 조회 (주문번호로 찾지 못한 항목만)
+      const foundOrderNumbers = new Set(
+        ordersByOrderNumber.map((o: any) => o.order_number)
+      );
+      const notFoundByOrderNumber = orderNumbers.filter(
+        (on) => !foundOrderNumbers.has(on)
+      );
 
-          // 주문번호로 찾지 못하면 내부코드로 검색
-          if (existingOrder.length === 0) {
-            existingOrder = await sql`
-              SELECT ur.id, ur.row_data 
-              FROM upload_rows ur
-              INNER JOIN uploads u ON ur.upload_id = u.id
-              WHERE ur.row_data->>'내부코드' = ${update.orderNumber}
-              AND u.company_id = ${companyId}
-              ORDER BY ur.id DESC
-              LIMIT 1
-            `;
-            if (existingOrder.length > 0) {
-              matchType = "내부코드";
-            }
+      let ordersByInternalCode: any[] = [];
+      if (notFoundByOrderNumber.length > 0) {
+        ordersByInternalCode = await sql`
+          SELECT DISTINCT ON (ur.row_data->>'내부코드') 
+            ur.id, 
+            ur.row_data,
+            ur.row_data->>'내부코드' as internal_code
+          FROM upload_rows ur
+          INNER JOIN uploads u ON ur.upload_id = u.id
+          WHERE ur.row_data->>'내부코드' = ANY(${notFoundByOrderNumber})
+          AND u.company_id = ${companyId}
+          ORDER BY ur.row_data->>'내부코드', ur.id DESC
+        `;
+      }
+
+      // 조회 결과를 맵으로 변환 (빠른 조회를 위해)
+      const orderMap = new Map<number, any>();
+      const matchTypeMap = new Map<number, string>();
+
+      ordersByOrderNumber.forEach((order: any) => {
+        orderMap.set(order.id, order);
+        matchTypeMap.set(order.id, "주문번호");
+      });
+
+      ordersByInternalCode.forEach((order: any) => {
+        if (!orderMap.has(order.id)) {
+          orderMap.set(order.id, order);
+          matchTypeMap.set(order.id, "내부코드");
+        }
+      });
+
+      // 주문번호/내부코드 -> ID 매핑 생성
+      const orderNumberToIdMap = new Map<string, number>();
+      const internalCodeToIdMap = new Map<string, number>();
+
+      ordersByOrderNumber.forEach((order: any) => {
+        if (order.order_number) {
+          orderNumberToIdMap.set(order.order_number, order.id);
+        }
+      });
+
+      ordersByInternalCode.forEach((order: any) => {
+        if (order.internal_code) {
+          internalCodeToIdMap.set(order.internal_code, order.id);
+        }
+      });
+
+      // 업데이트할 데이터 준비
+      const updatesToProcess: Array<{
+        id: number;
+        update: typeof deliveryUpdates[0];
+        currentData: any;
+        matchType: string;
+      }> = [];
+
+      for (const update of deliveryUpdates) {
+        let orderId: number | undefined;
+        let matchType = "";
+
+        // 주문번호로 먼저 찾기
+        orderId = orderNumberToIdMap.get(update.orderNumber);
+        if (orderId) {
+          matchType = "주문번호";
+        } else {
+          // 내부코드로 찾기
+          orderId = internalCodeToIdMap.get(update.orderNumber);
+          if (orderId) {
+            matchType = "내부코드";
           }
+        }
 
-          if (existingOrder.length > 0) {
-            console.log(
-              `✅ 매칭 성공: ${update.orderNumber} → ${matchType}로 찾음`
-            );
-          }
-
-          if (existingOrder.length === 0) {
-            results.push({
-              orderNumber: update.orderNumber,
-              success: false,
-              error: `주문번호/내부코드를 찾을 수 없습니다. (검색값: ${update.orderNumber})`,
-              rowNumber: update.rowNumber,
-            });
-            failCount++;
-            continue;
-          }
-
-          const orderId = existingOrder[0].id;
-          const currentData = existingOrder[0].row_data;
-
-          // 운송장 정보 업데이트
-          const updatedData = {
-            ...currentData,
-            택배사: update.carrier,
-            운송장번호: update.trackingNumber,
-            주문상태: "배송중", // 운송장 입력 시 배송중으로 상태 변경
-          };
-
-          await sql`
-            UPDATE upload_rows
-            SET row_data = ${JSON.stringify(updatedData)}
-            WHERE id = ${orderId}
-          `;
-
-          results.push({
-            orderNumber: update.orderNumber,
-            success: true,
-            carrier: update.carrier,
-            trackingNumber: update.trackingNumber,
-            rowNumber: update.rowNumber,
-          });
-          successCount++;
-        } catch (error: any) {
+        if (!orderId) {
           results.push({
             orderNumber: update.orderNumber,
             success: false,
-            error: error.message || "업데이트 중 오류가 발생했습니다.",
+            error: `주문번호/내부코드를 찾을 수 없습니다. (검색값: ${update.orderNumber})`,
             rowNumber: update.rowNumber,
           });
           failCount++;
+          continue;
         }
 
-        // 각 처리 사이에 약간의 지연을 주어 실시간 효과를 줌 (클라이언트에서 처리)
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        const orderData = orderMap.get(orderId);
+        if (!orderData) {
+          results.push({
+            orderNumber: update.orderNumber,
+            success: false,
+            error: `데이터를 찾을 수 없습니다. (ID: ${orderId})`,
+            rowNumber: update.rowNumber,
+          });
+          failCount++;
+          continue;
+        }
+
+        updatesToProcess.push({
+          id: orderId,
+          update,
+          currentData: orderData.row_data,
+          matchType,
+        });
+      }
+
+      // 배치 업데이트 처리 (배치 크기로 나누어 처리)
+      const BATCH_SIZE = 100;
+      for (let i = 0; i < updatesToProcess.length; i += BATCH_SIZE) {
+        const batch = updatesToProcess.slice(i, i + BATCH_SIZE);
+
+        // 배치 내 각 항목 업데이트
+        for (const {id, update, currentData, matchType} of batch) {
+          try {
+            // 운송장 정보 업데이트
+            const updatedData = {
+              ...currentData,
+              택배사: update.carrier,
+              운송장번호: update.trackingNumber,
+              주문상태: "배송중", // 운송장 입력 시 배송중으로 상태 변경
+            };
+
+            await sql`
+              UPDATE upload_rows
+              SET row_data = ${JSON.stringify(updatedData)}
+              WHERE id = ${id}
+            `;
+
+            results.push({
+              orderNumber: update.orderNumber,
+              success: true,
+              carrier: update.carrier,
+              trackingNumber: update.trackingNumber,
+              rowNumber: update.rowNumber,
+            });
+            successCount++;
+          } catch (error: any) {
+            results.push({
+              orderNumber: update.orderNumber,
+              success: false,
+              error: error.message || "업데이트 중 오류가 발생했습니다.",
+              rowNumber: update.rowNumber,
+            });
+            failCount++;
+          }
+        }
       }
 
       await sql`COMMIT`;
 
+      // 실제 처리할 항목 수 (필수 값이 모두 있는 행만 포함)
+      const totalCount = deliveryUpdates.length;
+
       return NextResponse.json({
         success: true,
-        message: `총 ${totalDataRows}건 중 ${successCount}건 성공, ${failCount}건 실패`,
-        totalCount: totalDataRows, // 헤더를 제외한 전체 데이터 행 수
+        message: `총 ${totalCount}건 중 ${successCount}건 성공, ${failCount}건 실패`,
+        totalCount, // 실제 처리할 항목 수
         successCount,
         failCount,
         results,

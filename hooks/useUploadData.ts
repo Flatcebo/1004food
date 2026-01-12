@@ -122,12 +122,21 @@ export function useUploadData() {
   ]);
 
   // 초기 로드 시 기본 필터 자동 적용
+  // 초기화가 이미 실행되었는지 추적하는 ref
+  const initializedRef = useRef(false);
+
   useEffect(() => {
-    // 초기 로드 시 기본값으로 필터 적용
+    // 이미 초기화되었거나 URL 파라미터가 설정된 경우 스킵
+    if (initializedRef.current) return;
+    
+    // 초기 로드 시 기본값으로 필터 적용 (URL 파라미터가 없는 경우에만)
+    // URL 파라미터가 있으면 그 값이 우선되므로 여기서는 기본값만 설정
     setAppliedUploadTimeFrom(todayDate);
     setAppliedUploadTimeTo(todayDate);
     setAppliedOrderStatus("공급중");
     setAppliedItemsPerPage(20);
+    
+    initializedRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

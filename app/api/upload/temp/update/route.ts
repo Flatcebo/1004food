@@ -119,9 +119,10 @@ export async function PUT(request: NextRequest) {
             product_id_map = ${JSON.stringify(productIdMap || {})},
             validation_status = ${JSON.stringify(validationResult)},
             vendor_name = ${vendorName || null},
+            user_id = COALESCE(user_id, ${userId}),
             is_confirmed = ${isConfirmed ?? false},
                 updated_at = ${now.toISOString()}
-          WHERE file_id = ${fileId} AND company_id = ${companyId} AND user_id = ${userId}
+          WHERE file_id = ${fileId} AND company_id = ${companyId} AND (user_id = ${userId} OR user_id IS NULL)
           RETURNING *
         `;
       } else {
@@ -165,9 +166,10 @@ export async function PUT(request: NextRequest) {
               product_id_map = ${JSON.stringify(productIdMap || {})},
               validation_status = ${JSON.stringify(validationResult)},
               vendor_name = ${vendorName || null},
+              user_id = COALESCE(user_id, ${userId}),
               is_confirmed = ${isConfirmed ?? false},
                 updated_at = ${now.toISOString()}
-            WHERE file_id = ${fileId} AND company_id = ${companyId} AND user_id = ${userId}
+            WHERE file_id = ${fileId} AND company_id = ${companyId} AND (user_id = ${userId} OR user_id IS NULL)
             RETURNING *
           `;
         } else {

@@ -15,6 +15,12 @@ export async function GET(request: NextRequest) {
       ON upload_rows USING GIN ((row_data->'내부코드'))
     `;
 
+    // 주문번호 검색을 위한 GIN 인덱스 생성 (운송장 업로드 성능 개선)
+    await sql`
+      CREATE INDEX IF NOT EXISTS idx_upload_rows_order_number
+      ON upload_rows USING GIN ((row_data->'주문번호'))
+    `;
+
     // 사용자별 세션 관리를 위한 user_id 컬럼 추가
     await sql`
       ALTER TABLE upload_sessions

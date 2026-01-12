@@ -83,6 +83,7 @@ export async function GET(request: NextRequest) {
               validation_status as "validationStatus",
               is_confirmed as "isConfirmed",
               vendor_name as "vendorName",
+              original_header as "originalHeader",
               created_at as "createdAt",
               updated_at
             FROM temp_files
@@ -104,6 +105,7 @@ export async function GET(request: NextRequest) {
               validation_status as "validationStatus",
               is_confirmed as "isConfirmed",
               vendor_name as "vendorName",
+              original_header as "originalHeader",
               created_at as "createdAt",
               updated_at
             FROM temp_files
@@ -125,6 +127,7 @@ export async function GET(request: NextRequest) {
               validation_status as "validationStatus",
               is_confirmed as "isConfirmed",
               vendor_name as "vendorName",
+              original_header as "originalHeader",
               created_at as "createdAt",
               updated_at
             FROM temp_files
@@ -150,6 +153,7 @@ export async function GET(request: NextRequest) {
               validation_status as "validationStatus",
               is_confirmed as "isConfirmed",
               vendor_name as "vendorName",
+              original_header as "originalHeader",
               created_at as "createdAt",
               updated_at
             FROM temp_files
@@ -172,6 +176,7 @@ export async function GET(request: NextRequest) {
               validation_status as "validationStatus",
               is_confirmed as "isConfirmed",
               vendor_name as "vendorName",
+              original_header as "originalHeader",
               created_at as "createdAt",
               updated_at
             FROM temp_files
@@ -195,6 +200,7 @@ export async function GET(request: NextRequest) {
               validation_status as "validationStatus",
               is_confirmed as "isConfirmed",
               vendor_name as "vendorName",
+              original_header as "originalHeader",
               created_at as "createdAt",
               updated_at
             FROM temp_files
@@ -226,6 +232,7 @@ export async function GET(request: NextRequest) {
               NULL as "validationStatus",
               is_confirmed as "isConfirmed",
               vendor_name as "vendorName",
+              original_header as "originalHeader",
               created_at as "createdAt",
               updated_at
             FROM temp_files
@@ -246,6 +253,7 @@ export async function GET(request: NextRequest) {
               NULL as "validationStatus",
               is_confirmed as "isConfirmed",
               vendor_name as "vendorName",
+              original_header as "originalHeader",
               created_at as "createdAt",
               updated_at
             FROM temp_files
