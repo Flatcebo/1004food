@@ -13,7 +13,7 @@ import {
   Legend,
   ArcElement,
 } from "chart.js";
-import {Bar, Line} from "react-chartjs-2";
+import {Bar, Line, Chart} from "react-chartjs-2";
 
 // Chart.js 등록
 ChartJS.register(
@@ -377,13 +377,15 @@ export default function App() {
             </h2>
             {chartData.dailySalesProfit.length > 0 ? (
               <div className="h-[300px]">
-                <Bar
+                <Chart
+                  type="bar"
                   data={{
                     labels: chartData.dailySalesProfit.map((item) =>
                       formatDate(item.date)
                     ),
                     datasets: [
                       {
+                        type: "bar" as const,
                         label: "매출",
                         data: chartData.dailySalesProfit.map(
                           (item) => item.sales
@@ -392,17 +394,18 @@ export default function App() {
                         yAxisID: "y",
                       },
                       {
+                        type: "line" as const,
                         label: "이익",
                         data: chartData.dailySalesProfit.map(
                           (item) => item.profit
                         ),
-                        backgroundColor: "#f59e0b",
-                        type: "line" as const,
-                        yAxisID: "y1",
                         borderColor: "#f59e0b",
+                        backgroundColor: "#f59e0b",
                         borderWidth: 2,
                         fill: false,
-                      } as any,
+                        tension: 0.1,
+                        yAxisID: "y1",
+                      },
                     ],
                   }}
                   options={{
@@ -421,7 +424,9 @@ export default function App() {
                             } else if (context.dataset.label === "이익") {
                               return `이익: ${formatCurrency(value)}`;
                             }
-                            return `${context.dataset.label}: ${value}`;
+                            return `${context.dataset.label}: ${formatCurrency(
+                              value
+                            )}`;
                           },
                         },
                       },
