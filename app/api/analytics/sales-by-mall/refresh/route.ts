@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const {startDate, endDate} = body;
+    const {startDate, endDate, mallId} = body;
 
     if (!startDate || !endDate) {
       return NextResponse.json(
@@ -27,12 +27,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // mall 테이블에서 모든 쇼핑몰 조회
-    const malls = await sql`
-      SELECT id, name, code
-      FROM mall
-      ORDER BY name
-    `;
+    // mall 테이블에서 쇼핑몰 조회 (mallId가 있으면 해당 쇼핑몰만, 없으면 전체)
+    let malls;
+    if (mallId) {
+      malls = await sql`
+        SELECT id, name, code
+        FROM mall
+        WHERE id = ${mallId}::int
+        ORDER BY name
+      `;
+    } else {
+      malls = await sql`
+        SELECT id, name, code
+        FROM mall
+        ORDER BY name
+      `;
+    }
 
     if (malls.length === 0) {
       return NextResponse.json(
@@ -94,6 +104,23 @@ export async function POST(request: NextRequest) {
     try {
       const settlements = [];
       let totalOrdersCount = 0;
+
+      // 각 쇼핑몰별 행사가 조회 (한 번에 모든 쇼핑몰의 행사가 조회)
+      const allPromotions = await sql`
+        SELECT mall_id, product_code, discount_rate, event_price
+        FROM mall_promotions
+        WHERE mall_id = ANY(${malls.map((m) => m.id)})
+      `;
+      
+      // 행사가 맵 생성: {mallId_productCode: {discountRate, eventPrice}}
+      const promotionMap: {[key: string]: {discountRate: number | null; eventPrice: number | null}} = {};
+      allPromotions.forEach((promo: any) => {
+        const key = `${promo.mall_id}_${promo.product_code}`;
+        promotionMap[key] = {
+          discountRate: promo.discount_rate,
+          eventPrice: promo.event_price,
+        };
+      });
 
       // 각 쇼핑몰별로 정산 계산
       for (const mall of malls) {
@@ -195,14 +222,36 @@ export async function POST(request: NextRequest) {
           const orderStatus = rowData["주문상태"] || "";
           const isCanceled = orderStatus === "취소";
 
-          // 공급가: row_data의 공급가 또는 products의 sale_price
-          const salePrice =
+          // 매핑코드 또는 productId 추출
+          const productCode = rowData["매핑코드"] || rowData["productId"] || null;
+
+          // 행사가 확인
+          let eventPrice: number | null = null;
+          let discountRate: number | null = null;
+          if (productCode) {
+            const promoKey = `${mallId}_${productCode}`;
+            const promotion = promotionMap[promoKey];
+            if (promotion) {
+              eventPrice = promotion.eventPrice;
+              discountRate = promotion.discountRate;
+            }
+          }
+
+          // 공급가: 행사가 우선, 없으면 row_data의 공급가 또는 products의 sale_price
+          let salePrice =
             rowData["공급가"] ||
             order.product_sale_price ||
             rowData["sale_price"] ||
             rowData["공급단가"] ||
             0;
-          const salePriceNum = typeof salePrice === "string" ? parseFloat(salePrice) : salePrice || 0;
+          let salePriceNum = typeof salePrice === "string" ? parseFloat(salePrice) : salePrice || 0;
+
+          // 행사가 적용: 행사가가 있으면 우선 사용, 없으면 할인율 적용
+          if (eventPrice !== null) {
+            salePriceNum = eventPrice;
+          } else if (discountRate !== null && salePriceNum > 0) {
+            salePriceNum = Math.round(salePriceNum * (1 - discountRate / 100));
+          }
 
           // 원가: products의 price
           const costPrice = order.product_price || rowData["원가"] || rowData["가격"] || 0;
@@ -402,18 +451,29 @@ export async function POST(request: NextRequest) {
             WHERE settlement_id = ${settlementId}
           `;
           
-          // 배치로 삽입 (Promise.all을 사용하여 병렬 처리)
+          // 배치로 삽입 (배치 크기로 나눠서 처리하여 타임아웃 방지)
           if (orderIds.length > 0) {
             try {
-              const insertPromises = orderIds.map(orderId => 
-                sql`
-                  INSERT INTO mall_sales_settlement_orders (settlement_id, order_id)
-                  VALUES (${settlementId}, ${orderId})
-                  ON CONFLICT (settlement_id, order_id) DO NOTHING
-                `
-              );
+              const BATCH_SIZE = 500; // 배치 크기
               
-              await Promise.all(insertPromises);
+              // 주문 ID를 배치 크기로 나눠서 처리
+              for (let i = 0; i < orderIds.length; i += BATCH_SIZE) {
+                const batch = orderIds.slice(i, i + BATCH_SIZE);
+                
+                // 단일 INSERT 문으로 여러 행을 한 번에 삽입
+                if (batch.length > 0) {
+                  await sql`
+                    INSERT INTO mall_sales_settlement_orders (settlement_id, order_id)
+                    SELECT ${settlementId}, unnest(${batch}::int[])
+                    ON CONFLICT (settlement_id, order_id) DO NOTHING
+                  `;
+                }
+                
+                // 진행 상황 로그 (큰 배치의 경우)
+                if (orderIds.length > BATCH_SIZE && (i + BATCH_SIZE) % (BATCH_SIZE * 5) === 0) {
+                  console.log(`[${mallName}] 주문 ID 연결 진행 중: ${Math.min(i + BATCH_SIZE, orderIds.length)}/${orderIds.length}`);
+                }
+              }
               
               // 저장 확인
               const savedCount = await sql`

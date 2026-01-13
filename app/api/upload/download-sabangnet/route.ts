@@ -185,25 +185,91 @@ export async function POST(request: NextRequest) {
         });
       }
 
+      // 업체명별 행사가 조회 (업체명과 mall.name 매칭)
+      const vendorNames = [
+        ...new Set(
+          dataRows
+            .map((row: any) => row.업체명)
+            .filter((name: any) => name && String(name).trim() !== "")
+        ),
+      ];
+      
+      // mall 테이블에서 업체명으로 mall_id 조회
+      const mallMap: {[vendorName: string]: number} = {};
+      if (vendorNames.length > 0) {
+        const malls = await sql`
+          SELECT id, name
+          FROM mall
+          WHERE name = ANY(${vendorNames})
+        `;
+        malls.forEach((mall: any) => {
+          mallMap[mall.name] = mall.id;
+        });
+      }
+
+      // 각 업체의 행사가 조회
+      const promotionMap: {[key: string]: {discountRate: number | null; eventPrice: number | null}} = {};
+      const mallIds = Object.values(mallMap);
+      if (mallIds.length > 0) {
+        const promotions = await sql`
+          SELECT mall_id, product_code, discount_rate, event_price
+          FROM mall_promotions
+          WHERE mall_id = ANY(${mallIds})
+        `;
+        promotions.forEach((promo: any) => {
+          const key = `${promo.mall_id}_${promo.product_code}`;
+          promotionMap[key] = {
+            discountRate: promo.discount_rate,
+            eventPrice: promo.event_price,
+          };
+        });
+      }
+
       // 업체명이 없는 경우 기본값 설정 (테이블 데이터의 원래 업체명 사용)
       dataRows.forEach((row: any) => {
         if (!row.업체명 || row.업체명.trim() === "") {
           row.업체명 = "업체미지정";
         }
 
+        const vendorName = row.업체명;
+        const mallId = mallMap[vendorName];
+        const productCode = row.매핑코드 || (row.productId ? null : null);
+        
+        // 행사가 확인
+        let eventPrice: number | null = null;
+        let discountRate: number | null = null;
+        if (mallId && productCode) {
+          const promoKey = `${mallId}_${productCode}`;
+          const promotion = promotionMap[promoKey];
+          if (promotion) {
+            eventPrice = promotion.eventPrice;
+            discountRate = promotion.discountRate;
+          }
+        }
+
         // 공급가 및 사방넷명 주입: productId가 있으면 ID로, 없으면 매핑코드로 찾기
         if (row.productId) {
           // 사용자가 선택한 상품 ID로만 찾기
+          let salePrice: number | null = null;
           if (productSalePriceMap[row.productId] !== undefined) {
-            const salePrice = productSalePriceMap[row.productId];
-            if (salePrice !== null) {
-              // 수량을 고려한 판매가 계산: (공급가 * 수량) - (4000 * (수량 - 1))
-              const quantity = Number(row["수량"] || row["개수"] || row["quantity"] || 1) || 1;
-              const calculatedPrice = salePrice * quantity - 4000 * (quantity - 1);
-              row["판매가"] = calculatedPrice;
-              row["sale_price"] = calculatedPrice;
-            }
+            salePrice = productSalePriceMap[row.productId];
           }
+
+          // 행사가 적용: 행사가가 있으면 우선 사용, 없으면 할인율 적용
+          if (eventPrice !== null) {
+            salePrice = eventPrice;
+          } else if (discountRate !== null && salePrice !== null) {
+            salePrice = Math.round(salePrice * (1 - discountRate / 100));
+          }
+
+          if (salePrice !== null) {
+            // 수량을 고려한 판매가 계산: (공급가 * 수량) - (4000 * (수량 - 1))
+            const quantity = Number(row["수량"] || row["개수"] || row["quantity"] || 1) || 1;
+            const calculatedPrice = salePrice * quantity - 4000 * (quantity - 1);
+            row["판매가"] = calculatedPrice;
+            row["sale_price"] = calculatedPrice;
+          }
+
           // 사방넷명 설정: productSabangNameMap에 있으면 사용, 없으면 null로 설정 (상품명으로 fallback)
           if (productSabangNameMap[row.productId] !== undefined) {
             const sabangName = productSabangNameMap[row.productId];
@@ -230,16 +296,26 @@ export async function POST(request: NextRequest) {
           }
         } else if (row.매핑코드) {
           // productId가 없으면 매핑코드로 찾기
+          let salePrice: number | null = null;
           if (productSalePriceMapByCode[row.매핑코드] !== undefined) {
-            const salePrice = productSalePriceMapByCode[row.매핑코드];
-            if (salePrice !== null) {
-              // 수량을 고려한 판매가 계산: (공급가 * 수량) - (4000 * (수량 - 1))
-              const quantity = Number(row["수량"] || row["개수"] || row["quantity"] || 1) || 1;
-              const calculatedPrice = salePrice * quantity - 4000 * (quantity - 1);
-              row["판매가"] = calculatedPrice;
-              row["sale_price"] = calculatedPrice;
-            }
+            salePrice = productSalePriceMapByCode[row.매핑코드];
           }
+
+          // 행사가 적용: 행사가가 있으면 우선 사용, 없으면 할인율 적용
+          if (eventPrice !== null) {
+            salePrice = eventPrice;
+          } else if (discountRate !== null && salePrice !== null) {
+            salePrice = Math.round(salePrice * (1 - discountRate / 100));
+          }
+
+          if (salePrice !== null) {
+            // 수량을 고려한 판매가 계산: (공급가 * 수량) - (4000 * (수량 - 1))
+            const quantity = Number(row["수량"] || row["개수"] || row["quantity"] || 1) || 1;
+            const calculatedPrice = salePrice * quantity - 4000 * (quantity - 1);
+            row["판매가"] = calculatedPrice;
+            row["sale_price"] = calculatedPrice;
+          }
+
           // 사방넷명 설정: productSabangNameMapByCode에 있으면 사용
           if (productSabangNameMapByCode[row.매핑코드] !== undefined) {
             const sabangName = productSabangNameMapByCode[row.매핑코드];

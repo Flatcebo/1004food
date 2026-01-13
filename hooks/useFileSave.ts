@@ -660,8 +660,17 @@ export function useFileSave({
               headerIndex: fileData.headerIndex,
               productCodeMap: fileData.productCodeMap || {},
               productIdMap: mergedProductIdMap, // 업데이트된 productIdMap 사용
+              vendorName: fileData.vendorName || null, // vendorName 포함
+              mallId: fileData.mallId || null, // mallId 포함
               isConfirmed: true,
             }),
+          });
+
+          console.log("📤 useFileSave에서 업데이트 요청:", {
+            fileId: fileData.id,
+            fileName: fileData.fileName,
+            vendorName: fileData.vendorName,
+            mallId: fileData.mallId,
           });
 
           const updateResult = await updateResponse.json();

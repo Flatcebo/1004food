@@ -172,7 +172,7 @@ function OrderPageContent() {
 
   // URL 쿼리 파라미터 읽기
   const searchParams = useSearchParams();
-  
+
   // URL 파라미터가 이미 처리되었는지 추적하는 ref
   const urlParamsProcessedRef = useRef(false);
 
@@ -180,7 +180,7 @@ function OrderPageContent() {
   useEffect(() => {
     // 이미 처리된 경우 스킵
     if (urlParamsProcessedRef.current) return;
-    
+
     const searchFieldParam = searchParams.get("searchField");
     const searchValueParam = searchParams.get("searchValue");
     const uploadTimeFromParam = searchParams.get("uploadTimeFrom");
@@ -188,7 +188,7 @@ function OrderPageContent() {
     const orderStatusParam = searchParams.get("orderStatus");
 
     // URL 파라미터가 하나라도 있으면 처리
-    const hasUrlParams = 
+    const hasUrlParams =
       (searchFieldParam && searchValueParam) ||
       (uploadTimeFromParam && uploadTimeToParam) ||
       orderStatusParam !== null;

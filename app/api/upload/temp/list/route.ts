@@ -215,7 +215,7 @@ export async function GET(request: NextRequest) {
       if (
         error.message &&
         (error.message.includes('column "validation_status" does not exist') ||
-         error.message.includes('column "user_id" does not exist'))
+          error.message.includes('column "user_id" does not exist'))
       ) {
         // user_id 컬럼이 없으면 user_id 필터링 없이 조회 (관리자 권한과 관계없이 company_id만 필터링)
         if (sessionId === "all") {

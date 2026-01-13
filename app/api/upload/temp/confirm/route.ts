@@ -130,6 +130,7 @@ export async function POST(request: NextRequest) {
           product_code_map,
           product_id_map,
           vendor_name,
+          mall_id,
           original_header
         FROM temp_files
         WHERE is_confirmed = true AND company_id = ${companyId} AND user_id = ${userId}
@@ -146,6 +147,7 @@ export async function POST(request: NextRequest) {
           product_code_map,
           product_id_map,
           vendor_name,
+          mall_id,
           original_header
         FROM temp_files
         WHERE is_confirmed = true AND company_id = ${companyId}
@@ -364,9 +366,12 @@ export async function POST(request: NextRequest) {
         firstRowProductId: rowObjects[0]?.["productId"],
       });
 
-      // 업체명으로 mall 테이블에서 해당 mall 찾기 (uploads 저장 전에 미리 찾기)
-      let mallId: number | null = null;
-      if (vendorName) {
+      // mall_id 찾기: temp_files에 저장된 mall_id를 우선 사용, 없으면 vendorName으로 찾기
+      let mallId: number | null = file.mall_id || null;
+
+      if (mallId) {
+        console.log(`✅ temp_files에 저장된 mall_id 사용: mall_id=${mallId}`);
+      } else if (vendorName) {
         try {
           const trimmedVendorName = vendorName.trim();
           console.log(`🔍 mall 조회 시작: vendor_name="${trimmedVendorName}"`);

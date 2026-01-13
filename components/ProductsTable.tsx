@@ -3,6 +3,7 @@
 import {useState, useMemo, useCallback, memo} from "react";
 import Pagination from "./Pagination";
 import DirectInputModal from "./DirectInputModal";
+import CodeEditWindow from "./CodeEditWindow";
 import {fieldNameMap} from "@/constants/fieldMappings";
 import {PRODUCT_FIELD_ORDER} from "@/constants/productFields";
 import {getColumnWidth} from "@/utils/table";
@@ -38,6 +39,13 @@ const ProductsTable = memo(function ProductsTable({
   const [saving, setSaving] = useState(false);
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [isDeleting, setIsDeleting] = useState(false);
+  const [codeEditWindow, setCodeEditWindow] = useState<{
+    open: boolean;
+    product: Product | null;
+  }>({
+    open: false,
+    product: null,
+  });
 
   // 필드 순서 정의
   const fieldOrder = [...PRODUCT_FIELD_ORDER];
@@ -60,6 +68,71 @@ const ProductsTable = memo(function ProductsTable({
       values,
     });
   };
+
+  const handleSearch = (product: Product) => {
+    setCodeEditWindow({
+      open: true,
+      product,
+    });
+  };
+
+  const handleCloseCodeEditWindow = () => {
+    setCodeEditWindow({
+      open: false,
+      product: null,
+    });
+  };
+
+  const handleCodeUpdate = useCallback(
+    async (rowId: number, code: string, codeItem?: any) => {
+      if (!codeEditWindow.product || !codeItem) {
+        return;
+      }
+
+      const currentProduct = codeEditWindow.product;
+      const selectedProduct = codeItem;
+
+      // 상품명은 유지하고 나머지는 선택한 상품의 데이터로 업데이트
+      const updates: Partial<Product> = {
+        type: selectedProduct.type || null,
+        postType: selectedProduct.postType || null,
+        code: selectedProduct.code,
+        pkg: selectedProduct.pkg || null,
+        price: selectedProduct.price || null,
+        salePrice: selectedProduct.salePrice || null,
+        postFee: selectedProduct.postFee || null,
+        purchase: selectedProduct.purchase || null,
+        billType: selectedProduct.billType || null,
+        category: selectedProduct.category || null,
+        productType: selectedProduct.productType || null,
+        sabangName: selectedProduct.sabangName || null,
+        etc: selectedProduct.etc || null,
+        // name은 유지 (업데이트하지 않음)
+      };
+
+      setSaving(true);
+      try {
+        const {batchUpdateProducts} = await import("@/utils/api");
+        const result = await batchUpdateProducts([currentProduct.id], updates);
+
+        if (result.success) {
+          alert("상품이 성공적으로 업데이트되었습니다.");
+          handleCloseCodeEditWindow();
+          onDataUpdate();
+        } else {
+          throw new Error(result.error || "업데이트 실패");
+        }
+      } catch (error) {
+        console.error("상품 업데이트 실패:", error);
+        const errorMessage =
+          error instanceof Error ? error.message : "업데이트 실패";
+        alert(`업데이트 실패: ${errorMessage}`);
+      } finally {
+        setSaving(false);
+      }
+    },
+    [codeEditWindow.product, onDataUpdate]
+  );
 
   const handleAdd = () => {
     // DirectInputModal 열기
@@ -393,12 +466,20 @@ const ProductsTable = memo(function ProductsTable({
                     {product.etc || ""}
                   </td>
                   <td className="border px-2 py-1 border-gray-300 text-xs text-center">
-                    <button
-                      onClick={() => handleEdit(product)}
-                      className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded"
-                    >
-                      수정
-                    </button>
+                    <div className="flex gap-1 justify-center">
+                      <button
+                        onClick={() => handleEdit(product)}
+                        className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded"
+                      >
+                        수정
+                      </button>
+                      <button
+                        onClick={() => handleSearch(product)}
+                        className="px-2 py-1 bg-green-500 hover:bg-green-600 text-white text-xs rounded"
+                      >
+                        검색
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -437,6 +518,20 @@ const ProductsTable = memo(function ProductsTable({
         onSave={handleSaveEditDirectInput}
         onValueChange={handleEditDirectInputValueChange}
       />
+
+      {codeEditWindow.open && codeEditWindow.product && (
+        <CodeEditWindow
+          rowId={codeEditWindow.product.id}
+          currentRowData={{
+            매핑코드: codeEditWindow.product.code,
+            상품명: codeEditWindow.product.name,
+            productId: codeEditWindow.product.id,
+          }}
+          skipApiCall={true}
+          onCodeUpdate={handleCodeUpdate}
+          onClose={handleCloseCodeEditWindow}
+        />
+      )}
     </>
   );
 });

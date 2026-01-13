@@ -71,7 +71,9 @@ export default function AutocompleteDropdown({
     setIsOpen(true);
   };
 
-  const handleOptionClick = (option: string) => {
+  const handleOptionClick = (option: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     setInputValue(option);
     onChange(option);
     setIsOpen(false);
@@ -98,7 +100,11 @@ export default function AutocompleteDropdown({
       case "Enter":
         e.preventDefault();
         if (selectedIndex >= 0 && selectedIndex < filteredOptions.length) {
-          handleOptionClick(filteredOptions[selectedIndex]);
+          const syntheticEvent = {
+            preventDefault: () => {},
+            stopPropagation: () => {},
+          } as React.MouseEvent;
+          handleOptionClick(filteredOptions[selectedIndex], syntheticEvent);
         }
         break;
       case "Escape":
@@ -145,14 +151,18 @@ export default function AutocompleteDropdown({
         </button>
       </div>
       {isOpen && filteredOptions.length > 0 && (
-        <div className="absolute z-50 mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto w-full">
+        <div 
+          className="absolute z-50 mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto w-full"
+          onMouseDown={(e) => e.preventDefault()} // 드롭다운 클릭 시 외부 클릭 감지 방지
+        >
           {filteredOptions.map((option, index) => (
             <div
               key={option}
               className={`px-3 py-2 cursor-pointer hover:bg-gray-100 ${
                 index === selectedIndex ? "bg-blue-50" : ""
               }`}
-              onClick={() => handleOptionClick(option)}
+              onClick={(e) => handleOptionClick(option, e)}
+              onMouseDown={(e) => e.preventDefault()} // mousedown 이벤트 전파 방지
             >
               <span className="text-sm">{option}</span>
             </div>
@@ -160,7 +170,10 @@ export default function AutocompleteDropdown({
         </div>
       )}
       {isOpen && inputValue.trim() !== "" && filteredOptions.length === 0 && (
-        <div className="absolute z-50 mt-1 bg-white border border-gray-300 rounded shadow-lg w-full">
+        <div 
+          className="absolute z-50 mt-1 bg-white border border-gray-300 rounded shadow-lg w-full"
+          onMouseDown={(e) => e.preventDefault()} // 드롭다운 클릭 시 외부 클릭 감지 방지
+        >
           <div className="px-3 py-2 text-sm text-gray-500">
             일치하는 항목이 없습니다
           </div>

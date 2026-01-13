@@ -155,7 +155,12 @@ export default function UsersPage() {
     setError("");
 
     // 유효성 검증
-    if (!formData.companyId || !formData.username || !formData.password || !formData.name) {
+    if (
+      !formData.companyId ||
+      !formData.username ||
+      !formData.password ||
+      !formData.name
+    ) {
       setError("필수 항목을 모두 입력해주세요.");
       return;
     }
@@ -220,7 +225,9 @@ export default function UsersPage() {
     setEditingUser(user);
     // assignedVendorIds를 숫자 배열로 변환
     const vendorIds = Array.isArray(user.assignedVendorIds)
-      ? user.assignedVendorIds.map((id) => Number(id)).filter((id) => !isNaN(id))
+      ? user.assignedVendorIds
+          .map((id) => Number(id))
+          .filter((id) => !isNaN(id))
       : [];
     setEditFormData({
       name: user.name,
@@ -271,10 +278,10 @@ export default function UsersPage() {
 
       // assignedVendorIds는 항상 배열로 보장
       // grade가 '납품업체'인 경우 선택된 값, 아닌 경우 빈 배열
-      const vendorIds = Array.isArray(editFormData.assignedVendorIds) 
-        ? editFormData.assignedVendorIds 
+      const vendorIds = Array.isArray(editFormData.assignedVendorIds)
+        ? editFormData.assignedVendorIds
         : [];
-      
+
       // grade가 '납품업체'인 경우에만 assignedVendorIds 포함
       if (editFormData.grade === "납품업체") {
         updateData.assignedVendorIds = vendorIds;
@@ -355,11 +362,12 @@ export default function UsersPage() {
 
   return (
     <div className="w-full h-full p-8">
-      <div className="w-full flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">회원 관리</h1>
+      <div className="w-full flex items-center justify-end mb-6">
+        {/* <h1 className="text-2xl font-bold">회원 관리</h1> */}
         <button
           onClick={() => setIsCreateModalOpen(true)}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md transition-colors"
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md transition-colors
+          text-[14px]"
         >
           새 사용자 추가
         </button>
@@ -413,7 +421,10 @@ export default function UsersPage() {
               </tr>
             ) : (
               users.map((user) => (
-                <tr key={user.id} className={!user.isActive ? "opacity-50" : ""}>
+                <tr
+                  key={user.id}
+                  className={!user.isActive ? "opacity-50" : ""}
+                >
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {user.username}
                   </td>
@@ -683,12 +694,16 @@ export default function UsersPage() {
                 <select
                   value={editFormData.grade}
                   onChange={(e) => {
-                    const newGrade = e.target.value as "납품업체" | "관리자" | "직원";
+                    const newGrade = e.target.value as
+                      | "납품업체"
+                      | "관리자"
+                      | "직원";
                     setEditFormData((prev) => ({
                       ...prev,
                       grade: newGrade,
                       // grade가 '납품업체'가 아닐 때 assignedVendorIds 초기화
-                      assignedVendorIds: newGrade === "납품업체" ? prev.assignedVendorIds : [],
+                      assignedVendorIds:
+                        newGrade === "납품업체" ? prev.assignedVendorIds : [],
                     }));
                   }}
                   className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -710,7 +725,10 @@ export default function UsersPage() {
                       const assignedVendorIds = new Set<number>();
                       users.forEach((user) => {
                         // 현재 편집 중인 사용자는 제외
-                        if (user.id !== editingUser?.id && user.assignedVendorIds) {
+                        if (
+                          user.id !== editingUser?.id &&
+                          user.assignedVendorIds
+                        ) {
                           user.assignedVendorIds.forEach((vendorId) => {
                             assignedVendorIds.add(vendorId);
                           });
@@ -718,7 +736,9 @@ export default function UsersPage() {
                       });
 
                       // 현재 사용자가 이미 선택한 vendor는 포함 (자신이 선택한 것은 유지)
-                      const currentSelectedIds = new Set(editFormData.assignedVendorIds || []);
+                      const currentSelectedIds = new Set(
+                        editFormData.assignedVendorIds || []
+                      );
 
                       // 사용 가능한 vendors: 같은 회사이고, 다른 사용자에게 할당되지 않은 것들
                       // 또는 현재 사용자가 이미 선택한 것들
@@ -728,7 +748,10 @@ export default function UsersPage() {
                             return false;
                           }
                           // 이미 다른 사용자에게 할당되었고, 현재 사용자가 선택하지 않은 경우 제외
-                          if (assignedVendorIds.has(v.id) && !currentSelectedIds.has(v.id)) {
+                          if (
+                            assignedVendorIds.has(v.id) &&
+                            !currentSelectedIds.has(v.id)
+                          ) {
                             return false;
                           }
                           return true;
@@ -738,11 +761,18 @@ export default function UsersPage() {
                           label: vendor.name,
                         }));
                     })()}
-                    selectedValues={(editFormData.assignedVendorIds || []) as (string | number)[]}
+                    selectedValues={
+                      (editFormData.assignedVendorIds || []) as (
+                        | string
+                        | number
+                      )[]
+                    }
                     onChange={(values) => {
                       setEditFormData((prev) => ({
                         ...prev,
-                        assignedVendorIds: values.map((v) => Number(v)) as number[],
+                        assignedVendorIds: values.map((v) =>
+                          Number(v)
+                        ) as number[],
                       }));
                     }}
                     placeholder="담당 납품업체 선택"

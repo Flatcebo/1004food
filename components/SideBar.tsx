@@ -66,6 +66,11 @@ const adminMenuNames: {path: string; name: string; icon: IconType}[] = [
     name: "납품업체 관리",
     icon: IoBusiness,
   },
+  {
+    path: "/mall-promotions",
+    name: "쇼핑몰 프로모션 관리",
+    icon: IoPricetag,
+  },
 ];
 
 export default function SideBar() {
@@ -91,7 +96,8 @@ export default function SideBar() {
   const isHeaderAliasesActive = pathname === "/header-aliases";
   const isUsersActive = pathname === "/users";
   const isVendorsActive = pathname === "/vendors";
-
+  const isMallPromotionsActive = pathname === "/mall-promotions";
+  const isSalesByMallActive = pathname === "/analytics/sales-by-mall";
   return (
     <div className="w-60 h-full bg-[#25323c] shrink-0">
       <div className="w-full h-full flex flex-col">
@@ -126,6 +132,14 @@ export default function SideBar() {
                   ? isTemplatesActive
                   : menu.path === "/header-aliases"
                   ? isHeaderAliasesActive
+                  : menu.path === "/mall-promotions"
+                  ? isMallPromotionsActive
+                  : menu.path === "/analytics/sales-by-mall"
+                  ? isSalesByMallActive
+                  : menu.path === "/users"
+                  ? isUsersActive
+                  : menu.path === "/vendors"
+                  ? isVendorsActive
                   : false;
 
               const IconComponent = menu.icon;
@@ -170,7 +184,7 @@ export default function SideBar() {
         </div>
 
         <div className="w-full text-center text-sm text-white py-2">
-          beta 2.1.0
+          beta 3.1.0
         </div>
       </div>
     </div>

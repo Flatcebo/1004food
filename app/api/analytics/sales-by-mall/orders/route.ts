@@ -263,17 +263,52 @@ export async function GET(request: NextRequest) {
       console.log(`[주문 목록 조회] 기간 내 다른 mall_id별 주문 건수:`, otherMallIds);
     }
 
+    // 행사가 조회 (mallId와 매핑코드 기준)
+    const promotions = await sql`
+      SELECT mall_id, product_code, discount_rate, event_price
+      FROM mall_promotions
+      WHERE mall_id = ${mallIdInt}
+    `;
+    
+    // 행사가 맵 생성: {productCode: {discountRate, eventPrice}}
+    const promotionMap: {[key: string]: {discountRate: number | null; eventPrice: number | null}} = {};
+    promotions.forEach((promo: any) => {
+      promotionMap[promo.product_code] = {
+        discountRate: promo.discount_rate,
+        eventPrice: promo.event_price,
+      };
+    });
+
     // 주문 데이터 포맷팅 (refresh/route.ts와 동일한 로직 사용)
     const formattedOrders = orders.map((order: any) => {
       const rowData = order.row_data || {};
       
-      // 공급가: row_data의 공급가 또는 products의 sale_price (refresh/route.ts와 동일)
-      const salePrice =
+      // 매핑코드만 사용하여 행사가 조회
+      const mappingCode = rowData["매핑코드"] || null;
+      
+      // 행사가 확인 (매핑코드로만 조회)
+      let eventPrice: number | null = null;
+      let discountRate: number | null = null;
+      if (mappingCode) {
+        const promotion = promotionMap[mappingCode];
+        if (promotion) {
+          eventPrice = promotion.eventPrice;
+          discountRate = promotion.discountRate;
+        }
+      }
+      
+      // 공급가: 원래 상품의 공급가 (행사가 적용하지 않음)
+      // row_data의 공급가 또는 products의 sale_price
+      let salePrice =
         rowData["공급가"] ||
         order.product_sale_price ||
         rowData["sale_price"] ||
         rowData["공급단가"] ||
         0;
+      const salePriceNum = typeof salePrice === "number" ? salePrice : parseFloat(String(salePrice)) || 0;
+      
+      // 행사가는 이미 위에서 mall_promotions 테이블에서 업체명(mall_id)과 매핑코드로 조회됨
+      // 공급가에는 행사가를 적용하지 않고 원래 값을 그대로 사용
       
       // 수량: row_data의 수량 또는 주문수량
       const quantity = rowData["수량"] || rowData["주문수량"] || 1;
@@ -287,7 +322,9 @@ export async function GET(request: NextRequest) {
         productName: rowData["상품명"] || null,
         mappingCode: rowData["매핑코드"] || null,
         quantity: typeof quantity === "number" ? quantity : parseFloat(String(quantity)) || 1,
-        salePrice: typeof salePrice === "number" ? salePrice : parseFloat(String(salePrice)) || 0,
+        salePrice: salePriceNum,
+        eventPrice: eventPrice, // 행사가 추가
+        discountRate: discountRate, // 할인율 추가 (참고용)
         orderStatus: rowData["주문상태"] || null,
         orderDate: rowData["주문일시"] || null,
         ...rowData, // 나머지 모든 필드 포함

@@ -192,8 +192,12 @@ export async function POST(request: NextRequest) {
               type = ${type || null},
               pkg = ${pkg || null},
               price = ${price !== undefined && price !== null ? price : null},
-              sale_price = ${salePrice !== undefined && salePrice !== null ? salePrice : null},
-              post_fee = ${postFee !== undefined && postFee !== null ? postFee : null},
+              sale_price = ${
+                salePrice !== undefined && salePrice !== null ? salePrice : null
+              },
+              post_fee = ${
+                postFee !== undefined && postFee !== null ? postFee : null
+              },
               purchase = ${purchase || null},
               bill_type = ${billType || null},
               category = ${category || null},
@@ -217,7 +221,9 @@ export async function POST(request: NextRequest) {
               ${code},
               ${pkg || null},
               ${price !== undefined && price !== null ? price : null},
-              ${salePrice !== undefined && salePrice !== null ? salePrice : null},
+              ${
+                salePrice !== undefined && salePrice !== null ? salePrice : null
+              },
               ${postFee !== undefined && postFee !== null ? postFee : null},
               ${purchase || null},
               ${billType || null},

@@ -140,13 +140,29 @@ export default function App() {
         }
       }
 
-      const response = await fetch("/api/dashboard/stats?days=30&topLimit=10", {
+      // 일일 주문 수량, 일일 매출과 이익액은 30일 기준
+      const response30 = await fetch(
+        "/api/dashboard/stats?days=30&topLimit=10",
+        {
+          headers,
+        }
+      );
+      const result30 = await response30.json();
+
+      // 주문수 많은 업체, 매출 높은 업체, 주문수 많은 상품은 당일 기준
+      const response1 = await fetch("/api/dashboard/stats?days=1&topLimit=10", {
         headers,
       });
-      const result = await response.json();
+      const result1 = await response1.json();
 
-      if (result.success) {
-        setChartData(result.data);
+      if (result30.success && result1.success) {
+        setChartData({
+          dailyOrders: result30.data.dailyOrders,
+          dailySalesProfit: result30.data.dailySalesProfit,
+          topVendorsByOrders: result1.data.topVendorsByOrders,
+          topVendorsBySales: result1.data.topVendorsBySales,
+          topProductsByOrders: result1.data.topProductsByOrders,
+        });
       }
     } catch (error) {
       console.error("차트 데이터 로드 실패:", error);

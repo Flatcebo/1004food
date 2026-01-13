@@ -1,9 +1,10 @@
 "use client";
 
-import {useState, useEffect, useCallback} from "react";
+import {useState, useEffect, useCallback, useMemo} from "react";
 import {getTodayDate, formatDate} from "@/utils/date";
 import {useLoadingStore} from "@/stores/loadingStore";
 import LoadingOverlay from "@/components/LoadingOverlay";
+import AutocompleteDropdown from "@/components/AutocompleteDropdown";
 
 interface SettlementData {
   id: number;
@@ -43,6 +44,8 @@ interface OrderData {
   mappingCode: string | null;
   quantity: number;
   salePrice: number;
+  eventPrice?: number | null;
+  discountRate?: number | null;
   orderStatus: string | null;
   orderDate: string | null;
   [key: string]: any;
@@ -53,11 +56,24 @@ export default function SalesByMallPage() {
   const [startDate, setStartDate] = useState<string>(todayDate);
   const [endDate, setEndDate] = useState<string>(todayDate);
   const [selectedMallId, setSelectedMallId] = useState<string>("");
+  const [selectedMallName, setSelectedMallName] = useState<string>("");
   const [malls, setMalls] = useState<Mall[]>([]);
   const [settlements, setSettlements] = useState<SettlementData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>("");
   const {isLoading, title, message, subMessage, startLoading, stopLoading, updateLoadingMessage} = useLoadingStore();
+  
+  // 쇼핑몰명 목록 (가나다 순 정렬)
+  const mallNames = useMemo(() => {
+    return [...malls]
+      .sort((a, b) => a.name.localeCompare(b.name, "ko"))
+      .map((mall) => mall.name);
+  }, [malls]);
+  
+  // AutocompleteDropdown 옵션 (전체 포함)
+  const mallOptions = useMemo(() => {
+    return ["전체", ...mallNames];
+  }, [mallNames]);
   
   // 주문 목록 모달 상태
   const [orderModalOpen, setOrderModalOpen] = useState(false);
@@ -196,15 +212,22 @@ export default function SalesByMallPage() {
 
       updateLoadingMessage("주문 데이터를 조회하고 있습니다...");
 
-      console.log("갱신 API 호출 시작:", {startDate, endDate});
+      console.log("갱신 API 호출 시작:", {startDate, endDate, selectedMallId});
+
+      const requestBody: {startDate: string; endDate: string; mallId?: string} = {
+        startDate,
+        endDate,
+      };
+      
+      // 쇼핑몰이 선택된 경우에만 mallId 추가
+      if (selectedMallId) {
+        requestBody.mallId = selectedMallId;
+      }
 
       const response = await fetch("/api/analytics/sales-by-mall/refresh", {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          startDate,
-          endDate,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       console.log("갱신 API 응답 상태:", response.status);
@@ -239,7 +262,7 @@ export default function SalesByMallPage() {
     } finally {
       stopLoading();
     }
-  }, [startDate, endDate, startLoading, stopLoading, updateLoadingMessage, handleSearch]);
+  }, [startDate, endDate, selectedMallId, malls, startLoading, stopLoading, updateLoadingMessage, handleSearch]);
 
   // 숫자 포맷팅
   const formatNumber = (num: number | string | null | undefined): string => {
@@ -488,20 +511,47 @@ export default function SalesByMallPage() {
               />
             </label>
 
-            <label className="text-sm font-medium">
+            <label className="text-sm font-medium flex items-center">
               쇼핑몰:
-              <select
-                className="ml-2 px-2 py-1 border border-gray-300 rounded"
-                value={selectedMallId}
-                onChange={(e) => setSelectedMallId(e.target.value)}
-              >
-                <option value="">전체</option>
-                {malls.map((mall) => (
-                  <option key={mall.id} value={mall.id.toString()}>
-                    {mall.name}
-                  </option>
-                ))}
-              </select>
+              <div className="ml-2">
+                <AutocompleteDropdown
+                  value={selectedMallName}
+                  onChange={(value) => {
+                    // 사용자가 입력한 값을 그대로 저장
+                    setSelectedMallName(value);
+                    // 쇼핑몰명으로 mallId 찾기
+                    if (value === "전체" || value === "") {
+                      setSelectedMallId("");
+                    } else {
+                      const foundMall = malls.find((mall) => mall.name === value);
+                      if (foundMall) {
+                        setSelectedMallId(foundMall.id.toString());
+                      } else {
+                        setSelectedMallId("");
+                      }
+                    }
+                  }}
+                  onSelect={(value) => {
+                    // 드롭다운에서 선택했을 때만 처리
+                    if (value === "전체") {
+                      setSelectedMallName("");
+                      setSelectedMallId("");
+                    } else {
+                      const foundMall = malls.find((mall) => mall.name === value);
+                      if (foundMall) {
+                        setSelectedMallName(value);
+                        setSelectedMallId(foundMall.id.toString());
+                      } else {
+                        setSelectedMallName("");
+                        setSelectedMallId("");
+                      }
+                    }
+                  }}
+                  options={mallOptions}
+                  placeholder="전체"
+                  className="w-[200px]"
+                />
+              </div>
             </label>
 
             <div className="flex gap-2">
@@ -822,6 +872,7 @@ export default function SalesByMallPage() {
                         <th className="border border-gray-300 px-3 py-2 text-left">내부코드</th>
                         <th className="border border-gray-300 px-3 py-2 text-right">수량</th>
                         <th className="border border-gray-300 px-3 py-2 text-right">공급가</th>
+                        <th className="border border-gray-300 px-3 py-2 text-right">행사가</th>
                         <th className="border border-gray-300 px-3 py-2 text-right">주문금액</th>
                         <th className="border border-gray-300 px-3 py-2 text-left">주문상태</th>
                         <th className="border border-gray-300 px-3 py-2 text-left">주문일시</th>
@@ -838,7 +889,11 @@ export default function SalesByMallPage() {
                       }).map((order, index) => {
                         const quantity = typeof order.quantity === "number" ? order.quantity : parseFloat(String(order.quantity)) || 1;
                         const salePrice = typeof order.salePrice === "number" ? order.salePrice : parseFloat(String(order.salePrice)) || 0;
-                        const orderAmount = quantity * salePrice;
+                        // 주문금액: 행사가가 있으면 행사가 * 수량, 없으면 공급가 * 수량
+                        const priceForAmount = (order.eventPrice !== null && order.eventPrice !== undefined) 
+                          ? order.eventPrice 
+                          : salePrice;
+                        const orderAmount = quantity * priceForAmount;
                         
                         // 행 클릭 핸들러: 내부코드로 order page 열기 (기간 필터링 포함)
                         const handleRowClick = () => {
@@ -893,6 +948,11 @@ export default function SalesByMallPage() {
                             <td className="border border-gray-300 px-3 py-2 text-right">
                               {formatNumber(salePrice)}
                             </td>
+                            <td className="border border-gray-300 px-3 py-2 text-right">
+                              {order.eventPrice !== null && order.eventPrice !== undefined 
+                                ? formatNumber(order.eventPrice) 
+                                : "-"}
+                            </td>
                             <td className="border border-gray-300 px-3 py-2 text-right font-semibold">
                               {formatNumber(orderAmount)}
                             </td>
@@ -912,7 +972,7 @@ export default function SalesByMallPage() {
                     {orders.length > 0 && (
                       <tfoot>
                         <tr className="bg-gray-100 font-bold">
-                          <td className="border border-gray-300 px-3 py-2 text-center" colSpan={5}>
+                          <td className="border border-gray-300 px-3 py-2 text-center" colSpan={6}>
                             합계
                           </td>
                           <td className="border border-gray-300 px-3 py-2 text-right">
@@ -924,11 +984,16 @@ export default function SalesByMallPage() {
                             )}
                           </td>
                           <td className="border border-gray-300 px-3 py-2 text-right">-</td>
+                          <td className="border border-gray-300 px-3 py-2 text-right">-</td>
                           <td className="border border-gray-300 px-3 py-2 text-right">
                             {formatNumber(
                               orders.reduce((sum, o) => {
                                 const qty = typeof o.quantity === "number" ? o.quantity : parseFloat(String(o.quantity)) || 1;
-                                const price = typeof o.salePrice === "number" ? o.salePrice : parseFloat(String(o.salePrice)) || 0;
+                                // 주문금액 합계: 행사가가 있으면 행사가 * 수량, 없으면 공급가 * 수량
+                                const salePrice = typeof o.salePrice === "number" ? o.salePrice : parseFloat(String(o.salePrice)) || 0;
+                                const price = (o.eventPrice !== null && o.eventPrice !== undefined) 
+                                  ? o.eventPrice 
+                                  : salePrice;
                                 return sum + (qty * price);
                               }, 0)
                             )}

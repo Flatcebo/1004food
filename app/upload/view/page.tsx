@@ -55,6 +55,8 @@ function FileViewContent() {
   const [vendorName, setVendorName] = useState("");
   const [vendorNameOptions, setVendorNameOptions] = useState<string[]>([]);
   const [confirmedVendorName, setConfirmedVendorName] = useState<string>(""); // 드롭다운에서 선택한 업체명만 저장
+  const [confirmedMallId, setConfirmedMallId] = useState<number | null>(null); // 드롭다운에서 선택한 mall id 저장
+  const [mallMap, setMallMap] = useState<{[name: string]: number}>({}); // mall name -> id 매핑
   const codesOriginRef = useRef<any[]>([]);
 
   // 원본 배송메시지 저장 (rowIdx -> 원본 메시지, 파일 로드 시점의 메시지)
@@ -641,6 +643,18 @@ function FileViewContent() {
   const handleVendorNameSelect = (selectedVendorName: string) => {
     setConfirmedVendorName(selectedVendorName);
     setVendorName(selectedVendorName);
+    // 선택한 업체명에 해당하는 mall_id 찾기
+    const mallId = mallMap[selectedVendorName] || null;
+    setConfirmedMallId(mallId);
+    if (mallId) {
+      console.log(
+        `✅ 업체명 "${selectedVendorName}" 선택됨, mall_id=${mallId}`
+      );
+    } else {
+      console.warn(
+        `⚠️ 업체명 "${selectedVendorName}"에 해당하는 mall_id를 찾을 수 없습니다.`
+      );
+    }
     updateVendorName(selectedVendorName);
   };
 
@@ -969,10 +983,20 @@ function FileViewContent() {
         headerIndex: {...headerIndex},
         productCodeMap: {...productCodeMap},
         productIdMap: {...productIdMap}, // 사용자가 선택한 상품 ID 맵도 함께 저장
-        vendorName: vendorName.trim() || undefined, // 업체명 포함
+        vendorName:
+          confirmedVendorName.trim() || vendorName.trim() || undefined, // 업체명 포함 (드롭다운에서 선택한 값 우선)
+        mallId: confirmedMallId || undefined, // mall_id 포함
         createdAt:
           file.createdAt || file.uploadTime || new Date().toISOString(), // createdAt 유지
       };
+
+      console.log("💾 파일 저장 데이터:", {
+        fileName: updatedFile.fileName,
+        vendorName: updatedFile.vendorName,
+        mallId: updatedFile.mallId,
+        confirmedMallId: confirmedMallId,
+        confirmedVendorName: confirmedVendorName,
+      });
 
       // console.log("업데이트할 파일 데이터:", {
       //   fileName: updatedFile.fileName,
@@ -1010,8 +1034,17 @@ function FileViewContent() {
           productCodeMap: {...productCodeMap},
           productIdMap: {...productIdMap}, // 사용자가 선택한 상품 ID 맵도 함께 전송
           vendorName: confirmedVendorName.trim() || vendorName.trim() || null, // 업체명 포함 (드롭다운에서 선택한 값 우선)
+          mallId: confirmedMallId, // 선택한 mall_id 포함
           isConfirmed: true,
         };
+
+        console.log("📤 서버 업데이트 요청 데이터:", {
+          fileId: requestData.fileId,
+          vendorName: requestData.vendorName,
+          mallId: requestData.mallId,
+          confirmedMallId: confirmedMallId,
+          confirmedVendorName: confirmedVendorName,
+        });
 
         // console.log("서버 업데이트 요청 데이터:", {
         //   fileId: requestData.fileId,
@@ -1209,6 +1242,15 @@ function FileViewContent() {
           // 중복 제거하여 정렬
           const uniqueNames: string[] = Array.from(new Set(mallNames)).sort();
           setVendorNameOptions(uniqueNames);
+
+          // mall name -> id 매핑 생성
+          const nameToIdMap: {[name: string]: number} = {};
+          result.data.forEach((mall: any) => {
+            if (mall.name && mall.id) {
+              nameToIdMap[String(mall.name)] = mall.id;
+            }
+          });
+          setMallMap(nameToIdMap);
         }
       })
       .catch((error) => {
@@ -1221,6 +1263,23 @@ function FileViewContent() {
       codesOriginRef.current = [...codes];
     }
   }, [codes]);
+
+  // mallMap이 로드된 후 파일의 vendorName을 기반으로 mallId 복원
+  useEffect(() => {
+    if (
+      Object.keys(mallMap).length > 0 &&
+      confirmedVendorName &&
+      !confirmedMallId
+    ) {
+      const mallId = mallMap[confirmedVendorName];
+      if (mallId) {
+        setConfirmedMallId(mallId);
+        console.log(
+          `✅ mallMap 로드 후 mallId 복원: vendorName="${confirmedVendorName}", mallId=${mallId}`
+        );
+      }
+    }
+  }, [mallMap, confirmedVendorName, confirmedMallId]);
 
   useEffect(() => {
     if (!fileId) return;
@@ -1475,6 +1534,36 @@ function FileViewContent() {
           // 엑셀 파일에서 자동으로 읽어서 설정하지 않음
         } else {
           setTableData(parsedFile.tableData);
+
+          // vendorName과 mallId 복원
+          if (parsedFile.vendorName) {
+            setVendorName(parsedFile.vendorName);
+            setConfirmedVendorName(parsedFile.vendorName);
+          }
+          // mallId 복원 (우선순위: parsedFile.mallId > mallMap에서 찾기)
+          // 주의: mallMap이 아직 로드되지 않았을 수 있으므로 useEffect에서도 처리
+          if (parsedFile.mallId) {
+            setConfirmedMallId(parsedFile.mallId);
+            console.log(
+              `✅ 파일 로드 시 mallId 복원: parsedFile.mallId=${parsedFile.mallId}`
+            );
+          } else if (
+            parsedFile.vendorName &&
+            Object.keys(mallMap).length > 0 &&
+            mallMap[parsedFile.vendorName]
+          ) {
+            const foundMallId = mallMap[parsedFile.vendorName];
+            setConfirmedMallId(foundMallId);
+            console.log(
+              `✅ 파일 로드 시 mallMap에서 mallId 찾음: vendorName="${parsedFile.vendorName}", mallId=${foundMallId}`
+            );
+          } else if (parsedFile.vendorName) {
+            console.log(
+              `⚠️ 파일 로드 시 mallId를 찾을 수 없음: vendorName="${
+                parsedFile.vendorName
+              }", mallMap 크기=${Object.keys(mallMap).length}`
+            );
+          }
         }
 
         console.log(

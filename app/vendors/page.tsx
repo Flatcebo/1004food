@@ -306,11 +306,12 @@ export default function VendorsPage() {
 
   return (
     <div className="w-full h-full p-8">
-      <div className="w-full flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">납품업체 관리</h1>
+      <div className="w-full flex items-center justify-end mb-6">
+        {/* <h1 className="text-2xl font-bold">납품업체 관리</h1> */}
         <button
           onClick={() => setIsCreateModalOpen(true)}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md transition-colors"
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-md transition-colors
+          text-[14px]"
         >
           새 납품업체 추가
         </button>

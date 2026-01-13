@@ -25,6 +25,7 @@ export async function PUT(request: NextRequest) {
       productCodeMap,
       productIdMap,
       vendorName,
+      mallId,
       isConfirmed,
     } = body;
 
@@ -32,6 +33,8 @@ export async function PUT(request: NextRequest) {
       fileId,
       tableDataLength: tableData ? tableData.length : 0,
       rowCount: tableData ? tableData.length - 1 : 0,
+      vendorName,
+      mallId,
       isConfirmed,
     });
 
@@ -53,7 +56,7 @@ export async function PUT(request: NextRequest) {
       tableDataRows: tableData?.length,
     });
 
-    // validation_status, vendor_name, product_id_map, user_id 컬럼이 없으면 추가
+    // validation_status, vendor_name, product_id_map, user_id, mall_id 컬럼이 없으면 추가
     try {
       await sql`
         DO $$
@@ -73,6 +76,10 @@ export async function PUT(request: NextRequest) {
           IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                         WHERE table_name = 'temp_files' AND column_name = 'user_id') THEN
             ALTER TABLE temp_files ADD COLUMN user_id VARCHAR(255);
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                        WHERE table_name = 'temp_files' AND column_name = 'mall_id') THEN
+            ALTER TABLE temp_files ADD COLUMN mall_id INTEGER REFERENCES mall(id) ON DELETE SET NULL;
           END IF;
         END
         $$;
@@ -119,6 +126,7 @@ export async function PUT(request: NextRequest) {
             product_id_map = ${JSON.stringify(productIdMap || {})},
             validation_status = ${JSON.stringify(validationResult)},
             vendor_name = ${vendorName || null},
+            mall_id = ${mallId || null},
             user_id = COALESCE(user_id, ${userId}),
             is_confirmed = ${isConfirmed ?? false},
                 updated_at = ${now.toISOString()}
@@ -136,6 +144,7 @@ export async function PUT(request: NextRequest) {
             product_id_map = ${JSON.stringify(productIdMap || {})},
             validation_status = ${JSON.stringify(validationResult)},
             vendor_name = ${vendorName || null},
+            mall_id = ${mallId || null},
             is_confirmed = ${isConfirmed ?? false},
                 updated_at = ${now.toISOString()}
           WHERE file_id = ${fileId} AND company_id = ${companyId}
@@ -166,6 +175,7 @@ export async function PUT(request: NextRequest) {
               product_id_map = ${JSON.stringify(productIdMap || {})},
               validation_status = ${JSON.stringify(validationResult)},
               vendor_name = ${vendorName || null},
+              mall_id = ${mallId || null},
               user_id = COALESCE(user_id, ${userId}),
               is_confirmed = ${isConfirmed ?? false},
                 updated_at = ${now.toISOString()}
@@ -183,6 +193,7 @@ export async function PUT(request: NextRequest) {
               product_id_map = ${JSON.stringify(productIdMap || {})},
               validation_status = ${JSON.stringify(validationResult)},
               vendor_name = ${vendorName || null},
+              mall_id = ${mallId || null},
               is_confirmed = ${isConfirmed ?? false},
                 updated_at = ${now.toISOString()}
             WHERE file_id = ${fileId} AND company_id = ${companyId}
