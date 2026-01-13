@@ -87,6 +87,10 @@ const SavedDataTable = memo(function SavedDataTable({
       "주문자 전화번호",
       "주문번호", // 내부코드에 합쳐져서 표시되므로 단독 컬럼은 숨김
       "쇼핑몰명", // 업체명에 합쳐져서 표시되므로 단독 컬럼은 숨김
+      "순서번호", // 순서번호 헤더 숨김
+      "상품ID", // 상품ID 헤더 숨김
+      "productId", // productId 헤더 숨김 (상품ID와 동일)
+      "rowOrder", // rowOrder 헤더 숨김
     ];
 
     // 운송장 입력 모드일 때는 매핑코드와 운송장번호만 숨김 (배송메시지는 운송장입력으로 변경됨)
@@ -998,6 +1002,7 @@ const SavedDataTable = memo(function SavedDataTable({
             const isCarrier = header === "택배사";
             const isOrdererName = header === "주문자명";
             const isOrdererPhone = header === "주문자 전화번호";
+            const isAddress = header === "주소";
             const cellValue = getCombinedCellValue(row, header);
             const isMultiLine = cellValue.includes("\n");
 
@@ -1040,7 +1045,7 @@ const SavedDataTable = memo(function SavedDataTable({
                   isDeliveryInput ||
                   isInternalCode
                     ? "cursor-pointer hover:bg-blue-50"
-                    : isDeliveryMessage || isTrackingNumber
+                    : isDeliveryMessage || isTrackingNumber || isAddress
                     ? "cursor-default"
                     : ""
                 } ${isOrdererName || isOrdererPhone ? "text-blue-600" : ""}`}
@@ -1094,6 +1099,12 @@ const SavedDataTable = memo(function SavedDataTable({
                   />
                 ) : isTrackingNumber ? (
                   <TableTrackingNumberCell
+                    cellValue={cellValue}
+                    handleTooltipShow={handleTooltipShow}
+                    handleTooltipHide={handleTooltipHide}
+                  />
+                ) : isAddress ? (
+                  <TableAddressCell
                     cellValue={cellValue}
                     handleTooltipShow={handleTooltipShow}
                     handleTooltipHide={handleTooltipHide}
@@ -1285,6 +1296,63 @@ const SavedDataTable = memo(function SavedDataTable({
     }
   );
 
+  // 주소 버튼 컴포넌트 메모이제이션
+  const TableAddressCell = memo(
+    ({
+      cellValue,
+      handleTooltipShow,
+      handleTooltipHide,
+    }: {
+      cellValue: string;
+      handleTooltipShow: (content: string, x: number, y: number) => void;
+      handleTooltipHide: () => void;
+    }) => {
+      const handleClick = async () => {
+        if (cellValue && cellValue.trim()) {
+          try {
+            await navigator.clipboard.writeText(cellValue);
+            handleTooltipShow("복사되었습니다!", 0, 0);
+            setTimeout(() => {
+              handleTooltipShow(cellValue || "주소 없음", 0, 0);
+            }, 1000);
+          } catch (err) {
+            console.error("클립보드 복사 실패:", err);
+            handleTooltipShow("복사 실패", 0, 0);
+            setTimeout(() => {
+              handleTooltipShow(cellValue || "주소 없음", 0, 0);
+            }, 1000);
+          }
+        }
+      };
+
+      return (
+        <div className="flex items-center justify-center">
+          <div
+            className={`px-2 py-1 rounded text-xs font-medium border ${
+              cellValue && cellValue.trim()
+                ? "cursor-pointer bg-purple-100 border-purple-300 text-purple-800 hover:bg-purple-200"
+                : "cursor-not-allowed bg-gray-200 border-gray-400 text-gray-500 opacity-60"
+            }`}
+            onMouseEnter={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              handleTooltipShow(
+                cellValue && cellValue.trim()
+                  ? cellValue
+                  : "주소 없음 (클릭 불가)",
+                rect.left + rect.width / 2,
+                rect.top - 10
+              );
+            }}
+            onMouseLeave={handleTooltipHide}
+            onClick={handleClick}
+          >
+            ADDR
+          </div>
+        </div>
+      );
+    }
+  );
+
   // 운송장번호 버튼 컴포넌트 메모이제이션
   const TableTrackingNumberCell = memo(
     ({
@@ -1450,6 +1518,7 @@ const SavedDataTable = memo(function SavedDataTable({
   TableMappingCodeCell.displayName = "TableMappingCodeCell";
   TableInternalCodeCell.displayName = "TableInternalCodeCell";
   TableDeliveryMessageCell.displayName = "TableDeliveryMessageCell";
+  TableAddressCell.displayName = "TableAddressCell";
   TableTrackingNumberCell.displayName = "TableTrackingNumberCell";
   TableCarrierTrackingButton.displayName = "TableCarrierTrackingButton";
   TableDeliveryInputCell.displayName = "TableDeliveryInputCell";
