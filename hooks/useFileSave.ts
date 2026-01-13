@@ -151,28 +151,20 @@ export function useFileSave({
 
       updateLoadingMessage(`내부 코드 생성 중... (${totalRows}개)`);
 
-      // 업체명 배열 추출 (각 row의 업체명을 순서대로)
+      // 업체명 배열 추출 (드롭다운에서 선택한 업체명을 무조건 사용)
       const vendorNames: string[] = [];
       filesToUpload.forEach((file: any) => {
         if (!file.tableData || !file.headerIndex) return;
 
-        const headerRow = file.tableData[0];
-        const vendorIdx = headerRow.findIndex(
-          (h: any) => h === "업체명" || h === "업체"
-        );
+        // 파일 레벨의 업체명 (드롭다운에서 선택한 값) - row 확인 없이 무조건 사용
+        const fileVendorName = file.vendorName
+          ? String(file.vendorName).trim()
+          : "";
 
-        if (vendorIdx === -1) {
-          // 업체명 컬럼이 없으면 빈 문자열로 처리
-          const rowCount = file.tableData.length - 1; // 헤더 제외
-          for (let i = 0; i < rowCount; i++) {
-            vendorNames.push("");
-          }
-        } else {
-          // 각 row의 업체명 추출 (헤더 제외)
-          file.tableData.slice(1).forEach((row: any[]) => {
-            const vendorName = String(row[vendorIdx] || "").trim();
-            vendorNames.push(vendorName);
-          });
+        // 모든 row에 동일한 업체명 사용
+        const rowCount = file.tableData.length - 1; // 헤더 제외
+        for (let i = 0; i < rowCount; i++) {
+          vendorNames.push(fileVendorName);
         }
       });
 
