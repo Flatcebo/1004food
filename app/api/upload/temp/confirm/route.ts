@@ -172,13 +172,46 @@ export async function POST(request: NextRequest) {
         return;
       }
 
-      // 사용자가 드롭다운에서 선택한 업체명 사용
-      const vendorName = file.vendor_name || "";
+      // 사용자가 드롭다운에서 선택한 업체명 사용 (DB에 저장된 vendor_name)
+      let vendorName = file.vendor_name || "";
+
+      // vendor_name이 비어있으면 테이블 데이터에서 업체명 찾기 (하위 호환성)
+      if (!vendorName || vendorName.trim() === "") {
+        const headerRow = tableData[0];
+        const vendorIdx = headerRow.findIndex(
+          (h: any) =>
+            h && typeof h === "string" && (h === "업체명" || h === "업체")
+        );
+
+        if (vendorIdx !== -1 && tableData.length > 1) {
+          // 첫 번째 데이터 행에서 업체명 찾기
+          const firstDataRow = tableData[1];
+          const vendorFromTable = firstDataRow[vendorIdx];
+          if (vendorFromTable && typeof vendorFromTable === "string") {
+            vendorName = String(vendorFromTable).trim();
+            console.warn(
+              `⚠️ 파일 "${file.file_name}": DB의 vendor_name이 비어있어 테이블 데이터에서 업체명을 찾았습니다: "${vendorName}"`
+            );
+          }
+        }
+
+        // 여전히 비어있으면 경고 로그
+        if (!vendorName || vendorName.trim() === "") {
+          console.error(
+            `❌ 파일 "${file.file_name}": 업체명을 찾을 수 없습니다. DB의 vendor_name도 비어있고 테이블 데이터에도 업체명 컬럼이 없습니다.`
+          );
+        }
+      } else {
+        console.log(
+          `✅ 파일 "${file.file_name}": DB의 vendor_name 사용: "${vendorName}"`
+        );
+      }
+
       const rowCount = tableData.length - 1; // 헤더 제외한 데이터 행 개수
 
       // 각 행에 대해 동일한 업체명 사용
       for (let i = 0; i < rowCount; i++) {
-        allVendorNames.push(vendorName);
+        allVendorNames.push(vendorName || ""); // 빈 문자열이면 "미지정"이 됨
       }
     });
 

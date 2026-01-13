@@ -157,14 +157,45 @@ export function useFileSave({
         if (!file.tableData || !file.headerIndex) return;
 
         // 파일 레벨의 업체명 (드롭다운에서 선택한 값) - row 확인 없이 무조건 사용
-        const fileVendorName = file.vendorName
+        let fileVendorName = file.vendorName
           ? String(file.vendorName).trim()
           : "";
+
+        // vendorName이 비어있으면 테이블 데이터에서 업체명 찾기 (하위 호환성)
+        if (!fileVendorName || fileVendorName === "") {
+          const headerRow = file.tableData[0];
+          const vendorIdx = headerRow.findIndex(
+            (h: any) => h && typeof h === "string" && (h === "업체명" || h === "업체")
+          );
+          
+          if (vendorIdx !== -1 && file.tableData.length > 1) {
+            // 첫 번째 데이터 행에서 업체명 찾기
+            const firstDataRow = file.tableData[1];
+            const vendorFromTable = firstDataRow[vendorIdx];
+            if (vendorFromTable && typeof vendorFromTable === "string") {
+              fileVendorName = String(vendorFromTable).trim();
+              console.warn(
+                `⚠️ 파일 "${file.fileName}": 파일 객체의 vendorName이 비어있어 테이블 데이터에서 업체명을 찾았습니다: "${fileVendorName}"`
+              );
+            }
+          }
+          
+          // 여전히 비어있으면 경고 로그
+          if (!fileVendorName || fileVendorName === "") {
+            console.error(
+              `❌ 파일 "${file.fileName}": 업체명을 찾을 수 없습니다. 파일 객체의 vendorName도 비어있고 테이블 데이터에도 업체명 컬럼이 없습니다.`
+            );
+          }
+        } else {
+          console.log(
+            `✅ 파일 "${file.fileName}": 파일 객체의 vendorName 사용: "${fileVendorName}"`
+          );
+        }
 
         // 모든 row에 동일한 업체명 사용
         const rowCount = file.tableData.length - 1; // 헤더 제외
         for (let i = 0; i < rowCount; i++) {
-          vendorNames.push(fileVendorName);
+          vendorNames.push(fileVendorName || ""); // 빈 문자열이면 "미지정"이 됨
         }
       });
 
