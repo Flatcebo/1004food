@@ -26,40 +26,36 @@ export async function POST(request: NextRequest) {
     await sql`BEGIN`;
 
     try {
-      for (const item of deliveryData) {
+      // 배치 처리: jsonb_set을 사용하여 SELECT 없이 직접 업데이트 (성능 최적화)
+      // 각 항목마다 개별 UPDATE 쿼리 실행하되, SELECT 쿼리는 제거하여 성능 향상
+      const updatePromises = deliveryData.map((item: any) => {
         const {id, carrier, trackingNumber, orderStatus} = item;
-
-        // 현재 row_data 가져오기 (company_id 필터링)
-        const currentRow = await sql`
-          SELECT ur.row_data 
-          FROM upload_rows ur
-          INNER JOIN uploads u ON ur.upload_id = u.id
-          WHERE ur.id = ${id} AND u.company_id = ${companyId}
-        `;
-
-        if (currentRow.length === 0) {
-          throw new Error(`ID ${id}에 해당하는 데이터를 찾을 수 없습니다.`);
-        }
-
-        const currentData = currentRow[0].row_data;
-
-        // row_data 업데이트 (택배사, 운송장번호, 주문상태)
-        const updatedData = {
-          ...currentData,
-          택배사: carrier,
-          운송장번호: trackingNumber,
-          주문상태: orderStatus,
-        };
-
-        await sql`
+        
+        // jsonb_set을 사용하여 SELECT 없이 직접 업데이트
+        return sql`
           UPDATE upload_rows ur
-          SET row_data = ${JSON.stringify(updatedData)}
+          SET row_data = jsonb_set(
+            jsonb_set(
+              jsonb_set(
+                row_data,
+                '{택배사}',
+                to_jsonb(${carrier}::text)
+              ),
+              '{운송장번호}',
+              to_jsonb(${trackingNumber}::text)
+            ),
+            '{주문상태}',
+            to_jsonb(${orderStatus}::text)
+          )
           FROM uploads u
           WHERE ur.upload_id = u.id 
             AND ur.id = ${id}
             AND u.company_id = ${companyId}
         `;
-      }
+      });
+
+      // 모든 업데이트를 병렬로 실행 (트랜잭션 내에서도 가능)
+      await Promise.all(updatePromises);
 
       await sql`COMMIT`;
 

@@ -24,6 +24,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // 선택된 행들의 주문상태를 취소로 업데이트 (company_id 필터링)
+    // 모든 상태(공급중, 발주서 다운, 사방넷 다운, 배송중 등)를 "취소"로 업데이트
     const updatePromises = rowIds.map(
       (rowId: number) =>
         sql`

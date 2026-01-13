@@ -146,6 +146,7 @@ export default function BaseFilter({
             selectedValues={selectedCompany}
             onChange={(values) => onCompanyChange(values.map((v) => String(v)))}
             placeholder="전체"
+            enableAutocomplete={true}
           />
         )}
         {showVendor && onVendorChange && (
@@ -155,6 +156,7 @@ export default function BaseFilter({
             selectedValues={selectedVendor}
             onChange={(values) => onVendorChange(values.map((v) => String(v)))}
             placeholder="전체"
+            enableAutocomplete={true}
           />
         )}
         {showOrderStatus && onOrderStatusChange && (

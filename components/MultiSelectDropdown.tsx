@@ -1,6 +1,6 @@
 "use client";
 
-import {useEffect, useState} from "react";
+import {useEffect, useState, useRef, useMemo} from "react";
 
 interface Option {
   value: string | number;
@@ -15,6 +15,7 @@ interface MultiSelectDropdownProps {
   placeholder?: string;
   className?: string;
   showSelectedTags?: boolean;
+  enableAutocomplete?: boolean;
 }
 
 export default function MultiSelectDropdown({
@@ -25,8 +26,12 @@ export default function MultiSelectDropdown({
   placeholder = "전체",
   className = "",
   showSelectedTags = false,
+  enableAutocomplete = false,
 }: MultiSelectDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [inputValue, setInputValue] = useState("");
+  const [filteredOptions, setFilteredOptions] = useState<Option[]>([]);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // 드롭다운 외부 클릭 시 닫기
   useEffect(() => {
@@ -46,20 +51,73 @@ export default function MultiSelectDropdown({
 
   const toggleDropdown = () => {
     setIsOpen(!isOpen);
+    if (!isOpen && enableAutocomplete) {
+      setInputValue("");
+    }
   };
 
   const handleClearAll = (e: React.MouseEvent) => {
     e.stopPropagation();
     onChange([]);
+    if (enableAutocomplete) {
+      setInputValue("");
+    }
   };
 
-  // options가 string[]인지 Option[]인지 확인하고 정규화
-  const normalizedOptions: Option[] = options.map((opt: string | Option) => {
-    if (typeof opt === "string") {
-      return {value: opt, label: opt};
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newValue = e.target.value;
+    setInputValue(newValue);
+    setIsOpen(true);
+  };
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && inputValue.trim() !== "") {
+      // 입력된 값과 정확히 일치하는 옵션 찾기
+      const exactMatch = normalizedOptions.find(
+        (opt) =>
+          opt.label.toLowerCase() === inputValue.toLowerCase() &&
+          !selectedValues.some((v) => String(v) === String(opt.value))
+      );
+      if (exactMatch) {
+        handleToggleOption(exactMatch.value);
+        setInputValue("");
+      }
+    } else if (e.key === "Escape") {
+      setIsOpen(false);
+      setInputValue("");
     }
-    return opt;
-  });
+  };
+
+  // options가 string[]인지 Option[]인지 확인하고 정규화 (메모이제이션)
+  const normalizedOptions: Option[] = useMemo(() => {
+    return options.map((opt: string | Option) => {
+      if (typeof opt === "string") {
+        return {value: opt, label: opt};
+      }
+      return opt;
+    });
+  }, [options]);
+
+  // 인풋 값에 따라 필터링된 옵션 업데이트
+  useEffect(() => {
+    if (!enableAutocomplete || inputValue.trim() === "") {
+      setFilteredOptions(normalizedOptions);
+    } else {
+      const filtered = normalizedOptions.filter((opt) =>
+        opt.label.toLowerCase().includes(inputValue.toLowerCase())
+      );
+      setFilteredOptions(filtered);
+    }
+  }, [inputValue, normalizedOptions, enableAutocomplete]);
+
+  // 드롭다운이 열릴 때 인풋에 포커스
+  useEffect(() => {
+    if (isOpen && enableAutocomplete && inputRef.current) {
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 0);
+    }
+  }, [isOpen, enableAutocomplete]);
 
   const handleToggleOption = (optionValue: string | number) => {
     // 타입 안전한 비교를 위해 모든 값을 문자열로 변환하여 비교
@@ -72,6 +130,14 @@ export default function MultiSelectDropdown({
     } else {
       // 추가: 원본 타입 유지하면서 추가
       onChange([...selectedValues, optionValue]);
+    }
+    
+    // 자동완성 모드일 때 인풋 초기화
+    if (enableAutocomplete) {
+      setInputValue("");
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 0);
     }
   };
 
@@ -114,14 +180,32 @@ export default function MultiSelectDropdown({
             className={`px-2 py-1 border border-gray-300 rounded bg-white text-left ${
               showSelectedTags ? "w-full" : "min-w-[150px]"
             } flex items-center justify-between hover:border-gray-400 focus-within:ring-2 focus-within:ring-blue-500`}
+            onClick={(e) => {
+              if (!enableAutocomplete) {
+                toggleDropdown();
+              }
+            }}
           >
-            <button
-              type="button"
-              onClick={toggleDropdown}
-              className="flex-1 text-left flex items-center justify-between focus:outline-none"
-            >
-              <span className="truncate">{displayText}</span>
-            </button>
+            {enableAutocomplete && isOpen ? (
+              <input
+                ref={inputRef}
+                type="text"
+                value={inputValue}
+                onChange={handleInputChange}
+                onKeyDown={handleInputKeyDown}
+                placeholder={placeholder}
+                className="flex-1 outline-none text-sm"
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <button
+                type="button"
+                onClick={toggleDropdown}
+                className="flex-1 text-left flex items-center justify-between focus:outline-none"
+              >
+                <span className="truncate">{displayText}</span>
+              </button>
+            )}
             {isOpen && selectedValues.length > 0 ? (
               <button
                 type="button"
@@ -169,8 +253,8 @@ export default function MultiSelectDropdown({
           </div>
           {isOpen && (
             <div className="absolute z-9999 mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-48 overflow-y-auto min-w-[150px]">
-              {normalizedOptions && normalizedOptions.length > 0 ? (
-                normalizedOptions.map((option) => {
+              {filteredOptions && filteredOptions.length > 0 ? (
+                filteredOptions.map((option) => {
                   const isChecked = isOptionSelected(option.value);
                   return (
                     <div

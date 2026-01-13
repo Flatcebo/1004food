@@ -23,6 +23,22 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    // 삭제 전에 삭제될 row들의 upload_id를 먼저 조회
+    const rowsToDelete = await sql`
+      SELECT ur.id, ur.upload_id
+      FROM upload_rows ur
+      INNER JOIN uploads u ON ur.upload_id = u.id
+      WHERE ur.id = ANY(${rowIds}::int[])
+        AND u.company_id = ${companyId}
+    `;
+
+    if (rowsToDelete.length === 0) {
+      return NextResponse.json(
+        {success: false, error: "삭제할 데이터를 찾을 수 없습니다."},
+        {status: 404}
+      );
+    }
+
     // 선택된 행들을 삭제 (company_id 필터링)
     const result = await sql`
       DELETE FROM upload_rows ur
@@ -30,21 +46,45 @@ export async function DELETE(request: NextRequest) {
       WHERE ur.upload_id = u.id 
         AND ur.id = ANY(${rowIds}::int[])
         AND u.company_id = ${companyId}
-      RETURNING ur.id
+      RETURNING ur.id, ur.upload_id
     `;
 
-    if (result.length === 0) {
-      return NextResponse.json(
-        {success: false, error: "삭제할 데이터를 찾을 수 없습니다."},
-        {status: 404}
-      );
+    // 삭제된 row들의 upload_id 목록 추출
+    const affectedUploadIds = [
+      ...new Set(result.map((r: any) => r.upload_id)),
+    ];
+
+    // 각 upload_id에 대해 남은 row 개수 확인하고, 0개면 uploads도 삭제
+    const deletedUploadIds: number[] = [];
+    for (const uploadId of affectedUploadIds) {
+      const remainingRows = await sql`
+        SELECT COUNT(*) as count
+        FROM upload_rows
+        WHERE upload_id = ${uploadId}
+      `;
+
+      if (remainingRows[0].count === 0) {
+        // 남은 row가 없으면 해당 uploads 레코드도 삭제
+        await sql`
+          DELETE FROM uploads
+          WHERE id = ${uploadId}
+            AND company_id = ${companyId}
+        `;
+        deletedUploadIds.push(uploadId);
+      }
     }
+
+    const responseMessage =
+      deletedUploadIds.length > 0
+        ? `${result.length}개의 데이터가 성공적으로 삭제되었습니다. (발주서 ${deletedUploadIds.length}개도 함께 삭제됨)`
+        : `${result.length}개의 데이터가 성공적으로 삭제되었습니다.`;
 
     return NextResponse.json({
       success: true,
-      message: `${result.length}개의 데이터가 성공적으로 삭제되었습니다.`,
+      message: responseMessage,
       deletedCount: result.length,
-      deletedIds: result.map((r) => r.id),
+      deletedIds: result.map((r: any) => r.id),
+      deletedUploadIds,
     });
   } catch (error: any) {
     console.error("데이터 삭제 실패:", error);

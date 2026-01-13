@@ -424,10 +424,13 @@ export async function POST(request: NextRequest) {
 
             if (idsToUpdate.length > 0) {
               // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
+              // 현재 상태가 "공급중"인 경우에만 업데이트 (뒷단계로 돌아가지 않도록)
+              // "사방넷 다운", "배송중" 상태는 유지됨 (조건에 포함되지 않으므로 업데이트되지 않음)
               await sql`
                 UPDATE upload_rows
                 SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
                 WHERE id = ANY(${idsToUpdate})
+                  AND (row_data->>'주문상태' IS NULL OR row_data->>'주문상태' = '공급중')
               `;
             }
           } catch (updateError) {
@@ -1010,10 +1013,12 @@ export async function POST(request: NextRequest) {
 
         if (idsToUpdate.length > 0) {
           // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
+          // 현재 상태가 "공급중"인 경우에만 업데이트 (뒷단계로 돌아가지 않도록)
           await sql`
             UPDATE upload_rows
             SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
             WHERE id = ANY(${idsToUpdate})
+              AND (row_data->>'주문상태' IS NULL OR row_data->>'주문상태' = '공급중')
           `;
         }
       } catch (updateError) {
