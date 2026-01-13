@@ -48,6 +48,11 @@ const menuNames: {path: string; name: string; icon: IconType}[] = [
     name: "매출 정산 관리",
     icon: IoStatsChart,
   },
+  {
+    path: "/mall-promotions",
+    name: "쇼핑몰 프로모션 관리",
+    icon: IoPricetag,
+  },
 ];
 
 const adminMenuNames: {path: string; name: string; icon: IconType}[] = [
@@ -65,11 +70,6 @@ const adminMenuNames: {path: string; name: string; icon: IconType}[] = [
     path: "/vendors",
     name: "납품업체 관리",
     icon: IoBusiness,
-  },
-  {
-    path: "/mall-promotions",
-    name: "쇼핑몰 프로모션 관리",
-    icon: IoPricetag,
   },
 ];
 

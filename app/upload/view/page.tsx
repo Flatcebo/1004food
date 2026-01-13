@@ -1038,18 +1038,12 @@ function FileViewContent() {
           isConfirmed: true,
         };
 
-        console.log("📤 서버 업데이트 요청 데이터:", {
-          fileId: requestData.fileId,
-          vendorName: requestData.vendorName,
-          mallId: requestData.mallId,
-          confirmedMallId: confirmedMallId,
-          confirmedVendorName: confirmedVendorName,
-        });
-
-        // console.log("서버 업데이트 요청 데이터:", {
+        // console.log("📤 서버 업데이트 요청 데이터:", {
         //   fileId: requestData.fileId,
-        //   rowCount: requestData.tableData.length - 1,
-        //   productCodeMapSize: Object.keys(requestData.productCodeMap).length,
+        //   vendorName: requestData.vendorName,
+        //   mallId: requestData.mallId,
+        //   confirmedMallId: confirmedMallId,
+        //   confirmedVendorName: confirmedVendorName,
         // });
 
         // company-id 헤더 포함
