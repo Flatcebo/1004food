@@ -29,7 +29,7 @@ export function useUploadData() {
   const todayDate = getTodayDate();
   const [uploadTimeFrom, setUploadTimeFrom] = useState<string>(todayDate);
   const [uploadTimeTo, setUploadTimeTo] = useState<string>(todayDate);
-  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [itemsPerPage, setItemsPerPage] = useState(1000);
 
   // 실제 적용되는 필터 (검색 버튼 클릭 시 적용)
   const [appliedType, setAppliedType] = useState<string>("");
@@ -44,7 +44,7 @@ export function useUploadData() {
     useState<string>(todayDate);
   const [appliedUploadTimeTo, setAppliedUploadTimeTo] =
     useState<string>(todayDate);
-  const [appliedItemsPerPage, setAppliedItemsPerPage] = useState(20);
+  const [appliedItemsPerPage, setAppliedItemsPerPage] = useState(1000);
 
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -393,7 +393,7 @@ export function useUploadData() {
     setSearchValue("");
     setUploadTimeFrom(todayDate);
     setUploadTimeTo(todayDate);
-    setItemsPerPage(20);
+    setItemsPerPage(1000);
     setAppliedType("");
     setAppliedPostType("");
     setAppliedCompany([]);
@@ -403,7 +403,7 @@ export function useUploadData() {
     setAppliedSearchValue("");
     setAppliedUploadTimeFrom(todayDate);
     setAppliedUploadTimeTo(todayDate);
-    setAppliedItemsPerPage(20);
+    setAppliedItemsPerPage(1000);
     setCurrentPage(1);
     // 필터 초기화 시 자동 필터링 플래그도 리셋
     autoFilterAppliedRef.current = false;
