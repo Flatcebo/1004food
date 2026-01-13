@@ -31,7 +31,9 @@ export default function MultiSelectDropdown({
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [filteredOptions, setFilteredOptions] = useState<Option[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState(-1);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // 드롭다운 외부 클릭 시 닫기
   useEffect(() => {
@@ -68,23 +70,62 @@ export default function MultiSelectDropdown({
     const newValue = e.target.value;
     setInputValue(newValue);
     setIsOpen(true);
+    setSelectedIndex(-1);
   };
 
   const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && inputValue.trim() !== "") {
-      // 입력된 값과 정확히 일치하는 옵션 찾기
-      const exactMatch = normalizedOptions.find(
-        (opt) =>
-          opt.label.toLowerCase() === inputValue.toLowerCase() &&
-          !selectedValues.some((v) => String(v) === String(opt.value))
-      );
-      if (exactMatch) {
-        handleToggleOption(exactMatch.value);
+    if (!isOpen || filteredOptions.length === 0) {
+      if (e.key === "Enter" && inputValue.trim() !== "") {
+        // 입력된 값과 정확히 일치하는 옵션 찾기
+        const exactMatch = normalizedOptions.find(
+          (opt) =>
+            opt.label.toLowerCase() === inputValue.toLowerCase() &&
+            !selectedValues.some((v) => String(v) === String(opt.value))
+        );
+        if (exactMatch) {
+          handleToggleOption(exactMatch.value);
+          setInputValue("");
+        }
+      } else if (e.key === "Escape") {
+        setIsOpen(false);
         setInputValue("");
       }
-    } else if (e.key === "Escape") {
-      setIsOpen(false);
-      setInputValue("");
+      return;
+    }
+
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        setSelectedIndex((prev) =>
+          prev < filteredOptions.length - 1 ? prev + 1 : prev
+        );
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        setSelectedIndex((prev) => (prev > 0 ? prev - 1 : -1));
+        break;
+      case "Enter":
+        e.preventDefault();
+        if (selectedIndex >= 0 && selectedIndex < filteredOptions.length) {
+          // 키보드로 선택된 항목 선택
+          handleToggleOption(filteredOptions[selectedIndex].value);
+        } else if (inputValue.trim() !== "") {
+          // 입력된 값과 정확히 일치하는 옵션 찾기
+          const exactMatch = normalizedOptions.find(
+            (opt) =>
+              opt.label.toLowerCase() === inputValue.toLowerCase() &&
+              !selectedValues.some((v) => String(v) === String(opt.value))
+          );
+          if (exactMatch) {
+            handleToggleOption(exactMatch.value);
+          }
+        }
+        break;
+      case "Escape":
+        setIsOpen(false);
+        setInputValue("");
+        setSelectedIndex(-1);
+        break;
     }
   };
 
@@ -108,7 +149,21 @@ export default function MultiSelectDropdown({
       );
       setFilteredOptions(filtered);
     }
+    setSelectedIndex(-1);
   }, [inputValue, normalizedOptions, enableAutocomplete]);
+
+  // 선택된 인덱스가 변경될 때 스크롤 처리
+  useEffect(() => {
+    if (selectedIndex >= 0 && dropdownRef.current) {
+      const selectedElement = dropdownRef.current.children[selectedIndex] as HTMLElement;
+      if (selectedElement) {
+        selectedElement.scrollIntoView({
+          block: "nearest",
+          behavior: "smooth",
+        });
+      }
+    }
+  }, [selectedIndex]);
 
   // 드롭다운이 열릴 때 인풋에 포커스
   useEffect(() => {
@@ -252,18 +307,25 @@ export default function MultiSelectDropdown({
             )}
           </div>
           {isOpen && (
-            <div className="absolute z-9999 mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-48 overflow-y-auto min-w-[150px]">
+            <div
+              ref={dropdownRef}
+              className="absolute z-9999 mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-48 overflow-y-auto min-w-[150px]"
+            >
               {filteredOptions && filteredOptions.length > 0 ? (
-                filteredOptions.map((option) => {
+                filteredOptions.map((option, index) => {
                   const isChecked = isOptionSelected(option.value);
+                  const isHighlighted = index === selectedIndex;
                   return (
                     <div
                       key={String(option.value)}
-                      className="flex items-center px-3 py-2 hover:bg-gray-100 cursor-pointer"
+                      className={`flex items-center px-3 py-2 hover:bg-gray-100 cursor-pointer ${
+                        isHighlighted ? "bg-blue-50" : ""
+                      }`}
                       onClick={(e) => {
                         e.stopPropagation();
                         handleToggleOption(option.value);
                       }}
+                      onMouseEnter={() => setSelectedIndex(index)}
                     >
                       <input
                         type="checkbox"
