@@ -57,7 +57,7 @@ export default function App() {
   });
 
   const [loading, setLoading] = useState(true);
-  
+
   // Line 컨트롤러 등록을 위해 Line 컴포넌트를 한 번 렌더링 (숨김)
   useEffect(() => {
     // Line 컴포넌트가 import되면 자동으로 Line 컨트롤러가 등록됨
@@ -384,7 +384,13 @@ export default function App() {
             {chartData.dailySalesProfit.length > 0 ? (
               <div className="h-[300px] relative">
                 {/* Line 컨트롤러 등록을 위한 숨김 Line 차트 */}
-                <div style={{position: "absolute", visibility: "hidden", height: 0}}>
+                <div
+                  style={{
+                    position: "absolute",
+                    visibility: "hidden",
+                    height: 0,
+                  }}
+                >
                   <Line
                     data={{
                       labels: [],

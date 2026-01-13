@@ -568,9 +568,11 @@ export async function POST(request: NextRequest) {
           const headerStr =
             typeof header === "string" ? header : String(header || "");
 
-          // 빈 헤더인 경우 빈 값 반환
+          // 빈 헤더인 경우 주문 수량 반환
           if (!headerStr || headerStr.trim() === "") {
-            return "";
+            const quantity =
+              row["수량"] || row["주문수량"] || row["quantity"] || 1;
+            return String(quantity);
           }
 
           let value = mapDataToTemplate(row, headerStr, {
@@ -1117,9 +1119,11 @@ export async function POST(request: NextRequest) {
             const headerStr =
               typeof header === "string" ? header : String(header || "");
 
-            // 빈 헤더인 경우 빈 값 반환
+            // 빈 헤더인 경우 주문 수량 반환
             if (!headerStr || headerStr.trim() === "") {
-              return "";
+              const quantity =
+                row["수량"] || row["주문수량"] || row["quantity"] || 1;
+              return String(quantity);
             }
 
             let value = mapDataToTemplate(row, headerStr, {
