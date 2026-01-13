@@ -1471,21 +1471,8 @@ function FileViewContent() {
 
           setTableData(updatedTableData);
 
-          // 업체명 초기값 설정
-          const vendorIdx = headerRow.findIndex(
-            (h: any) => h && typeof h === "string" && h === "업체명"
-          );
-          if (
-            vendorIdx !== -1 &&
-            updatedTableData[1] &&
-            updatedTableData[1][vendorIdx]
-          ) {
-            const initialVendorName = String(
-              updatedTableData[1][vendorIdx]
-            ).trim();
-            setVendorName(initialVendorName);
-            setConfirmedVendorName(initialVendorName); // 초기값도 확인된 값으로 설정
-          }
+          // 업체명은 드롭다운에서 선택해야만 적용되도록 변경
+          // 엑셀 파일에서 자동으로 읽어서 설정하지 않음
         } else {
           setTableData(parsedFile.tableData);
         }
@@ -2753,13 +2740,6 @@ function FileViewContent() {
                                     );
                                   }}
                                   onClose={() => setRecommendIdx(null)}
-                                  onDirectInput={(inputName, inputRowIdx) => {
-                                    openDirectInputModal(
-                                      inputName,
-                                      inputRowIdx
-                                    );
-                                    setRecommendIdx(null);
-                                  }}
                                   onDelete={async (item) => {
                                     if (!item.id) return;
 

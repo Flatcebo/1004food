@@ -68,7 +68,7 @@ export default function BaseFilter({
   ],
   uploadTimeFrom = "",
   uploadTimeTo = "",
-  itemsPerPage = 20,
+  itemsPerPage = 1000,
   onTypeChange,
   onPostTypeChange,
   onCategoryChange,
@@ -144,7 +144,7 @@ export default function BaseFilter({
             label="업체명"
             options={filters.companies || []}
             selectedValues={selectedCompany}
-            onChange={(values) => onCompanyChange(values.map(v => String(v)))}
+            onChange={(values) => onCompanyChange(values.map((v) => String(v)))}
             placeholder="전체"
           />
         )}
@@ -153,7 +153,7 @@ export default function BaseFilter({
             label="매입처명"
             options={filters.vendors || []}
             selectedValues={selectedVendor}
-            onChange={(values) => onVendorChange(values.map(v => String(v)))}
+            onChange={(values) => onVendorChange(values.map((v) => String(v)))}
             placeholder="전체"
           />
         )}

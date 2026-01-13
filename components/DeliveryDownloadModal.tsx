@@ -62,7 +62,11 @@ export default function DeliveryDownloadModal({
     }
   };
 
-  const handleDownload = async (vendorName: string, uploadId: number, fileName: string) => {
+  const handleDownload = async (
+    vendorName: string,
+    uploadId: number,
+    fileName: string
+  ) => {
     const downloadKey = `${vendorName}_${uploadId}`;
     setDownloading(downloadKey);
     try {
@@ -88,7 +92,9 @@ export default function DeliveryDownloadModal({
       const contentDisposition = response.headers.get("Content-Disposition");
       let downloadFileName = `${vendorName}_운송장.xlsx`;
       if (contentDisposition) {
-        const fileNameMatch = contentDisposition.match(/filename\*=UTF-8''(.+)/);
+        const fileNameMatch = contentDisposition.match(
+          /filename\*=UTF-8''(.+)/
+        );
         if (fileNameMatch) {
           downloadFileName = decodeURIComponent(fileNameMatch[1]);
         } else {
@@ -146,7 +152,7 @@ export default function DeliveryDownloadModal({
         {/* 업체 리스트 */}
         {!loading && vendors.length === 0 && (
           <div className="text-center py-8">
-            <p className="text-gray-600">금일 업로드한 업체가 없습니다.</p>
+            <p className="text-gray-600">어제~오늘 업로드한 업체가 없습니다.</p>
           </div>
         )}
 
@@ -160,7 +166,7 @@ export default function DeliveryDownloadModal({
                 <h3 className="text-lg font-semibold text-gray-800 mb-4">
                   {vendor.vendorName}
                 </h3>
-                
+
                 {vendor.files.length === 0 ? (
                   <p className="text-sm text-gray-500">파일이 없습니다.</p>
                 ) : (
@@ -170,7 +176,7 @@ export default function DeliveryDownloadModal({
                         file.totalOrders > 0
                           ? (file.deliveryOrders / file.totalOrders) * 100
                           : 0;
-                      
+
                       // progress가 1% 이상이면 다운로드 가능
                       const canDownload = progress >= 1;
                       const downloadKey = `${vendor.vendorName}_${file.uploadId}`;
@@ -187,7 +193,8 @@ export default function DeliveryDownloadModal({
                               </div>
                               <div className="flex items-center gap-4 text-xs text-gray-600">
                                 <span>
-                                  운송장 입력: <strong>{file.deliveryOrders}</strong>건
+                                  운송장 입력:{" "}
+                                  <strong>{file.deliveryOrders}</strong>건
                                 </span>
                                 <span>
                                   총 주문: <strong>{file.totalOrders}</strong>건
@@ -195,7 +202,13 @@ export default function DeliveryDownloadModal({
                               </div>
                             </div>
                             <button
-                              onClick={() => handleDownload(vendor.vendorName, file.uploadId, file.fileName)}
+                              onClick={() =>
+                                handleDownload(
+                                  vendor.vendorName,
+                                  file.uploadId,
+                                  file.fileName
+                                )
+                              }
                               disabled={
                                 downloading === downloadKey || !canDownload
                               }

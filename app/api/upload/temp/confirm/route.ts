@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
         WHERE table_name = 'uploads' 
         AND column_name = 'vendor_name'
       `;
-      
+
       if (vendorNameColumnExists.length === 0) {
         await sql`
           ALTER TABLE uploads 
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
         WHERE table_name = 'uploads' 
         AND column_name = 'header_order'
       `;
-      
+
       if (headerOrderColumnExists.length === 0) {
         await sql`
           ALTER TABLE uploads 
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
         WHERE table_name = 'uploads' 
         AND column_name = 'header_format'
       `;
-      
+
       if (headerFormatColumnExists.length === 0) {
         await sql`
           ALTER TABLE uploads 
@@ -99,14 +99,14 @@ export async function POST(request: NextRequest) {
         WHERE table_name = 'upload_rows' 
         AND column_name = 'mall_id'
       `;
-      
+
       if (mallIdColumnExists.length === 0) {
         await sql`
           ALTER TABLE upload_rows 
           ADD COLUMN mall_id INTEGER REFERENCES mall(id) ON DELETE SET NULL
         `;
         console.log("✅ upload_rows 테이블에 mall_id 컬럼 추가 완료");
-        
+
         // 인덱스 생성
         await sql`
           CREATE INDEX IF NOT EXISTS idx_upload_rows_mall_id ON upload_rows(mall_id)
@@ -163,7 +163,8 @@ export async function POST(request: NextRequest) {
     // 한국 시간(KST) 생성
     const koreaTime = new Date(Date.now() + 9 * 60 * 60 * 1000);
 
-    // 모든 업체명 추출하여 내부코드 일괄 생성
+    // 사용자가 드롭다운에서 선택한 업체명을 기반으로 내부코드 일괄 생성
+    // 각 파일의 모든 행에 대해 동일한 업체명(file.vendor_name) 사용
     const allVendorNames: string[] = [];
     confirmedFiles.forEach((file) => {
       const tableData = file.table_data;
@@ -171,23 +172,13 @@ export async function POST(request: NextRequest) {
         return;
       }
 
-      const headerRow = tableData[0];
-      const vendorIdx = headerRow.findIndex(
-        (h: any) => h === "업체명" || h === "업체"
-      );
+      // 사용자가 드롭다운에서 선택한 업체명 사용
+      const vendorName = file.vendor_name || "";
+      const rowCount = tableData.length - 1; // 헤더 제외한 데이터 행 개수
 
-      if (vendorIdx === -1) {
-        // 업체명 컬럼이 없으면 빈 문자열
-        const rowCount = tableData.length - 1;
-        for (let i = 0; i < rowCount; i++) {
-          allVendorNames.push("");
-        }
-      } else {
-        // 각 row의 업체명 추출
-        tableData.slice(1).forEach((row: any[]) => {
-          const vendorName = String(row[vendorIdx] || "").trim();
-          allVendorNames.push(vendorName);
-        });
+      // 각 행에 대해 동일한 업체명 사용
+      for (let i = 0; i < rowCount; i++) {
+        allVendorNames.push(vendorName);
       }
     });
 
@@ -210,7 +201,6 @@ export async function POST(request: NextRequest) {
     const results = [];
     let globalCodeIndex = 0;
 
-
     for (const file of confirmedFiles) {
       const tableData = file.table_data;
       const productCodeMap = file.product_code_map || {};
@@ -227,8 +217,14 @@ export async function POST(request: NextRequest) {
       const dataRows = tableData.slice(1);
 
       // 디버깅: 각 파일의 헤더 확인
-      console.log(`📋 파일 "${file.file_name}"의 원본 헤더 (DB 저장용):`, file.original_header);
-      console.log(`📋 파일 "${file.file_name}"의 사용할 헤더 (데이터 처리용):`, headerRow);
+      console.log(
+        `📋 파일 "${file.file_name}"의 원본 헤더 (DB 저장용):`,
+        file.original_header
+      );
+      console.log(
+        `📋 파일 "${file.file_name}"의 사용할 헤더 (데이터 처리용):`,
+        headerRow
+      );
 
       // 상품명 인덱스 찾기
       const nameIdx = headerRow.findIndex(
@@ -317,27 +313,11 @@ export async function POST(request: NextRequest) {
         return rowObj;
       });
 
-      // 업체명 확인 및 디버깅
-      // file.vendor_name이 없으면 table_data에서 업체명 추출
+      // 업체명은 드롭다운에서 선택해야만 적용되도록 변경
+      // 엑셀 파일에서 자동으로 읽어서 설정하지 않음
+      // file.vendor_name만 사용 (드롭다운에서 선택한 값)
       let vendorName = file.vendor_name || null;
-      
-      if (!vendorName || vendorName.trim() === "") {
-        // table_data에서 업체명 추출
-        const vendorIdx = headerRow.findIndex(
-          (h: any) => h === "업체명" || h === "업체"
-        );
-        
-        if (vendorIdx !== -1 && dataRows.length > 0 && dataRows[0][vendorIdx]) {
-          vendorName = String(dataRows[0][vendorIdx]).trim();
-          console.log(`📝 file.vendor_name이 없어서 table_data에서 업체명 추출: "${vendorName}"`);
-        } else if (rowObjects.length > 0 && rowObjects[0]["업체명"]) {
-          vendorName = String(rowObjects[0]["업체명"]).trim();
-          console.log(`📝 file.vendor_name이 없어서 rowObjects에서 업체명 추출: "${vendorName}"`);
-        } else {
-          console.warn(`⚠️ 업체명을 찾을 수 없습니다. file.vendor_name: ${file.vendor_name}, vendorIdx: ${vendorIdx}`);
-        }
-      }
-      
+
       console.log("💾 저장할 데이터 샘플:", {
         fileName: file.file_name,
         rowCount: rowObjects.length,
@@ -357,17 +337,19 @@ export async function POST(request: NextRequest) {
         try {
           const trimmedVendorName = vendorName.trim();
           console.log(`🔍 mall 조회 시작: vendor_name="${trimmedVendorName}"`);
-          
+
           // 정확한 매칭 시도
           let mallResult = await sql`
             SELECT id, name FROM mall 
             WHERE name = ${trimmedVendorName}
             LIMIT 1
           `;
-          
+
           if (mallResult.length > 0) {
             mallId = mallResult[0].id;
-            console.log(`✅ 업체명 "${trimmedVendorName}"에 해당하는 mall 찾음: mall_id=${mallId}, mall_name="${mallResult[0].name}"`);
+            console.log(
+              `✅ 업체명 "${trimmedVendorName}"에 해당하는 mall 찾음: mall_id=${mallId}, mall_name="${mallResult[0].name}"`
+            );
           } else {
             // 대소문자 구분 없이 매칭 시도
             mallResult = await sql`
@@ -375,34 +357,50 @@ export async function POST(request: NextRequest) {
               WHERE LOWER(TRIM(name)) = LOWER(${trimmedVendorName})
               LIMIT 1
             `;
-            
+
             if (mallResult.length > 0) {
               mallId = mallResult[0].id;
-              console.log(`✅ 업체명 "${trimmedVendorName}"에 해당하는 mall 찾음 (대소문자 무시): mall_id=${mallId}, mall_name="${mallResult[0].name}"`);
+              console.log(
+                `✅ 업체명 "${trimmedVendorName}"에 해당하는 mall 찾음 (대소문자 무시): mall_id=${mallId}, mall_name="${mallResult[0].name}"`
+              );
             } else {
-              console.warn(`⚠️ 업체명 "${trimmedVendorName}"에 해당하는 mall을 찾을 수 없습니다.`);
+              console.warn(
+                `⚠️ 업체명 "${trimmedVendorName}"에 해당하는 mall을 찾을 수 없습니다.`
+              );
               // mall 테이블의 모든 name 목록 출력 (디버깅용)
-              const allMalls = await sql`SELECT id, name FROM mall ORDER BY name LIMIT 20`;
-              console.log("mall 테이블 샘플 (처음 20개):", allMalls.map((m: any) => ({id: m.id, name: m.name})));
+              const allMalls =
+                await sql`SELECT id, name FROM mall ORDER BY name LIMIT 20`;
+              console.log(
+                "mall 테이블 샘플 (처음 20개):",
+                allMalls.map((m: any) => ({id: m.id, name: m.name}))
+              );
             }
           }
         } catch (error) {
           console.error("mall 조회 실패:", error);
         }
       } else {
-        console.warn("⚠️ vendor_name이 없습니다. file.vendor_name:", file.vendor_name);
+        console.warn(
+          "⚠️ vendor_name이 없습니다. file.vendor_name:",
+          file.vendor_name
+        );
       }
-      
-      console.log(`📝 저장 전 확인: vendorName="${vendorName}", mallId=${mallId}`);
+
+      console.log(
+        `📝 저장 전 확인: vendorName="${vendorName}", mallId=${mallId}`
+      );
 
       // 헤더 순서 및 양식 정보 구성
       // 원본 헤더는 DB에만 저장하고, 실제 데이터 처리에는 사용하지 않음
       // header_order: 원본 헤더 순서 (DB 저장용)
       // header_format: 상세 양식 정보 객체 (원본 헤더 포함)
-      const originalHeader = file.original_header && Array.isArray(file.original_header) && file.original_header.length > 0
-        ? file.original_header
-        : headerRow; // 원본 헤더가 없으면 현재 헤더 사용 (하위 호환성)
-      
+      const originalHeader =
+        file.original_header &&
+        Array.isArray(file.original_header) &&
+        file.original_header.length > 0
+          ? file.original_header
+          : headerRow; // 원본 헤더가 없으면 현재 헤더 사용 (하위 호환성)
+
       const headerFormat = {
         headers: originalHeader, // 원본 헤더 내용 배열 (DB 저장용)
         headerIndex: file.header_index || {}, // 헤더 인덱스 정보 (예: {nameIdx: 0, ...})
@@ -441,7 +439,9 @@ export async function POST(request: NextRequest) {
 
       const uploadId = uploadResult[0].id;
       const createdAt = uploadResult[0].created_at;
-      console.log(`✅ uploads 저장 완료: upload_id=${uploadId}, vendor_name=${vendorName}`);
+      console.log(
+        `✅ uploads 저장 완료: upload_id=${uploadId}, vendor_name=${vendorName}`
+      );
 
       // upload_rows 테이블에 vendor_name 컬럼이 있는지 확인하고 없으면 추가
       try {
@@ -451,7 +451,7 @@ export async function POST(request: NextRequest) {
           WHERE table_name = 'upload_rows' 
           AND column_name = 'vendor_name'
         `;
-        
+
         if (vendorNameColumnExists.length === 0) {
           await sql`
             ALTER TABLE upload_rows 
@@ -471,7 +471,7 @@ export async function POST(request: NextRequest) {
           WHERE table_name = 'upload_rows' 
           AND column_name = 'row_order'
         `;
-        
+
         if (rowOrderColumnExists.length === 0) {
           await sql`
             ALTER TABLE upload_rows 
@@ -491,7 +491,9 @@ export async function POST(request: NextRequest) {
 
         // 첫 번째 row만 상세 로그 출력
         if (index === 0) {
-          console.log(`📝 upload_rows 저장 시작: upload_id=${uploadId}, mall_id=${mallId}, vendor_name="${vendorName}"`);
+          console.log(
+            `📝 upload_rows 저장 시작: upload_id=${uploadId}, mall_id=${mallId}, vendor_name="${vendorName}"`
+          );
         }
 
         return sql`
@@ -511,20 +513,28 @@ export async function POST(request: NextRequest) {
       });
 
       const rowResults = await Promise.all(insertPromises);
-      
+
       // 저장 후 검증: 실제로 저장된 값 확인
       if (rowResults.length > 0) {
         const firstRowResult = rowResults[0][0];
-        console.log(`✅ upload_rows 저장 완료: 첫 번째 row - id=${firstRowResult.id}, mall_id=${firstRowResult.mall_id}, vendor_name="${firstRowResult.vendor_name}"`);
-        
+        console.log(
+          `✅ upload_rows 저장 완료: 첫 번째 row - id=${firstRowResult.id}, mall_id=${firstRowResult.mall_id}, vendor_name="${firstRowResult.vendor_name}"`
+        );
+
         // 전체 저장된 row 중 mall_id가 있는지 확인
-        const savedMallIds = rowResults.map((r: any) => r[0].mall_id).filter((id: any) => id !== null);
-        console.log(`📊 저장 통계: 총 ${rowResults.length}개 row 중 ${savedMallIds.length}개에 mall_id가 설정됨`);
-        
+        const savedMallIds = rowResults
+          .map((r: any) => r[0].mall_id)
+          .filter((id: any) => id !== null);
+        console.log(
+          `📊 저장 통계: 총 ${rowResults.length}개 row 중 ${savedMallIds.length}개에 mall_id가 설정됨`
+        );
+
         if (savedMallIds.length === 0 && vendorName) {
-          console.error(`❌ 경고: vendor_name="${vendorName}"이 있지만 mall_id가 저장되지 않았습니다!`);
+          console.error(
+            `❌ 경고: vendor_name="${vendorName}"이 있지만 mall_id가 저장되지 않았습니다!`
+          );
         }
-        
+
         // DB에서 실제로 저장된 값 다시 조회하여 검증
         try {
           const verifyResult = await sql`
@@ -533,11 +543,14 @@ export async function POST(request: NextRequest) {
             WHERE upload_id = ${uploadId} 
             LIMIT 5
           `;
-          console.log(`🔍 DB 검증 결과 (upload_id=${uploadId}):`, verifyResult.map((r: any) => ({
-            id: r.id,
-            mall_id: r.mall_id,
-            vendor_name: r.vendor_name
-          })));
+          console.log(
+            `🔍 DB 검증 결과 (upload_id=${uploadId}):`,
+            verifyResult.map((r: any) => ({
+              id: r.id,
+              mall_id: r.mall_id,
+              vendor_name: r.vendor_name,
+            }))
+          );
         } catch (error) {
           console.error("DB 검증 쿼리 실패:", error);
         }

@@ -25,7 +25,8 @@ export default function CodeEditWindow({
   // 현재 row 데이터에서 주요 필드 추출
   const currentCode = String(currentRowData?.매핑코드 || "");
   const currentProductName = String(currentRowData?.상품명 || "");
-  const currentProductId = currentRowData?.productId || currentRowData?.["productId"];
+  const currentProductId =
+    currentRowData?.productId || currentRowData?.["productId"];
   const [codes, setCodes] = useState<CodeItem[]>([]);
   const [currentCodeData, setCurrentCodeData] = useState<CodeItem | null>(null);
   const [codeSearch, setCodeSearch] = useState<string>("");
@@ -164,7 +165,7 @@ export default function CodeEditWindow({
           <div className="flex flex-col">
             <h2 className="text-xl font-bold">매핑코드 수정</h2>
             {currentProductName && (
-              <span className="text-xs text-gray-500 mt-1">
+              <span className="text-xs text-blue-600 font-medium mt-1">
                 주문 상품명: {currentProductName}
               </span>
             )}

@@ -1247,32 +1247,9 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             (h: any) => h && typeof h === "string" && h.includes("상품명")
           );
 
-          // 업체명 인덱스 찾기 및 수집
-          const vendorIdx = headerRow.findIndex(
-            (h: any) =>
-              h &&
-              typeof h === "string" &&
-              (h.includes("업체명") ||
-                h.includes("업체") ||
-                h.includes("거래처명") ||
-                h.includes("고객주문처명") ||
-                h.includes("매입처명"))
-          );
-
-          // 업체명 수집 (고유한 업체명들)
-          const vendorNames = new Set<string>();
-          if (vendorIdx !== -1 && jsonData.length > 1) {
-            for (let i = 1; i < jsonData.length; i++) {
-              const vendorName = String(jsonData[i][vendorIdx] || "").trim();
-              if (vendorName) {
-                vendorNames.add(vendorName);
-              }
-            }
-          }
-          // 업체명을 쉼표로 구분하여 하나의 문자열로 합치기 (최대 3개까지만)
-          const vendorNameStr =
-            Array.from(vendorNames).slice(0, 3).join(", ") +
-            (vendorNames.size > 3 ? " 외" : "");
+          // 업체명은 드롭다운에서 선택해야만 적용되도록 변경
+          // 엑셀 파일에서 자동으로 읽어서 설정하지 않음
+          const vendorNameStr = undefined;
 
           // 파일 ID 카운터 증가 및 ID 생성
           const {fileCounter, setFileCounter, uploadedFiles} = get();
@@ -1304,7 +1281,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             productCodeMap: {},
             userId: useAuthStore.getState().user?.id || "temp-user-001", // 임시: 로그인 기능 미구현 시 임시 사용자 ID 사용
             uploadTime: new Date().toISOString(),
-            vendorName: vendorNameStr || undefined, // 업체명 (없으면 undefined)
+            vendorName: undefined, // 업체명은 드롭다운에서 선택해야만 적용됨 (엑셀 파일에서 자동으로 읽지 않음)
             originalHeader: originalHeader, // 원본 파일의 헤더 순서 (정규화 전)
           };
 

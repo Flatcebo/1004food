@@ -172,7 +172,6 @@ export default function OrderModalContent({
                 // 나머지 로직은 부모 컴포넌트에서 처리
                 handleSelectSuggest(selectedName, selectedCode, selectedItem);
               }}
-              onDirectInput={openDirectInputModal}
               onCloseRecommend={onCloseRecommend}
             />
           )}

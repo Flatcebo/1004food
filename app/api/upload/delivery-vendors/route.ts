@@ -4,9 +4,9 @@ import {getCompanyIdFromRequest, getUserIdFromRequest} from "@/lib/company";
 
 /**
  * GET /api/upload/delivery-vendors
- * 금일 업로드한 업체 리스트와 통계 조회
+ * 어제~오늘 업로드한 업체 리스트와 통계 조회
  * - 일반 유저: assigned_vendor_ids에 있는 업체만
- * - 관리자: 금일 저장된 주문의 모든 업체
+ * - 관리자: 어제~오늘 저장된 주문의 모든 업체
  */
 export async function GET(request: NextRequest) {
   try {
@@ -56,16 +56,21 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 금일 날짜 계산 (한국 시간 기준, 00:00:00 ~ 23:59:59)
+    // 어제~오늘 날짜 계산 (한국 시간 기준)
     const today = new Date();
     const koreaTime = new Date(today.getTime() + 9 * 60 * 60 * 1000); // UTC+9
-    const todayStart = new Date(koreaTime);
-    todayStart.setHours(0, 0, 0, 0);
+    
+    // 어제 시작 시간 (00:00:00)
+    const yesterdayStart = new Date(koreaTime);
+    yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+    yesterdayStart.setHours(0, 0, 0, 0);
+    
+    // 오늘 종료 시간 (23:59:59)
     const todayEnd = new Date(koreaTime);
     todayEnd.setHours(23, 59, 59, 999);
     
     // UTC로 변환
-    const todayStartUTC = new Date(todayStart.getTime() - 9 * 60 * 60 * 1000);
+    const yesterdayStartUTC = new Date(yesterdayStart.getTime() - 9 * 60 * 60 * 1000);
     const todayEndUTC = new Date(todayEnd.getTime() - 9 * 60 * 60 * 1000);
 
     // 금일 업로드된 주문에서 업체명 추출
@@ -79,7 +84,7 @@ export async function GET(request: NextRequest) {
         FROM upload_rows ur
         INNER JOIN uploads u ON ur.upload_id = u.id
         WHERE u.company_id = ${companyId}
-          AND u.created_at >= ${todayStartUTC.toISOString()}
+          AND u.created_at >= ${yesterdayStartUTC.toISOString()}
           AND u.created_at <= ${todayEndUTC.toISOString()}
           AND ur.row_data->>'업체명' IS NOT NULL
           AND ur.row_data->>'업체명' != ''
@@ -117,7 +122,7 @@ export async function GET(request: NextRequest) {
         FROM upload_rows ur
         INNER JOIN uploads u ON ur.upload_id = u.id
         WHERE u.company_id = ${companyId}
-          AND u.created_at >= ${todayStartUTC.toISOString()}
+          AND u.created_at >= ${yesterdayStartUTC.toISOString()}
           AND u.created_at <= ${todayEndUTC.toISOString()}
           AND ur.row_data->>'업체명' = ANY(${vendorNames})
           AND ur.row_data->>'업체명' IS NOT NULL
@@ -150,7 +155,7 @@ export async function GET(request: NextRequest) {
           FROM upload_rows ur
           INNER JOIN uploads u ON ur.upload_id = u.id
           WHERE u.company_id = ${companyId}
-            AND u.created_at >= ${todayStartUTC.toISOString()}
+            AND u.created_at >= ${yesterdayStartUTC.toISOString()}
             AND u.created_at <= ${todayEndUTC.toISOString()}
             AND ur.row_data->>'업체명' = ${vendorName}
           GROUP BY u.id, u.file_name, u.created_at

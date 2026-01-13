@@ -12,7 +12,6 @@ interface RecommendModalProps {
   rowIdx: number;
   onSelect: (name: string, code: string, item?: any, id?: number) => void;
   onClose: () => void;
-  onDirectInput: (name: string, rowIdx: number) => void;
   onDelete?: (item: any) => void;
 }
 
@@ -23,7 +22,6 @@ export default function RecommendModal({
   rowIdx,
   onSelect,
   onClose,
-  onDirectInput,
   onDelete,
 }: RecommendModalProps) {
   if (!open || recommendList.length === 0) return null;
@@ -45,7 +43,7 @@ export default function RecommendModal({
         <div className="font-bold text-base mb-4 text-center">
           비슷한 상품명 추천
           {name && (
-            <div className="text-xs text-gray-500 font-normal mt-1">
+            <div className="text-xs text-blue-600 font-medium mt-1">
               주문 상품명: {name}
             </div>
           )}
@@ -149,18 +147,6 @@ export default function RecommendModal({
               })}
             </tbody>
           </table>
-        </div>
-        <div className="flex justify-between items-center mt-4 text-xs">
-          <button
-            type="button"
-            className="px-3 py-1 bg-gray-200 rounded hover:bg-gray-100 text-gray-600"
-            onClick={() => {
-              onDirectInput(name || "", rowIdx);
-              onClose();
-            }}
-          >
-            직접 입력
-          </button>
         </div>
         <button
           className="absolute top-2 right-4 text-gray-400 hover:text-black text-[24px]"

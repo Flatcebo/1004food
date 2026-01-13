@@ -66,9 +66,76 @@ export async function POST(request: NextRequest) {
     const headers = Array.isArray(templateData.headers)
       ? templateData.headers
       : [];
-    const columnOrder = Array.isArray(templateData.columnOrder)
+    let columnOrder = Array.isArray(templateData.columnOrder)
       ? templateData.columnOrder
       : headers;
+
+    // CJ외주 발주서인 경우 헤더 순서 수정
+    if (isCJOutsource) {
+      // 1. 두 번째 주소 헤더 바로 우측에 빈 열 추가
+      const addressIndices: number[] = [];
+      columnOrder.forEach((h: any, idx: number) => {
+        const headerStr = typeof h === "string" ? h : String(h || "");
+        if (headerStr.includes("주소") && !headerStr.includes("우편")) {
+          addressIndices.push(idx);
+        }
+      });
+
+      // 두 번째 주소 헤더 찾기
+      const secondAddressIndex =
+        addressIndices.length >= 2 ? addressIndices[1] : -1;
+
+      if (secondAddressIndex !== -1) {
+        // 두 번째 주소 다음에 이미 빈 열이 있는지 확인
+        const nextAfterAddress = columnOrder[secondAddressIndex + 1];
+        const isNextEmpty =
+          !nextAfterAddress ||
+          (typeof nextAfterAddress === "string" &&
+            nextAfterAddress.trim() === "");
+
+        // 빈 열이 없을 때만 추가
+        if (!isNextEmpty) {
+          columnOrder = [
+            ...columnOrder.slice(0, secondAddressIndex + 1),
+            "", // 두 번째 주소 바로 다음에 빈 열 추가
+            ...columnOrder.slice(secondAddressIndex + 1),
+          ];
+        }
+      }
+
+      // 2. 박스 뒤에 업체명 열 추가
+      const boxIndex = columnOrder.findIndex((h: any) => {
+        const headerStr = typeof h === "string" ? h : String(h || "");
+        return (
+          headerStr.includes("박스") ||
+          headerStr === "박스" ||
+          headerStr === "박스단위" ||
+          headerStr === "박스정보" ||
+          headerStr === "박스크기"
+        );
+      });
+
+      if (boxIndex !== -1) {
+        // 박스가 마지막 열이거나, 박스 다음에 업체명이 없는 경우에만 추가
+        const hasVendorName = columnOrder.some((h: any, idx: number) => {
+          if (idx <= boxIndex) return false;
+          const headerStr = typeof h === "string" ? h : String(h || "");
+          return (
+            headerStr === "업체명" ||
+            headerStr === "vendor_name" ||
+            headerStr.includes("업체명")
+          );
+        });
+
+        if (!hasVendorName) {
+          columnOrder = [
+            ...columnOrder.slice(0, boxIndex + 1),
+            "업체명", // 업체명 열 추가
+            ...columnOrder.slice(boxIndex + 1),
+          ];
+        }
+      }
+    }
 
     // columnOrder가 비어있거나 유효하지 않은 경우 에러 처리
     if (!columnOrder || columnOrder.length === 0) {
@@ -552,6 +619,23 @@ export async function POST(request: NextRequest) {
         // header가 문자열이 아닌 경우 문자열로 변환
         const headerStr =
           typeof header === "string" ? header : String(header || "");
+
+        // CJ외주 발주서인 경우 특별 처리
+        if (isCJOutsource) {
+          // 빈 헤더인 경우 빈 값 반환
+          if (!headerStr || headerStr.trim() === "") {
+            return "";
+          }
+
+          // 업체명 헤더인 경우 납품업체명(업체명) 값 반환
+          if (
+            headerStr === "업체명" ||
+            headerStr === "vendor_name" ||
+            headerStr.includes("업체명")
+          ) {
+            return row["업체명"] || row["납품업체명"] || "";
+          }
+        }
 
         // preferSabangName 옵션에 따라 사방넷명 또는 상품명 사용
         return mapDataToTemplate(row, headerStr, {

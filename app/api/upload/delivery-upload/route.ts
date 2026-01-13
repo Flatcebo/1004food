@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
     const requiredHeaders = [
       {
         name: "주문번호",
-        aliases: ["주문번호", "ordernumber"],
+        aliases: ["주문번호", "ordernumber", "고객주문번호"],
       },
       {
         name: "운송장번호",
@@ -390,7 +390,7 @@ export async function POST(request: NextRequest) {
       // 업데이트할 데이터 준비
       const updatesToProcess: Array<{
         id: number;
-        update: typeof deliveryUpdates[0];
+        update: (typeof deliveryUpdates)[0];
         currentData: any;
         matchType: string;
       }> = [];

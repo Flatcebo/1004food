@@ -14,7 +14,6 @@ interface DataTableProps {
   onInputCode: (name: string, code: string) => void;
   onRecommendClick: (rowIdx: number, name: string) => void;
   onSelectSuggest: (name: string, code: string, item?: any) => void;
-  onDirectInput: (name: string, rowIdx: number) => void;
   onCloseRecommend: () => void;
 }
 
@@ -30,7 +29,6 @@ export default function DataTable({
   onInputCode,
   onRecommendClick,
   onSelectSuggest,
-  onDirectInput,
   onCloseRecommend,
 }: DataTableProps) {
   if (
@@ -191,7 +189,6 @@ export default function DataTable({
                             rowIdx={i}
                             onSelect={onSelectSuggest}
                             onClose={onCloseRecommend}
-                            onDirectInput={onDirectInput}
                           />
                         )}
                       </div>
