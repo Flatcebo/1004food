@@ -1,7 +1,7 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
 import {getCompanyIdFromRequest} from "@/lib/company";
-import ExcelJS from "exceljs";
+import * as Excel from "exceljs";
 import {mapDataToTemplate, sortExcelData} from "@/utils/excelDataMapping";
 import {copyCellStyle, applyHeaderStyle} from "@/utils/excelStyles";
 import {prepareExcelCellValue} from "@/utils/excelTypeConversion";
@@ -662,9 +662,9 @@ export async function POST(request: NextRequest) {
     // 정렬: 상품명 오름차순 후 수취인명 오름차순
     excelData = sortExcelData(excelData, columnOrder);
 
-    // ExcelJS 워크북 생성
-    const workbook = new ExcelJS.Workbook();
-    let worksheet: ExcelJS.Worksheet;
+    // 엑셀 워크북 및 시트 생성
+    const wb = new Excel.Workbook();
+    let sheet = wb.addWorksheet(templateData.worksheetName);
 
     if (templateData.originalFile) {
       // 원본 파일 읽기
@@ -683,7 +683,7 @@ export async function POST(request: NextRequest) {
       }
 
       try {
-        await workbook.xlsx.load(originalBuffer as any);
+        await wb.xlsx.load(originalBuffer as any);
       } catch (loadError: any) {
         console.error("원본 파일 로드 실패:", loadError);
         console.error("버퍼 크기:", originalBuffer.length);
@@ -691,31 +691,31 @@ export async function POST(request: NextRequest) {
       }
 
       // 워크북이 제대로 로드되었는지 확인
-      if (!workbook) {
+      if (!wb) {
         throw new Error("워크북 객체가 생성되지 않았습니다.");
       }
 
       // 워크북 속성 초기화 (Excel 호환성)
-      initializeWorkbookProperties(workbook);
+      initializeWorkbookProperties(wb);
 
       // 워크시트 가져오기
       let originalSheetName = templateData.worksheetName;
       let hasOriginalWorksheet = false;
-      let tempWorksheet: ExcelJS.Worksheet | undefined = undefined;
+      let tempWorksheet: Excel.Worksheet | undefined = undefined;
 
       // 워크시트가 있는 경우
-      if (workbook.worksheets.length > 0) {
+      if (wb.worksheets.length > 0) {
         // 워크시트 이름이 지정되어 있으면 해당 워크시트 사용
         if (originalSheetName) {
-          const foundWorksheet = workbook.getWorksheet(originalSheetName);
+          const foundWorksheet = wb.getWorksheet(originalSheetName);
           if (foundWorksheet) {
             tempWorksheet = foundWorksheet;
           }
         }
 
         // 워크시트를 찾지 못했으면 첫 번째 워크시트 사용
-        if (!tempWorksheet && workbook.worksheets.length > 0) {
-          tempWorksheet = workbook.worksheets[0];
+        if (!tempWorksheet && wb.worksheets.length > 0) {
+          tempWorksheet = wb.worksheets[0];
           originalSheetName = tempWorksheet.name;
         }
 
@@ -725,7 +725,7 @@ export async function POST(request: NextRequest) {
         console.warn(
           "원본 파일에 워크시트가 없습니다. 새 워크시트를 생성합니다."
         );
-        tempWorksheet = workbook.addWorksheet(originalSheetName || "Sheet1");
+        tempWorksheet = wb.addWorksheet(originalSheetName || "Sheet1");
         hasOriginalWorksheet = false;
       }
 
@@ -734,19 +734,20 @@ export async function POST(request: NextRequest) {
         throw new Error("워크시트를 생성할 수 없습니다.");
       }
 
-      worksheet = tempWorksheet;
+      // 원본 파일을 로드한 후 sheet를 다시 설정
+      sheet = tempWorksheet;
 
-      // 원본 워크시트가 있는 경우 - 원본 파일을 그대로 사용하고 값만 업데이트
+      // 원본 워크시트가 있는 경우 - 원본 파일의 스타일을 사용하고 값만 업데이트
       if (hasOriginalWorksheet) {
         // 헤더 행이 없으면 생성
-        if (worksheet.rowCount === 0) {
-          worksheet.addRow(columnOrder);
+        if (sheet.rowCount === 0) {
+          sheet.addRow(columnOrder);
         }
 
         // 헤더 행의 원본 셀 객체를 직접 저장 (데이터 삭제 전에 미리 저장)
-        const headerRow = worksheet.getRow(1);
+        const headerRow = sheet.getRow(1);
         const headerRowHeight = headerRow?.height;
-        const headerCells: {[colNumber: number]: ExcelJS.Cell} = {};
+        const headerCells: {[colNumber: number]: Excel.Cell} = {};
 
         if (headerRow) {
           headerRow.eachCell({includeEmpty: true}, (cell, colNumber) => {
@@ -758,11 +759,11 @@ export async function POST(request: NextRequest) {
         // 원본 데이터 행의 셀 객체 저장 (2행이 있으면 사용)
         // 데이터 행 삭제 전에 미리 저장해야 참조가 유효함
         const dataRowHeight =
-          worksheet.rowCount > 1 ? worksheet.getRow(2).height : undefined;
-        const dataCells: {[colNumber: number]: ExcelJS.Cell} = {};
+          sheet.rowCount > 1 ? sheet.getRow(2).height : undefined;
+        const dataCells: {[colNumber: number]: Excel.Cell} = {};
 
-        if (worksheet.rowCount > 1) {
-          const originalDataRow = worksheet.getRow(2);
+        if (sheet.rowCount > 1) {
+          const originalDataRow = sheet.getRow(2);
           if (originalDataRow) {
             originalDataRow.eachCell(
               {includeEmpty: true},
@@ -776,20 +777,20 @@ export async function POST(request: NextRequest) {
 
         // 원본 열 너비 저장
         const columnWidths: {[key: number]: number} = {};
-        worksheet.columns.forEach((column, index) => {
+        sheet.columns.forEach((column, index) => {
           if (column.width) {
             columnWidths[index + 1] = column.width;
           }
         });
 
         // 기존 데이터 행 삭제 (헤더 행 제외)
-        const lastRow = worksheet.rowCount;
+        const lastRow = sheet.rowCount;
         if (lastRow > 1) {
           for (let rowNum = lastRow; rowNum > 1; rowNum--) {
             try {
-              worksheet.spliceRows(rowNum, 1);
+              sheet.spliceRows(rowNum, 1);
             } catch (e) {
-              const row = worksheet.getRow(rowNum);
+              const row = sheet.getRow(rowNum);
               if (row) {
                 row.eachCell({includeEmpty: true}, (cell) => {
                   cell.value = null;
@@ -801,7 +802,7 @@ export async function POST(request: NextRequest) {
 
         // 헤더 행 높이 복사
         if (headerRowHeight) {
-          worksheet.getRow(1).height = headerRowHeight;
+          sheet.getRow(1).height = headerRowHeight;
         }
 
         // 헤더 행 업데이트 - 원본 셀을 직접 사용하고 값만 업데이트
@@ -815,7 +816,7 @@ export async function POST(request: NextRequest) {
             originalCell.value = prepareExcelCellValue(header, false);
           } else {
             // 원본 셀이 없으면 새로 생성
-            const cell = worksheet.getCell(1, colNumber);
+            const cell = sheet.getCell(1, colNumber);
             cell.value = prepareExcelCellValue(header, false);
           }
         });
@@ -824,14 +825,14 @@ export async function POST(request: NextRequest) {
         Object.keys(columnWidths).forEach((colNumStr) => {
           const colNum = parseInt(colNumStr);
           if (colNum <= columnOrder.length) {
-            worksheet.getColumn(colNum).width = columnWidths[colNum];
+            sheet.getColumn(colNum).width = columnWidths[colNum];
           }
         });
 
         // 새 데이터 추가 - 원본 셀 스타일 복사
         excelData.forEach((rowData, rowIdx) => {
           const rowNumber = rowIdx + 2; // 헤더 다음 행부터
-          const row = worksheet.getRow(rowNumber);
+          const row = sheet.getRow(rowNumber);
 
           // 행 높이 복사
           if (dataRowHeight) {
@@ -872,21 +873,21 @@ export async function POST(request: NextRequest) {
         });
       } else {
         // 원본 워크시트가 없으면 헤더 행만 업데이트
-        if (worksheet.rowCount === 0) {
+        if (sheet.rowCount === 0) {
           const normalizedHeaders = columnOrder.map((h: any) =>
             prepareExcelCellValue(h, false)
           );
-          worksheet.addRow(normalizedHeaders);
+          sheet.addRow(normalizedHeaders);
         } else {
           columnOrder.forEach((header: string, colIdx: number) => {
             const colNumber = colIdx + 1;
-            const cell = worksheet.getCell(1, colNumber);
+            const cell = sheet.getCell(1, colNumber);
             cell.value = prepareExcelCellValue(header, false);
           });
         }
 
         // 헤더 행 스타일 적용
-        const headerRow = worksheet.getRow(1);
+        const headerRow = sheet.getRow(1);
         applyHeaderStyle(headerRow, columnOrder, templateData.columnWidths);
 
         // 데이터 행 추가 (값 정규화)
@@ -895,7 +896,7 @@ export async function POST(request: NextRequest) {
             const normalized = prepareExcelCellValue(cellValue, false);
             return normalized;
           });
-          const addedRow = worksheet.addRow(normalizedRowData);
+          const addedRow = sheet.addRow(normalizedRowData);
 
           // 숫자 셀 및 전화번호 셀에 대한 포맷 설정
           addedRow.eachCell({includeEmpty: true}, (cell, colNumber) => {
@@ -916,17 +917,16 @@ export async function POST(request: NextRequest) {
         });
       }
     } else {
-      // 원본 파일이 없으면 새로 생성
-      worksheet = workbook.addWorksheet("Sheet1");
+      // 원본 파일이 없으면 새로 생성 (이미 상단에서 sheet 선언됨)
 
       // 헤더 행 추가 (값 정규화)
       const normalizedHeaders = columnOrder.map((h: any) =>
         prepareExcelCellValue(h, false)
       );
-      worksheet.addRow(normalizedHeaders);
+      sheet.addRow(normalizedHeaders);
 
       // 헤더 행 스타일 적용
-      const headerRow = worksheet.getRow(1);
+      const headerRow = sheet.getRow(1);
       applyHeaderStyle(headerRow, columnOrder, templateData.columnWidths);
 
       // 데이터 행 추가 (값 정규화)
@@ -934,7 +934,7 @@ export async function POST(request: NextRequest) {
         const normalizedRowData = rowData.map((cellValue: any) =>
           prepareExcelCellValue(cellValue, false)
         );
-        const addedRow = worksheet.addRow(normalizedRowData);
+        const addedRow = sheet.addRow(normalizedRowData);
 
         // 숫자 셀 및 전화번호 셀에 대한 포맷 설정
         addedRow.eachCell({includeEmpty: true}, (cell, colNumber) => {
@@ -955,25 +955,25 @@ export async function POST(request: NextRequest) {
       });
 
       // 새 워크북의 속성 초기화 (Excel 호환성)
-      initializeWorkbookProperties(workbook);
+      initializeWorkbookProperties(wb);
     }
 
     // 워크북이 제대로 초기화되었는지 확인
-    if (!workbook) {
+    if (!wb) {
       throw new Error("워크북이 초기화되지 않았습니다.");
     }
 
-    if (!workbook.xlsx) {
+    if (!wb.xlsx) {
       throw new Error("워크북의 xlsx 모듈이 없습니다.");
     }
 
     // 워크시트가 있는지 확인
-    if (!worksheet) {
+    if (!sheet) {
       throw new Error("워크시트가 없습니다.");
     }
 
     // 워크북을 Excel 호환 모드로 완전히 정리
-    prepareWorkbookForExcel(workbook, {
+    prepareWorkbookForExcel(wb, {
       removeFormulas: false, // 수식은 유지 (필요시 true로 변경)
       removeDataValidations: false, // 데이터 검증은 유지
     });
@@ -981,14 +981,14 @@ export async function POST(request: NextRequest) {
     // 엑셀 파일 생성
     let buffer: ArrayBuffer;
     try {
-      const writeBuffer = await workbook.xlsx.writeBuffer();
+      const writeBuffer = await wb.xlsx.writeBuffer();
       buffer = writeBuffer as ArrayBuffer;
     } catch (writeError: any) {
       console.error("엑셀 파일 생성 실패:", writeError);
       console.error("워크북 상태:", {
-        hasProperties: !!workbook.properties,
-        hasCalcProperties: !!(workbook as any).calcProperties,
-        worksheetCount: workbook.worksheets.length,
+        hasProperties: !!wb.properties,
+        hasCalcProperties: !!(wb as any).calcProperties,
+        worksheetCount: wb.worksheets.length,
       });
       throw new Error(`엑셀 파일을 생성할 수 없습니다: ${writeError.message}`);
     }
