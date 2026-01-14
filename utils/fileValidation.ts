@@ -14,6 +14,16 @@ export function checkFileValidation(file: UploadedFile | any): {
     return {isValid: false, errors: ["파일 데이터가 없습니다"]}; // 파일이 없거나 데이터가 없으면 무효
   }
 
+  const errors: string[] = [];
+
+  // 파일 레벨의 업체명 검증 (파일 객체의 vendorName 필드가 공란이 아니어야 함)
+  const fileVendorName = String(file.vendorName || "").trim();
+  if (!fileVendorName) {
+    const errorMsg = "파일의 업체명이 공란입니다. 업체명을 입력해주세요.";
+    console.log(errorMsg);
+    errors.push(errorMsg);
+  }
+
   const headerRow = file.tableData[0];
   const nameIdx = file.headerIndex?.nameIdx;
   const mappingIdx = headerRow.findIndex(
@@ -25,8 +35,6 @@ export function checkFileValidation(file: UploadedFile | any): {
   const typeIdx = headerRow.findIndex((h: any) => h === "내외주");
   const postTypeIdx = headerRow.findIndex((h: any) => h === "택배사");
   const qtyIdx = headerRow.findIndex((h: any) => h === "수량");
-
-  const errors: string[] = [];
 
   console.log("파일 검증 시작:", {
     fileName: file.fileName,
