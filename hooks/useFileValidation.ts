@@ -49,9 +49,19 @@ export function useFileValidation(
         let fileToCheck = file;
         if (storedFile) {
           try {
-            fileToCheck = JSON.parse(storedFile);
+            const parsedStoredFile = JSON.parse(storedFile);
+            // sessionStorage의 파일과 uploadedFiles의 파일을 병합
+            // uploadedFiles의 vendorName을 우선 사용 (서버에서 최신 데이터)
+            fileToCheck = {
+              ...parsedStoredFile,
+              ...file,
+              // vendorName은 uploadedFiles의 값이 있으면 우선 사용
+              vendorName: file.vendorName || parsedStoredFile.vendorName || undefined,
+            };
           } catch (error) {
             console.error("파일 데이터 파싱 실패:", error);
+            // 파싱 실패 시 uploadedFiles의 파일 사용
+            fileToCheck = file;
           }
         }
         // 파일 자체에 productCodeMap이 있으면 우선 사용, 없으면 전역 productCodeMap 사용
@@ -123,8 +133,18 @@ export function useFileValidation(
         clearTimeout(timeoutId);
       };
     } else {
-      // 새 파일이 없으면 이전 파일 ID 목록만 업데이트
+      // 새 파일이 없어도 기존 파일들의 vendorName이 업데이트되었을 수 있으므로 재검증
+      // (서버에서 파일을 로드한 경우 등)
+      const timeoutId = setTimeout(() => {
+        updateValidation(); // 모든 파일 재검증
+      }, 100);
+
+      // 이전 파일 ID 목록 업데이트
       previousFileIdsRef.current = currentFileIds;
+
+      return () => {
+        clearTimeout(timeoutId);
+      };
     }
   }, [uploadedFiles, productCodeMap, updateValidation]);
 
@@ -142,5 +162,6 @@ export function useFileValidation(
   return {
     fileValidationStatus,
     updateValidationStatus,
+    updateValidation,
   };
 }

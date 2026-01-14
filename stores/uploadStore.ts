@@ -1023,6 +1023,12 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
                 let value: string =
                   idx >= 0 ? String(row[idx] ?? "").trim() : "";
 
+                // 업체명 컬럼은 엑셀 파일에서 읽지 않도록 빈 값으로 처리
+                // (드롭다운에서 선택한 값만 사용)
+                if (c.key === "vendor") {
+                  value = "";
+                }
+
                 // 수량 필드 처리
                 if (c.key === "qty") {
                   // 공란이면 1로 자동 입력

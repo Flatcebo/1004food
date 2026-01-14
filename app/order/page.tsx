@@ -297,10 +297,8 @@ function OrderPageContent() {
   };
 
   // 파일 검증 관련 훅
-  const {fileValidationStatus, updateValidationStatus} = useFileValidation(
-    uploadedFiles,
-    productCodeMap
-  );
+  const {fileValidationStatus, updateValidationStatus, updateValidation} =
+    useFileValidation(uploadedFiles, productCodeMap);
 
   // 검증 상태를 boolean으로 변환하는 헬퍼 함수
   const getValidationStatus = (fileId: string): boolean => {
