@@ -55,6 +55,9 @@ function OrderPageContent() {
     useState(false);
   const [isDeliveryDropdownOpen, setIsDeliveryDropdownOpen] = useState(false);
   const deliveryDropdownRef = useRef<HTMLDivElement>(null);
+  const [isUploadDropdownOpen, setIsUploadDropdownOpen] = useState(false);
+  const uploadDropdownRef = useRef<HTMLDivElement>(null);
+  const sabangnetFileInputRef = useRef<HTMLInputElement>(null);
 
   // 운송장 업로드 훅 사용
   const {
@@ -112,7 +115,7 @@ function OrderPageContent() {
   } = useUploadStore();
 
   // 로딩 상태
-  const {isLoading, title, message, subMessage, startLoading} =
+  const {isLoading, title, message, subMessage, startLoading, stopLoading} =
     useLoadingStore();
 
   // 저장된 데이터 관련 훅
@@ -730,6 +733,64 @@ function OrderPageContent() {
     return checkedFileIds.some((fileId) => !getValidationStatus(fileId));
   }, [confirmedFiles, fileValidationStatus]);
 
+  // 사방넷 파일 업로드 핸들러
+  const handleSabangnetFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      startLoading("사방넷 파일 업로드 중...", "파일을 처리하고 있습니다.");
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      // company-id 헤더 포함
+      const headers: HeadersInit = {};
+      if (typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem("auth-storage");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            const user = parsed.state?.user;
+            if (user?.companyId) {
+              headers["company-id"] = user.companyId.toString();
+            }
+          }
+        } catch (e) {
+          console.error("인증 정보 로드 실패:", e);
+        }
+      }
+
+      const response = await fetch("/api/upload/sabangnet-upload", {
+        method: "POST",
+        headers,
+        body: formData,
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert(
+          `사방넷 코드 업로드가 완료되었습니다.\n처리된 항목: ${result.updatedCount}개`
+        );
+        fetchSavedData(); // 데이터 새로고침
+      } else {
+        alert(`사방넷 코드 업로드 실패: ${result.error}`);
+      }
+    } catch (error: any) {
+      console.error("사방넷 파일 업로드 실패:", error);
+      alert(`사방넷 파일 업로드 실패: ${error.message}`);
+    } finally {
+      // 파일 input 초기화
+      if (sabangnetFileInputRef.current) {
+        sabangnetFileInputRef.current.value = "";
+      }
+      stopLoading();
+    }
+  };
+
   // 드롭다운 외부 클릭 시 닫기
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -739,16 +800,22 @@ function OrderPageContent() {
       ) {
         setIsDeliveryDropdownOpen(false);
       }
+      if (
+        uploadDropdownRef.current &&
+        !uploadDropdownRef.current.contains(event.target as Node)
+      ) {
+        setIsUploadDropdownOpen(false);
+      }
     };
 
-    if (isDeliveryDropdownOpen) {
+    if (isDeliveryDropdownOpen || isUploadDropdownOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isDeliveryDropdownOpen]);
+  }, [isDeliveryDropdownOpen, isUploadDropdownOpen]);
 
   return (
     <div className="w-full h-full flex flex-col items-start justify-start px-4">
@@ -767,14 +834,57 @@ function OrderPageContent() {
             <h2 className="text-xl font-bold">저장된 데이터</h2>
 
             <div className="flex gap-2 items-center mb-0">
-              <button
-                className="px-5 py-2 bg-blue-600 text-white text-sm font-bold rounded hover:bg-blue-800"
-                onClick={() => {
-                  setModalMode("excel");
-                }}
-              >
-                발주서 업로드
-              </button>
+              {/* 업로드 드롭다운 버튼 */}
+              <div className="relative" ref={uploadDropdownRef}>
+                <button
+                  className="px-5 py-2 bg-blue-600 text-white text-sm font-bold rounded hover:bg-blue-800 flex items-center gap-2"
+                  onClick={() => {
+                    setIsUploadDropdownOpen(!isUploadDropdownOpen);
+                  }}
+                >
+                  업로드
+                  <IoChevronDown
+                    className={`w-4 h-4 transition-transform ${
+                      isUploadDropdownOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </button>
+
+                {/* 드롭다운 메뉴 */}
+                {isUploadDropdownOpen && (
+                  <div className="absolute left-1/2 -translate-x-1/2 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden">
+                    <button
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 bg-white hover:bg-gray-100 border-b border-gray-200 flex items-center gap-2"
+                      onClick={() => {
+                        setModalMode("excel");
+                        setIsUploadDropdownOpen(false);
+                      }}
+                    >
+                      <IoCloudUpload className="w-4 h-4" />
+                      발주서
+                    </button>
+                    <button
+                      className="w-full px-4 py-2 text-left text-sm text-gray-700 bg-white hover:bg-gray-100 flex items-center gap-2"
+                      onClick={() => {
+                        sabangnetFileInputRef.current?.click();
+                        setIsUploadDropdownOpen(false);
+                      }}
+                    >
+                      <IoCloudUpload className="w-4 h-4" />
+                      사방넷
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* 숨겨진 사방넷 파일 input */}
+              <input
+                type="file"
+                ref={sabangnetFileInputRef}
+                onChange={handleSabangnetFileChange}
+                accept=".xlsx, .xls"
+                className="hidden"
+              />
 
               {/* 운송장 드롭다운 버튼 */}
               <div className="relative" ref={deliveryDropdownRef}>
@@ -794,7 +904,7 @@ function OrderPageContent() {
 
                 {/* 드롭다운 메뉴 */}
                 {isDeliveryDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden">
+                  <div className="absolute left-1/2 -translate-x-1/2 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden">
                     <button
                       className="w-full px-4 py-2 text-left text-sm text-gray-700 bg-white hover:bg-gray-100 border-b border-gray-200 flex items-center gap-2"
                       onClick={() => {

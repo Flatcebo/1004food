@@ -8,6 +8,7 @@ import {
   buildFilterQuery,
   UploadFilters,
 } from "@/utils/uploadFilters";
+import {generateExcelFileName} from "@/utils/filename";
 
 export async function POST(request: NextRequest) {
   try {
@@ -481,13 +482,13 @@ export async function POST(request: NextRequest) {
     const buffer = await wb.xlsx.writeBuffer();
 
     // 파일명 생성
-    const dateStr = new Date().toISOString().split("T")[0];
-    const fileName = `${dateStr}_${templateData.name || "download"}.xlsx`;
+    const fileName = generateExcelFileName(templateData.name || "download");
 
     // Windows에서 한글 파일명 깨짐 방지를 위한 RFC 5987 형식 인코딩
     // HTTP 헤더는 ASCII만 허용하므로 filename에는 ASCII fallback 추가
     const asciiFallbackBase =
-      `${dateStr}_${templateData.name || "download"}`
+      fileName
+        .replace(/\.xlsx$/, "")
         .replace(/[^\x00-\x7F]/g, "")
         .replace(/\s+/g, "_") || "download";
     const safeFileName = `${asciiFallbackBase}.xlsx`; // ASCII fallback

@@ -6,6 +6,7 @@ import {copyCellStyle, applyHeaderStyle} from "@/utils/excelStyles";
 import {prepareWorkbookForExcel} from "@/utils/excelCompatibility";
 import {prepareExcelCellValue} from "@/utils/excelTypeConversion";
 import {initializeWorkbookProperties} from "@/utils/excelCompatibility";
+import {generateExcelFileName} from "@/utils/filename";
 
 // 내주 발주서 다운로드
 export async function POST(request: NextRequest) {
@@ -401,9 +402,8 @@ export async function POST(request: NextRequest) {
     });
 
     // 파일명 생성
-    const dateStr = new Date().toISOString().split("T")[0];
     const baseName = (templateData.name || "download").toString().trim();
-    const fileName = `${dateStr}_${baseName}.xlsx`;
+    const fileName = generateExcelFileName(baseName);
 
     const asciiFallbackBase =
       `${dateStr}_${baseName}`

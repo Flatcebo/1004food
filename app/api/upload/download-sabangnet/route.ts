@@ -9,6 +9,7 @@ import {
   buildFilterQuery,
   UploadFilters,
 } from "@/utils/uploadFilters";
+import {generateDatePrefix} from "@/utils/filename";
 
 export async function POST(request: NextRequest) {
   try {
@@ -360,10 +361,7 @@ export async function POST(request: NextRequest) {
 
       // ZIP 파일 생성
       const zip = new JSZip();
-      const today = new Date();
-      const dateStr = `${today.getFullYear()}${String(
-        today.getMonth() + 1
-      ).padStart(2, "0")}${String(today.getDate()).padStart(2, "0")}`;
+      const dateStr = generateDatePrefix();
 
       // 각 업체명별로 엑셀 파일 생성
       for (const [vendor, vendorRows] of Object.entries(vendorGroups)) {

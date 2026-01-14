@@ -4,100 +4,202 @@ import Image from "next/image";
 import Link from "next/link";
 import {usePathname} from "next/navigation";
 import {useAuthStore} from "@/stores/authStore";
-import {useState, useEffect} from "react";
+import {useSidebarStore} from "@/stores/sidebarStore";
+import {useEffect, useState} from "react";
 import {
   IoList,
   IoCube,
   IoDocumentText,
-  IoPricetag,
   IoStatsChart,
-  IoCloudUpload,
-  IoPeople,
-  IoBusiness,
+  IoChevronDown,
+  IoChevronUp,
+  IoShieldCheckmark,
 } from "react-icons/io5";
 import {IconType} from "react-icons";
 
-const menuNames: {path: string; name: string; icon: IconType}[] = [
+interface AccordionMenuItem {
+  path: string;
+  name: string;
+}
+
+interface AccordionMenuConfig {
+  id: string;
+  icon: IconType;
+  title: string;
+  items: AccordionMenuItem[];
+  autoOpenPaths?: string[];
+  requiresAdmin?: boolean;
+}
+
+// 메뉴 설정 배열 (컴포넌트 외부로 이동)
+const menuConfigs: AccordionMenuConfig[] = [
   {
-    path: "/order",
-    name: "주문 리스트",
+    id: "order",
     icon: IoList,
+    title: "주문 관리",
+    items: [
+      {
+        path: "/order",
+        name: "주문 리스트",
+      },
+    ],
+    autoOpenPaths: ["/order", "/order/upload"],
   },
-  // {
-  //   path: "/order/upload",
-  //   name: "발주서 업로드",
-  // },
   {
-    path: "/products",
-    name: "상품 리스트",
+    id: "products",
     icon: IoCube,
+    title: "상품 관리",
+    items: [
+      {
+        path: "/products",
+        name: "상품 조회",
+      },
+      {
+        path: "/products/edit",
+        name: "상품 일괄 수정",
+      },
+    ],
+    autoOpenPaths: ["/products", "/products/edit"],
   },
   {
-    path: "/upload/templates",
-    name: "양식 템플릿 관리",
-    icon: IoDocumentText,
-  },
-
-  {
-    path: "/header-aliases",
-    name: "헤더 Alias 관리",
-    icon: IoPricetag,
-  },
-  {
-    path: "/analytics/sales-by-mall",
-    name: "매출 정산 관리",
+    id: "settlement",
     icon: IoStatsChart,
+    title: "정산 관리",
+    items: [
+      {
+        path: "/analytics/sales-by-mall",
+        name: "매출 정산 관리",
+      },
+      {
+        path: "/mall-promotions",
+        name: "쇼핑몰 프로모션 관리",
+      },
+    ],
+    autoOpenPaths: ["/analytics/sales-by-mall", "/mall-promotions"],
   },
   {
-    path: "/mall-promotions",
-    name: "쇼핑몰 프로모션 관리",
-    icon: IoPricetag,
+    id: "template",
+    icon: IoDocumentText,
+    title: "양식 관리",
+    items: [
+      {
+        path: "/upload/templates",
+        name: "양식 템플릿 관리",
+      },
+      {
+        path: "/header-aliases",
+        name: "헤더 Alias 관리",
+      },
+    ],
+    autoOpenPaths: ["/upload/templates", "/header-aliases"],
+  },
+
+  {
+    id: "admin",
+    icon: IoShieldCheckmark,
+    title: "관리자",
+    items: [
+      {
+        path: "/products/upload",
+        name: "상품 데이터 업로드",
+      },
+      {
+        path: "/users",
+        name: "회원 관리",
+      },
+      {
+        path: "/vendors",
+        name: "납품업체 관리",
+      },
+    ],
+    autoOpenPaths: ["/products/upload", "/users", "/vendors"],
+    requiresAdmin: true,
   },
 ];
 
-const adminMenuNames: {path: string; name: string; icon: IconType}[] = [
-  {
-    path: "/products/upload",
-    name: "상품 데이터 업로드",
-    icon: IoCloudUpload,
-  },
-  {
-    path: "/users",
-    name: "회원 관리",
-    icon: IoPeople,
-  },
-  {
-    path: "/vendors",
-    name: "납품업체 관리",
-    icon: IoBusiness,
-  },
-];
+function AccordionMenu({
+  config,
+  pathname,
+}: {
+  config: AccordionMenuConfig;
+  pathname: string;
+}) {
+  const {isMenuOpen, toggleMenu} = useSidebarStore();
+  const isOpen = isMenuOpen(config.id);
+
+  // 각 아이템의 활성 상태 확인
+  const itemsWithActive = config.items.map((item) => ({
+    ...item,
+    isActive: pathname === item.path,
+  }));
+
+  return (
+    <div className="w-full">
+      <button
+        onClick={() => toggleMenu(config.id)}
+        className="w-full px-2 pr-8 py-2 rounded-lg transition-all duration-200 flex items-center gap-3 hover:bg-gray-700 hover:translate-x-1 active:scale-95 text-white"
+      >
+        <span className="text-xl">
+          <config.icon />
+        </span>
+        <span>{config.title}</span>
+        <span className="text-lg ml-auto">
+          {isOpen ? <IoChevronUp /> : <IoChevronDown />}
+        </span>
+      </button>
+      {isOpen && (
+        <div className="ml-4 mt-1 flex flex-col gap-1">
+          {itemsWithActive.map((item) => (
+            <Link
+              key={item.path}
+              href={item.path}
+              className={`w-full px-4 py-2 rounded-lg transition-all duration-200 flex items-center gap-3 ${
+                item.isActive
+                  ? "text-[#888eab] bg-gray-800"
+                  : "hover:bg-gray-700 hover:translate-x-1 active:scale-95 text-white"
+              }`}
+            >
+              <span>{item.name}</span>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function SideBar() {
   const pathname = usePathname();
   const {user} = useAuthStore();
+  const {openMenu} = useSidebarStore();
   const [mounted, setMounted] = useState(false);
 
+  // 클라이언트에서만 마운트됨을 표시 (Hydration 오류 방지)
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  // 현재 경로에 따라 아코디언 자동 열기 (클라이언트에서만 실행)
+  useEffect(() => {
+    if (!mounted) return;
+
+    menuConfigs.forEach((config) => {
+      if (
+        config.autoOpenPaths?.some((path) => pathname === path) ||
+        config.autoOpenPaths?.some((path) => pathname.startsWith(path))
+      ) {
+        openMenu(config.id);
+      }
+    });
+  }, [pathname, openMenu, mounted]);
+
   const isAdmin = mounted && user?.grade === "관리자";
 
-  const isUploadActive =
-    pathname === "/upload" ||
-    pathname?.startsWith("/upload/view") ||
-    pathname?.startsWith("/upload/preview");
-  const isOrderActive = pathname === "/order";
-  const isOrderUploadActive = pathname === "/order/upload";
-  const isProductsActive = pathname === "/products";
-  const isProductUploadActive = pathname === "/products/upload";
-  const isTemplatesActive = pathname === "/upload/templates";
-  const isHeaderAliasesActive = pathname === "/header-aliases";
-  const isUsersActive = pathname === "/users";
-  const isVendorsActive = pathname === "/vendors";
-  const isMallPromotionsActive = pathname === "/mall-promotions";
-  const isSalesByMallActive = pathname === "/analytics/sales-by-mall";
+  // 관리자 메뉴 필터링
+  const visibleMenus = menuConfigs.filter(
+    (config) => !config.requiresAdmin || isAdmin
+  );
+
   return (
     <div className="w-60 h-full bg-[#25323c] shrink-0">
       <div className="w-full h-full flex flex-col">
@@ -116,70 +218,13 @@ export default function SideBar() {
 
         <div className="w-full flex-1 flex mx-4 my-6">
           <div className="w-full flex flex-col items-start font-semibold text-[16px] gap-2">
-            {menuNames.map((menu, key) => {
-              const isActive =
-                menu.path === "/"
-                  ? pathname === "/"
-                  : menu.path === "/products/upload"
-                  ? isProductUploadActive
-                  : menu.path === "/order"
-                  ? isOrderActive
-                  : menu.path === "/order/upload"
-                  ? isOrderUploadActive
-                  : menu.path === "/products"
-                  ? isProductsActive
-                  : menu.path === "/upload/templates"
-                  ? isTemplatesActive
-                  : menu.path === "/header-aliases"
-                  ? isHeaderAliasesActive
-                  : menu.path === "/mall-promotions"
-                  ? isMallPromotionsActive
-                  : menu.path === "/analytics/sales-by-mall"
-                  ? isSalesByMallActive
-                  : menu.path === "/users"
-                  ? isUsersActive
-                  : menu.path === "/vendors"
-                  ? isVendorsActive
-                  : false;
-
-              const IconComponent = menu.icon;
-              return (
-                <Link
-                  key={key}
-                  href={menu.path}
-                  className={`w-full px-4 py-2 rounded-lg transition-all duration-200 flex items-center gap-3 ${
-                    isActive
-                      ? "text-[#888eab]"
-                      : "hover:bg-gray-700 hover:translate-x-1 active:scale-95 text-white"
-                  }`}
-                >
-                  <span className="text-xl">
-                    <IconComponent />
-                  </span>
-                  <span>{menu.name}</span>
-                </Link>
-              );
-            })}
-            {isAdmin &&
-              adminMenuNames.map((menu, key) => {
-                const IconComponent = menu.icon;
-                return (
-                  <Link
-                    key={key}
-                    href={menu.path}
-                    className={`w-full px-4 py-2 rounded-lg transition-all duration-200 flex items-center gap-3 ${
-                      pathname === menu.path
-                        ? "text-[#888eab]"
-                        : "hover:bg-gray-700 hover:translate-x-1 active:scale-95 text-white"
-                    }`}
-                  >
-                    <span className="text-xl">
-                      <IconComponent />
-                    </span>
-                    <span>{menu.name}</span>
-                  </Link>
-                );
-              })}
+            {visibleMenus.map((config) => (
+              <AccordionMenu
+                key={config.id}
+                config={config}
+                pathname={pathname}
+              />
+            ))}
           </div>
         </div>
 

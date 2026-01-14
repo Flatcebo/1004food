@@ -91,6 +91,7 @@ const SavedDataTable = memo(function SavedDataTable({
       "상품ID", // 상품ID 헤더 숨김
       "productId", // productId 헤더 숨김 (상품ID와 동일)
       "rowOrder", // rowOrder 헤더 숨김
+      "sabang_code",
     ];
 
     // 운송장 입력 모드일 때는 매핑코드와 운송장번호만 숨김 (배송메시지는 운송장입력으로 변경됨)

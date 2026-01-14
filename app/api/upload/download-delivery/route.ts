@@ -2,6 +2,7 @@ import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
 import {getCompanyIdFromRequest, getUserIdFromRequest} from "@/lib/company";
 import ExcelJS from "exceljs";
+import {generateExcelFileName, generateDatePrefix} from "@/utils/filename";
 
 /**
  * POST /api/upload/download-delivery
@@ -192,8 +193,8 @@ export async function POST(request: NextRequest) {
     const buffer = await workbook.xlsx.writeBuffer();
 
     // 파일명 생성
-    const dateStr = new Date().toISOString().split("T")[0];
-    const fileName = `${dateStr}_${vendorName}_운송장.xlsx`;
+    const fileName = generateExcelFileName(`${vendorName}_운송장`);
+    const dateStr = generateDatePrefix();
 
     // Windows에서 한글 파일명 깨짐 방지를 위한 RFC 5987 형식 인코딩
     const asciiFallbackBase = `${dateStr}_${vendorName}_delivery`

@@ -141,7 +141,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // 각 업체별로 파일(upload_id)별 통계 조회
+    // 각 업체별로 파일(upload_id)별 통계 및 sabang_code 통계 조회
     const vendorStats = await Promise.all(
       vendorNames.map(async (vendorName: string) => {
         // 해당 업체의 파일(upload_id)별 통계 조회
@@ -162,6 +162,26 @@ export async function GET(request: NextRequest) {
           ORDER BY u.created_at DESC
         `;
 
+        // 해당 업체의 sabang_code 통계 조회 (어제~오늘 전체)
+        const sabangCodeStatsResult = await sql`
+          SELECT 
+            COUNT(*) FILTER (
+              WHERE ur.row_data->>'sabang_code' IS NOT NULL 
+              AND ur.row_data->>'sabang_code' != ''
+            ) as sabang_code_orders,
+            COUNT(*) as total_orders
+          FROM upload_rows ur
+          INNER JOIN uploads u ON ur.upload_id = u.id
+          WHERE u.company_id = ${companyId}
+            AND u.created_at >= ${yesterdayStartUTC.toISOString()}
+            AND u.created_at <= ${todayEndUTC.toISOString()}
+            AND ur.row_data->>'업체명' = ${vendorName}
+        `;
+
+        const sabangCodeStats = sabangCodeStatsResult[0] || {};
+        const sabangCodeOrders = parseInt(sabangCodeStats.sabang_code_orders || "0", 10);
+        const totalOrdersForSabang = parseInt(sabangCodeStats.total_orders || "0", 10);
+
         const files = fileStatsResult.map((file: any) => ({
           uploadId: file.upload_id,
           fileName: file.file_name || `파일_${file.upload_id}`,
@@ -173,6 +193,8 @@ export async function GET(request: NextRequest) {
         return {
           vendorName,
           files,
+          sabangCodeOrders,
+          totalOrdersForSabang,
         };
       })
     );

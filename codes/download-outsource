@@ -5,6 +5,7 @@ import {mapDataToTemplate, sortExcelData} from "@/utils/excelDataMapping";
 import {copyCellStyle, applyHeaderStyle} from "@/utils/excelStyles";
 import {prepareWorkbookForExcel} from "@/utils/excelCompatibility";
 import JSZip from "jszip";
+import {generateDatePrefix} from "@/utils/filename";
 
 // 외주 발주서 다운로드 (매입처별로 파일 분리, ZIP으로 압축)
 export async function POST(request: NextRequest) {
@@ -208,7 +209,7 @@ export async function POST(request: NextRequest) {
 
     // ZIP 파일 생성
     const zip = new JSZip();
-    const dateStr = new Date().toISOString().split("T")[0];
+    const dateStr = generateDatePrefix();
 
     // 각 매입처별로 엑셀 파일 생성
     for (const [vendor, vendorRows] of Object.entries(vendorGroups)) {

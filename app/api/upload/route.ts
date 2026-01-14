@@ -4,6 +4,7 @@ import {getCompanyIdFromRequest} from "@/lib/company";
 import * as Excel from "exceljs";
 import {mapDataToTemplate, sortExcelData} from "@/utils/excelDataMapping";
 import JSZip from "jszip";
+import {generateExcelFileName, generateDatePrefix} from "@/utils/filename";
 
 export async function POST(request: NextRequest) {
   try {
@@ -314,7 +315,7 @@ export async function POST(request: NextRequest) {
 
       // ZIP 파일 생성
       const zip = new JSZip();
-      const dateStr = new Date().toISOString().split("T")[0];
+      const dateStr = generateDatePrefix();
 
       // 각 매입처별로 엑셀 파일 생성
       for (const [vendor, vendorRows] of Object.entries(vendorGroups)) {
@@ -596,8 +597,8 @@ export async function POST(request: NextRequest) {
     const buffer = await wb.xlsx.writeBuffer();
 
     // 파일명 생성
-    const dateStr = new Date().toISOString().split("T")[0];
-    const fileName = `${dateStr}_${templateData.name || "download"}.xlsx`;
+    const fileName = generateExcelFileName(templateData.name || "download");
+    const dateStr = generateDatePrefix();
 
     // Windows에서 한글 파일명 깨짐 방지를 위한 RFC 5987 형식 인코딩
     // HTTP 헤더는 ASCII만 허용하므로 filename에는 ASCII fallback 추가

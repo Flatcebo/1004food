@@ -85,6 +85,10 @@ export default function SalesByMallPage() {
   } | null>(null);
   const [orders, setOrders] = useState<OrderData[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
+  
+  // 체크박스 선택 상태
+  const [selectedSettlementIds, setSelectedSettlementIds] = useState<Set<number>>(new Set());
+  const [downloading, setDownloading] = useState(false);
 
   // 쇼핑몰 목록 조회
   const fetchMalls = useCallback(async () => {
@@ -460,6 +464,106 @@ export default function SalesByMallPage() {
     setOrders([]);
   }, []);
 
+  // 체크박스 전체 선택/해제
+  const handleSelectAll = useCallback((checked: boolean) => {
+    if (checked) {
+      setSelectedSettlementIds(new Set(settlements.map(s => s.id)));
+    } else {
+      setSelectedSettlementIds(new Set());
+    }
+  }, [settlements]);
+
+  // 개별 체크박스 선택/해제
+  const handleSelectSettlement = useCallback((settlementId: number, checked: boolean) => {
+    setSelectedSettlementIds(prev => {
+      const newSet = new Set(prev);
+      if (checked) {
+        newSet.add(settlementId);
+      } else {
+        newSet.delete(settlementId);
+      }
+      return newSet;
+    });
+  }, []);
+
+  // 정산서 다운로드
+  const handleDownloadSettlement = useCallback(async () => {
+    // 체크박스 선택이 있으면 선택된 것만, 없으면 전체 다운로드
+    const idsToDownload = selectedSettlementIds.size > 0
+      ? Array.from(selectedSettlementIds)
+      : settlements.map(s => s.id);
+
+    if (idsToDownload.length === 0) {
+      alert("다운로드할 정산이 없습니다.");
+      return;
+    }
+
+    setDownloading(true);
+    try {
+      const headers: HeadersInit = {
+        "Content-Type": "application/json",
+      };
+
+      if (typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem("auth-storage");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            const user = parsed.state?.user;
+            if (user?.companyId) {
+              headers["company-id"] = user.companyId.toString();
+            }
+          }
+        } catch (e) {
+          console.error("인증 정보 로드 실패:", e);
+        }
+      }
+
+      const response = await fetch("/api/analytics/sales-by-mall/download-settlement", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({settlementIds: idsToDownload}),
+      });
+
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(result.error || "다운로드 실패");
+      }
+
+      // ZIP 파일 다운로드
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+
+      // Content-Disposition 헤더에서 파일명 추출 시도
+      const contentDisposition = response.headers.get("Content-Disposition");
+      let downloadFileName = `정산서_${new Date().toISOString().split("T")[0]}.zip`;
+      if (contentDisposition) {
+        const fileNameMatch = contentDisposition.match(/filename\*=UTF-8''(.+)/);
+        if (fileNameMatch) {
+          downloadFileName = decodeURIComponent(fileNameMatch[1]);
+        } else {
+          const fileNameMatch2 = contentDisposition.match(/filename="(.+)"/);
+          if (fileNameMatch2) {
+            downloadFileName = fileNameMatch2[1];
+          }
+        }
+      }
+
+      a.download = downloadFileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      console.error("정산서 다운로드 실패:", err);
+      alert("정산서 다운로드에 실패했습니다: " + err.message);
+    } finally {
+      setDownloading(false);
+    }
+  }, [settlements, selectedSettlementIds]);
+
 
 
   // 기간 표시 포맷팅 (시간 포함)
@@ -490,6 +594,19 @@ export default function SalesByMallPage() {
         <div className="w-full mt-6">
           <div className="mb-4 flex gap-4 items-center justify-between">
             <h2 className="text-xl font-bold">쇼핑몰별 매출 정산</h2>
+            {settlements.length > 0 && (
+              <button
+                className="px-4 py-2 bg-indigo-500 text-white text-sm rounded hover:bg-indigo-600 disabled:bg-gray-400"
+                onClick={handleDownloadSettlement}
+                disabled={downloading}
+              >
+                {downloading 
+                  ? "다운로드 중..." 
+                  : selectedSettlementIds.size > 0 
+                    ? `${selectedSettlementIds.size}건 다운로드`
+                    : "전체 다운로드"}
+              </button>
+            )}
           </div>
 
           {/* 필터 영역 */}
@@ -594,6 +711,14 @@ export default function SalesByMallPage() {
               <table className="w-full border-collapse border border-gray-300">
                 <thead>
                   <tr className="bg-gray-100">
+                    <th className="border border-gray-300 px-4 py-2 text-center">
+                      <input
+                        type="checkbox"
+                        checked={settlements.length > 0 && selectedSettlementIds.size === settlements.length}
+                        onChange={(e) => handleSelectAll(e.target.checked)}
+                        className="cursor-pointer"
+                      />
+                    </th>
                     <th className="border border-gray-300 px-4 py-2 text-left">
                       No.
                     </th>
@@ -620,6 +745,7 @@ export default function SalesByMallPage() {
                     </th>
                   </tr>
                   <tr className="bg-gray-50">
+                    <th className="border border-gray-300 px-4 py-2"></th>
                     <th className="border border-gray-300 px-4 py-2"></th>
                     <th className="border border-gray-300 px-4 py-2"></th>
                     <th className="border border-gray-300 px-4 py-2 text-center">
@@ -663,6 +789,14 @@ export default function SalesByMallPage() {
                 <tbody>
                   {settlements.map((settlement, index) => (
                     <tr key={settlement.id} className="hover:bg-gray-50">
+                      <td className="border border-gray-300 px-4 py-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedSettlementIds.has(settlement.id)}
+                          onChange={(e) => handleSelectSettlement(settlement.id, e.target.checked)}
+                          className="cursor-pointer"
+                        />
+                      </td>
                       <td className="border border-gray-300 px-4 py-2 text-center">
                         {index + 1}
                       </td>
@@ -717,7 +851,7 @@ export default function SalesByMallPage() {
                 {settlements.length > 0 && (
                   <tfoot>
                     <tr className="bg-gray-100 font-bold">
-                      <td className="border border-gray-300 px-4 py-2 text-center" colSpan={2}>
+                      <td className="border border-gray-300 px-4 py-2 text-center" colSpan={3}>
                         합계
                       </td>
                       <td className="border border-gray-300 px-4 py-2 text-right">
