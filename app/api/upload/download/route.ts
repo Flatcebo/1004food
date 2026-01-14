@@ -441,10 +441,20 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 내주 발주서인 경우: 내외주가 "내주"인 것들만 필터링 + 매핑코드 106464 제외 + 공란 제외
+    // 내주 발주서인 경우: 내외주가 "내주"인 것들만 필터링 + CJ외주 매핑코드 제외
     if (isInhouse) {
+      // CJ외주 발주서에서 사용하는 매핑코드들 (106464, 108640, 108788, 108879, 108221) 제외
+      const cjOutsourceCodes = [
+        "106464",
+        "108640",
+        "108788",
+        "108879",
+        "108221",
+      ];
       rows = rows.filter(
-        (row: any) => row.내외주?.trim() === "내주" && row.매핑코드 !== "106464"
+        (row: any) =>
+          row.내외주?.trim() === "내주" &&
+          !cjOutsourceCodes.includes(String(row.매핑코드 || "").trim())
       );
 
       if (rows.length === 0) {

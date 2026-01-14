@@ -38,11 +38,15 @@ export function useFileValidation(
       const newValidationStatus = {...prevStatus};
 
       filesToValidate.forEach((file: any) => {
-        // DB에서 불러온 검증 상태가 있으면 우선 사용
-        if (file.validationStatus) {
+        // DB에서 불러온 검증 상태가 있더라도 vendorName이 있으면 재검증
+        // (서버의 검증 상태가 업체명 입력 전 상태일 수 있음)
+        const hasVendorName = file.vendorName && String(file.vendorName).trim() !== "";
+        if (file.validationStatus && !hasVendorName) {
+          // vendorName이 없을 때만 서버의 검증 상태 사용
           newValidationStatus[file.id] = file.validationStatus;
           return;
         }
+        // vendorName이 있으면 항상 재검증 (서버의 검증 상태가 오래된 것일 수 있음)
 
         // DB 검증 상태가 없으면 클라이언트에서 검증 수행
         const storedFile = sessionStorage.getItem(`uploadedFile_${file.id}`);
@@ -51,18 +55,41 @@ export function useFileValidation(
           try {
             const parsedStoredFile = JSON.parse(storedFile);
             // sessionStorage의 파일과 uploadedFiles의 파일을 병합
-            // uploadedFiles의 vendorName을 우선 사용 (서버에서 최신 데이터)
+            // uploadedFiles의 vendorName을 무조건 우선 사용 (서버에서 최신 데이터)
+            // 서버에서 가져온 vendorName이 있으면 무조건 사용
+            const serverVendorName = file.vendorName;
+            const storedVendorName = parsedStoredFile.vendorName;
+            
+            console.log(`🔍 검증 시 vendorName 확인: fileId=${file.id}`, {
+              serverVendorName,
+              storedVendorName,
+              finalVendorName: serverVendorName !== null &&
+                serverVendorName !== undefined &&
+                String(serverVendorName).trim() !== ""
+                  ? String(serverVendorName).trim()
+                  : storedVendorName || undefined,
+            });
+            
             fileToCheck = {
               ...parsedStoredFile,
               ...file,
-              // vendorName은 uploadedFiles의 값이 있으면 우선 사용
-              vendorName: file.vendorName || parsedStoredFile.vendorName || undefined,
+              // vendorName은 서버에서 가져온 값(file.vendorName)을 최우선으로 사용
+              // 서버에 값이 있으면 무조건 사용, 없으면 sessionStorage 값 사용
+              vendorName:
+                serverVendorName !== null &&
+                serverVendorName !== undefined &&
+                String(serverVendorName).trim() !== ""
+                  ? String(serverVendorName).trim()
+                  : storedVendorName || undefined,
             };
           } catch (error) {
             console.error("파일 데이터 파싱 실패:", error);
             // 파싱 실패 시 uploadedFiles의 파일 사용
             fileToCheck = file;
           }
+        } else {
+          // sessionStorage에 파일이 없으면 uploadedFiles의 파일 사용
+          console.log(`⚠️ sessionStorage에 파일 없음: fileId=${file.id}, vendorName="${file.vendorName}"`);
         }
         // 파일 자체에 productCodeMap이 있으면 우선 사용, 없으면 전역 productCodeMap 사용
         const fileProductCodeMap =
@@ -102,13 +129,16 @@ export function useFileValidation(
     } = {};
 
     uploadedFiles.forEach((file: any) => {
-      // DB에서 불러온 검증 상태가 있으면 사용
-      if (file.validationStatus) {
+      // DB에서 불러온 검증 상태가 있더라도 vendorName이 있으면 재검증
+      // (서버의 검증 상태가 업체명 입력 전 상태일 수 있음)
+      const hasVendorName = file.vendorName && String(file.vendorName).trim() !== "";
+      if (file.validationStatus && !hasVendorName) {
+        // vendorName이 없을 때만 서버의 검증 상태 사용
         dbValidationStatus[file.id] = file.validationStatus;
       }
     });
 
-    // DB 검증 상태가 있으면 먼저 설정
+    // DB 검증 상태가 있으면 먼저 설정 (vendorName이 없는 파일만)
     if (Object.keys(dbValidationStatus).length > 0) {
       setFileValidationStatus((prev) => ({
         ...prev,

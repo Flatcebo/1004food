@@ -560,7 +560,18 @@ function OrderPageContent() {
       codesOriginRef.current = [];
 
       // 서버에서 임시 저장된 파일 불러오기
-      loadFilesFromServer();
+      loadFilesFromServer()
+        .then(() => {
+          // 파일 로드 완료 후 검증 다시 실행 (서버에서 가져온 vendorName 반영)
+          // 상태 업데이트가 완료될 시간을 확보하기 위해 더 긴 지연
+          setTimeout(() => {
+            console.log("🔄 모달 열림 후 검증 재실행");
+            updateValidation();
+          }, 500);
+        })
+        .catch((error) => {
+          console.error("파일 로드 실패:", error);
+        });
     }
   }, [
     isModalOpen,
@@ -571,6 +582,7 @@ function OrderPageContent() {
     setRecommendIdx,
     setRecommendList,
     loadFilesFromServer,
+    updateValidation,
   ]);
 
   // 상품 목록 fetch (DB에서)

@@ -554,19 +554,28 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
         // uploadTime이 없는 파일들에 대해 현재 시간 설정
         const updatedFiles = result.data.map((file: any) => {
           const existingFile = existingFilesMap.get(file.id);
+          // 서버에서 불러온 vendorName을 우선 사용 (서버가 최신 데이터)
+          const serverVendorName = file.vendorName || file.vendor_name;
+          const trimmedVendorName = serverVendorName !== null && serverVendorName !== undefined
+            ? String(serverVendorName).trim()
+            : null;
+          
+          console.log(`📥 서버에서 파일 로드: fileId=${file.id}, fileName="${file.fileName}"`, {
+            serverVendorName,
+            trimmedVendorName,
+            existingVendorName: existingFile?.vendorName,
+            finalVendorName: trimmedVendorName || existingFile?.vendorName || undefined,
+          });
+          
           return {
             ...file,
             uploadTime:
               file.uploadTime || file.createdAt || new Date().toISOString(),
             createdAt:
               file.createdAt || file.uploadTime || new Date().toISOString(),
-            // 서버에서 불러온 vendorName이 있으면 우선 사용, 없으면 기존 vendorName 유지
-            // (서버 업데이트가 완료되지 않았을 수 있으므로 기존 값 보존)
-            vendorName:
-              file.vendorName ||
-              file.vendor_name ||
-              existingFile?.vendorName ||
-              undefined,
+            // 서버에서 불러온 vendorName이 있으면 무조건 사용 (서버가 최신 데이터)
+            // 서버에 없으면 기존 vendorName 유지 (하위 호환성)
+            vendorName: trimmedVendorName || existingFile?.vendorName || undefined,
             // 서버에서 불러온 originalHeader가 있으면 우선 사용, 없으면 기존 originalHeader 유지
             originalHeader:
               file.originalHeader ||
@@ -584,8 +593,9 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             confirmFile(file.id);
           }
 
-          // sessionStorage에도 저장
+          // sessionStorage에도 저장 (vendorName 포함 확인)
           try {
+            console.log(`💾 sessionStorage 저장: fileId=${file.id}, vendorName="${file.vendorName}"`);
             sessionStorage.setItem(
               `uploadedFile_${file.id}`,
               JSON.stringify(file)
@@ -594,9 +604,12 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             console.error("sessionStorage 저장 실패:", error);
           }
         });
+        
+        return updatedFiles; // Promise 반환을 위해 파일 목록 반환
       }
     } catch (error) {
       console.error("서버에서 파일 불러오기 실패:", error);
+      throw error; // 에러 발생 시 throw하여 Promise rejection
     }
   },
   codes: [],

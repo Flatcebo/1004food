@@ -18,9 +18,14 @@ export function checkFileValidation(file: UploadedFile | any): {
 
   // 파일 레벨의 업체명 검증 (파일 객체의 vendorName 필드가 공란이 아니어야 함)
   const fileVendorName = String(file.vendorName || "").trim();
+  console.log(`🔍 파일 검증 - vendorName 확인: fileName="${file.fileName}", vendorName="${fileVendorName}", raw vendorName="${file.vendorName}"`);
   if (!fileVendorName) {
     const errorMsg = "파일의 업체명이 공란입니다. 업체명을 입력해주세요.";
-    console.log(errorMsg);
+    console.log(`❌ ${errorMsg}`, {
+      fileName: file.fileName,
+      vendorName: file.vendorName,
+      vendorNameType: typeof file.vendorName,
+    });
     errors.push(errorMsg);
   }
 
