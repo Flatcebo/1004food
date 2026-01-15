@@ -169,12 +169,14 @@ export async function POST(request: NextRequest) {
       const isInhouseTemplate = templateName.includes("내주");
 
       // 내주 발주서인 경우: 필터가 없어도 "내주"만 조회
+      // CJ외주 발주서에 포함되는 매핑코드들(106464, 108640, 108788, 108879, 108221) 제외
       if (isInhouseTemplate) {
         const allData = await sql`
           SELECT ur.id, ur.row_data
           FROM upload_rows ur
           INNER JOIN uploads u ON ur.upload_id = u.id
           WHERE ur.row_data->>'내외주' = '내주'
+            AND (ur.row_data->>'매핑코드' IS NULL OR ur.row_data->>'매핑코드' NOT IN ('106464', '108640', '108788', '108879', '108221'))
           ORDER BY u.created_at DESC, ur.id DESC
         `;
         // ID와 row_data를 함께 저장
@@ -313,16 +315,27 @@ export async function POST(request: NextRequest) {
     // 템플릿명 확인 (내주 발주서인지 체크)
     const templateName = (templateData.name || "").normalize("NFC").trim();
     const isInhouse = templateName.includes("내주");
+    const cjOutsourceCodes = ["106464", "108640", "108788", "108879", "108221"];
 
     // 내주 발주서인 경우: 내주 데이터만 필터링
-    if (isInhouse && dataRowsWithIds.length > 0) {
-      // ID와 함께 필터링하여 실제 다운로드된 행의 ID 추적
-      const filteredRowsWithIds = dataRowsWithIds.filter(
-        (item: any) =>
-          item.row_data.내외주 === "내주" && item.row_data.매핑코드 !== "106464"
-      );
-      dataRows = filteredRowsWithIds.map((item: any) => item.row_data);
-      downloadedRowIds = filteredRowsWithIds.map((item: any) => item.id);
+    // CJ외주 발주서에 포함되는 매핑코드들(106464, 108640, 108788, 108879, 108221) 제외
+    if (isInhouse) {
+      if (dataRowsWithIds.length > 0) {
+        // ID와 함께 필터링하여 실제 다운로드된 행의 ID 추적
+        const filteredRowsWithIds = dataRowsWithIds.filter(
+          (item: any) =>
+            item.row_data.내외주 === "내주" &&
+            !cjOutsourceCodes.includes(item.row_data.매핑코드)
+        );
+        dataRows = filteredRowsWithIds.map((item: any) => item.row_data);
+        downloadedRowIds = filteredRowsWithIds.map((item: any) => item.id);
+      } else {
+        // rows가 직접 전달된 경우
+        dataRows = dataRows.filter(
+          (row: any) =>
+            row.내외주 === "내주" && !cjOutsourceCodes.includes(row.매핑코드)
+        );
+      }
 
       if (dataRows.length === 0) {
         return NextResponse.json(
