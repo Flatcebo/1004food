@@ -79,8 +79,8 @@ export default function ProfilePage() {
       // assignedVendorIds를 숫자 배열로 변환
       const vendorIds = Array.isArray(userData.assignedVendorIds)
         ? userData.assignedVendorIds
-            .map((id) => Number(id))
-            .filter((id) => !isNaN(id))
+            .map((id: any) => Number(id))
+            .filter((id: number) => !isNaN(id))
         : [];
 
       setFormData({
