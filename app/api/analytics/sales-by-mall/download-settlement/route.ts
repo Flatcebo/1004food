@@ -59,6 +59,13 @@ export async function POST(request: NextRequest) {
     // ZIP 파일 생성
     const zip = new JSZip();
     const dateStr = generateDatePrefix();
+    
+    // 정산서 A1 셀용 날짜 (YYYY-MM-DD 형식)
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+    const settlementDate = `${year}-${month}-${day}`;
 
     // 각 mall별로 정산서 생성
     for (const settlement of settlements) {
@@ -219,7 +226,7 @@ export async function POST(request: NextRequest) {
       // 정산서 생성
       const workbook = createSettlementTemplate({
         mallName,
-        date: dateStr,
+        date: settlementDate,
         orders: orderDataList,
         summary,
       });

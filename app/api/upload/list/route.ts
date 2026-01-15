@@ -159,7 +159,7 @@ export async function GET(request: NextRequest) {
         sql`SELECT DISTINCT ur.row_data->>'내외주' as type FROM upload_rows ur INNER JOIN uploads u ON ur.upload_id = u.id WHERE u.company_id = ${companyId} AND ur.row_data->>'내외주' IS NOT NULL ORDER BY type`,
         sql`SELECT DISTINCT ur.row_data->>'택배사' as post_type FROM upload_rows ur INNER JOIN uploads u ON ur.upload_id = u.id WHERE u.company_id = ${companyId} AND ur.row_data->>'택배사' IS NOT NULL ORDER BY post_type`,
         sql`SELECT DISTINCT name as vendor FROM purchase WHERE company_id = ${companyId} AND name IS NOT NULL ORDER BY name`,
-        sql`SELECT DISTINCT ur.row_data->>'업체명' as company FROM upload_rows ur INNER JOIN uploads u ON ur.upload_id = u.id WHERE u.company_id = ${companyId} AND ur.row_data->>'업체명' IS NOT NULL ORDER BY company`,
+        sql`SELECT DISTINCT name as company FROM mall WHERE name IS NOT NULL ORDER BY name`,
       ]
     );
 
