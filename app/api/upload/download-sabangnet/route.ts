@@ -432,9 +432,41 @@ export async function POST(request: NextRequest) {
               stringValue = row["내부코드"] || stringValue;
             }
 
-            // 배송희망일은 오늘 날짜로 설정 (YYYYMMDD 형식)
+            // 배송희망일은 YYYYMMDD 형식으로 설정
             if (headerStr === "배송희망일" || headerStr.includes("배송희망")) {
-              stringValue = dateStr;
+              // row 데이터에 배송희망일이 있으면 사용, 없으면 오늘 날짜 사용
+              const deliveryDate = row["배송희망일"] || row["배송희망일자"] || null;
+              
+              if (deliveryDate) {
+                // 날짜 형식 변환 (다양한 형식 지원)
+                const date = new Date(deliveryDate);
+                if (!isNaN(date.getTime())) {
+                  const year = date.getFullYear();
+                  const month = String(date.getMonth() + 1).padStart(2, "0");
+                  const day = String(date.getDate()).padStart(2, "0");
+                  stringValue = `${year}${month}${day}`;
+                } else {
+                  // 이미 YYYYMMDD 형식인 경우 그대로 사용
+                  const dateStr = String(deliveryDate).replace(/\D/g, "");
+                  if (dateStr.length === 8) {
+                    stringValue = dateStr;
+                  } else {
+                    // 파싱 실패 시 오늘 날짜 사용
+                    const now = new Date();
+                    const year = now.getFullYear();
+                    const month = String(now.getMonth() + 1).padStart(2, "0");
+                    const day = String(now.getDate()).padStart(2, "0");
+                    stringValue = `${year}${month}${day}`;
+                  }
+                }
+              } else {
+                // 배송희망일이 없으면 오늘 날짜 사용
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = String(now.getMonth() + 1).padStart(2, "0");
+                const day = String(now.getDate()).padStart(2, "0");
+                stringValue = `${year}${month}${day}`;
+              }
             }
 
             // 전화번호2는 주문자 전화번호를 메인으로 하고, 데이터가 없는 경우엔 수취인 전화번호가 입력되게
