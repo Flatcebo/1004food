@@ -165,9 +165,10 @@ export function useFileSave({
         if (!fileVendorName || fileVendorName === "") {
           const headerRow = file.tableData[0];
           const vendorIdx = headerRow.findIndex(
-            (h: any) => h && typeof h === "string" && (h === "업체명" || h === "업체")
+            (h: any) =>
+              h && typeof h === "string" && (h === "업체명" || h === "업체")
           );
-          
+
           if (vendorIdx !== -1 && file.tableData.length > 1) {
             // 첫 번째 데이터 행에서 업체명 찾기
             const firstDataRow = file.tableData[1];
@@ -179,7 +180,7 @@ export function useFileSave({
               );
             }
           }
-          
+
           // 여전히 비어있으면 경고 로그
           if (!fileVendorName || fileVendorName === "") {
             console.error(
@@ -222,6 +223,35 @@ export function useFileSave({
       }
 
       updateLoadingMessage("업로드 데이터 준비 중...");
+
+      // productId가 있는데 productsToUse에 없는 경우를 대비해 전체 상품 목록도 로드
+      // (검색 모달에서 선택한 상품이 productsToUse에 없을 수 있음)
+      let allProducts = productsToUse;
+      const hasProductIdInMap = filesToUpload.some((file: any) => {
+        const productIdMap = file.productIdMap || {};
+        return Object.keys(productIdMap).length > 0;
+      });
+      
+      if (hasProductIdInMap) {
+        // productId가 있는 경우, 전체 상품 목록을 한 번 더 로드하여 확실히 포함
+        try {
+          const {fetchProducts} = await import("@/utils/api");
+          const result = await fetchProducts();
+          if (result.success && result.data) {
+            allProducts = result.data;
+            // productsToUse에 없는 상품들을 추가
+            const existingIds = new Set(productsToUse.map((p: any) => p.id));
+            const missingProducts = result.data.filter(
+              (p: any) => !existingIds.has(p.id)
+            );
+            if (missingProducts.length > 0) {
+              productsToUse = [...productsToUse, ...missingProducts];
+            }
+          }
+        } catch (error) {
+          console.error("전체 상품 목록 로드 실패:", error);
+        }
+      }
 
       let codeIndex = 0;
       const uploadData = filesToUpload
@@ -298,18 +328,23 @@ export function useFileSave({
               const productIdMap = file.productIdMap || {};
               let matchedProduct = null;
               let productId = null;
-              
+
               const selectedProductId = productIdMap[name];
               if (selectedProductId !== undefined) {
                 // 사용자가 선택한 상품 ID가 있으면 그것으로 정확히 찾기 (무조건 사용자가 선택한 상품만 사용)
                 matchedProduct = productsToUse.find(
                   (c: any) => c.id === selectedProductId
                 );
+                
+                // productsToUse에 없어도 productId가 있으면 사용자가 검색 모달에서 선택한 상품이므로
+                // productId를 저장하고, 신규 상품 생성 시 해당 ID를 사용하여 DB에서 찾을 수 있도록 함
+                // (batchCreateProducts API가 ON CONFLICT를 사용하므로 상품명, 매핑코드, 택배사가 같으면 업데이트됨)
+                
                 // 사용자가 선택한 상품 ID 저장 (다운로드 시 정확한 상품을 찾기 위함)
                 productId = selectedProductId;
                 rowData["productId"] = selectedProductId;
               }
-              
+
               if (!matchedProduct) {
                 // 사용자가 선택하지 않은 경우에만 상품명이 정확히 일치할 때만 찾기
                 matchedProduct = productsToUse.find(
@@ -321,7 +356,7 @@ export function useFileSave({
                   rowData["productId"] = matchedProduct.id;
                 }
               }
-              
+
               if (!matchedProduct) {
                 // 상품명으로도 찾지 못했으면 매핑코드로 찾기 (같은 매핑코드를 가진 여러 상품 중 첫 번째가 선택될 수 있음)
                 matchedProduct = productsToUse.find((c: any) => {
@@ -367,9 +402,11 @@ export function useFileSave({
 
               // 상품의 모든 필드를 포함하여 초기화
               const productInfo: any = {
-                name: name,
-                code: code,
+                name: name, // 주문의 상품명 사용
+                code: code, // 선택한 상품의 매핑코드 사용
               };
+
+              // productId는 신규 상품 생성 시 사용하지 않음 (선택한 상품의 정보만 참고)
 
               // 상품의 모든 필드를 기본값으로 초기화
               PRODUCT_FIELD_ORDER.forEach((field) => {
@@ -409,6 +446,57 @@ export function useFileSave({
                     "📦 매핑된 상품 정보에서 가져온 모든 필드:",
                     productInfo
                   );
+                }
+              } else if (productId && selectedProductId === productId) {
+                // 매핑된 상품을 찾지 못했지만 productId가 있으면,
+                // 검색 모달에서 선택한 상품이므로 전체 상품 목록에서 찾기
+                const selectedProduct = allProducts.find(
+                  (p: any) => p.id === productId
+                );
+                
+                if (selectedProduct) {
+                  // 선택한 상품의 정보를 복사하되, 상품명은 주문의 상품명 사용
+                  Object.keys(selectedProduct).forEach((key) => {
+                    if (
+                      key !== "id" &&
+                      key !== "createdAt" &&
+                      key !== "updatedAt" &&
+                      key !== "name" // name은 현재 row의 name 사용
+                    ) {
+                      // 택배사(postType)는 null을 빈 문자열로 변환
+                      if (key === "postType") {
+                        productInfo[key] = selectedProduct[key] || "";
+                      } else {
+                        productInfo[key] = selectedProduct[key];
+                      }
+                    }
+                  });
+
+                  // 디버깅: 첫 번째 상품만 로그 출력
+                  if (newProducts.length === 0) {
+                    console.log(
+                      "🔍 검색 모달에서 선택한 상품 정보:",
+                      productId,
+                      selectedProduct
+                    );
+                    console.log(
+                      "📦 선택한 상품 정보에서 가져온 모든 필드:",
+                      productInfo
+                    );
+                  }
+                } else {
+                  // 디버깅: 검색 모달에서 선택한 상품을 찾지 못한 경우
+                  if (newProducts.length === 0) {
+                    console.log(
+                      "⚠️ 검색 모달에서 선택한 상품을 찾지 못함:",
+                      "name=",
+                      name,
+                      "code=",
+                      code,
+                      "productId=",
+                      productId
+                    );
+                  }
                 }
               } else {
                 // 디버깅: 매핑된 상품을 찾지 못한 경우
@@ -610,7 +698,9 @@ export function useFileSave({
           if (!file) return null;
 
           // uploadData에서 해당 파일의 업데이트된 productIdMap 찾기
-          const uploadDataItem = uploadData.find((d: any) => d.fileName === file.fileName);
+          const uploadDataItem = uploadData.find(
+            (d: any) => d.fileName === file.fileName
+          );
           const updatedProductIdMap = uploadDataItem?.productIdMap || {};
 
           // 최신 파일 데이터 가져오기

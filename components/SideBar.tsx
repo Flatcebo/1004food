@@ -111,8 +111,12 @@ const menuConfigs: AccordionMenuConfig[] = [
         path: "/vendors",
         name: "납품업체 관리",
       },
+      {
+        path: "/logs",
+        name: "로그",
+      },
     ],
-    autoOpenPaths: ["/products/upload", "/users", "/vendors"],
+    autoOpenPaths: ["/products/upload", "/users", "/vendors", "/logs"],
     requiresAdmin: true,
   },
 ];
@@ -153,11 +157,12 @@ function AccordionMenu({
             <Link
               key={item.path}
               href={item.path}
-              className={`w-full px-4 py-2 rounded-lg transition-all duration-200 flex items-center gap-3 ${
-                item.isActive
-                  ? "text-[#888eab]"
-                  : "hover:bg-gray-700 hover:translate-x-1 active:scale-95 text-white"
-              }`}
+              className={`w-full px-6 py-2 rounded-lg transition-all duration-200 flex items-center gap-3
+                text-[15px] ${
+                  item.isActive
+                    ? "text-[#888eab]"
+                    : "hover:bg-gray-700 hover:translate-x-1 active:scale-95 text-[#ffffff]"
+                }`}
             >
               <span>{item.name}</span>
             </Link>

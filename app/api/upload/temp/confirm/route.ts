@@ -131,7 +131,9 @@ export async function POST(request: NextRequest) {
           product_id_map,
           vendor_name,
           mall_id,
-          original_header
+          original_header,
+          original_table_data,
+          user_id
         FROM temp_files
         WHERE is_confirmed = true AND company_id = ${companyId} AND user_id = ${userId}
         ORDER BY created_at ASC
@@ -148,7 +150,9 @@ export async function POST(request: NextRequest) {
           product_id_map,
           vendor_name,
           mall_id,
-          original_header
+          original_header,
+          original_table_data,
+          user_id
         FROM temp_files
         WHERE is_confirmed = true AND company_id = ${companyId}
         ORDER BY created_at ASC
@@ -479,10 +483,73 @@ export async function POST(request: NextRequest) {
         headerFormat: headerFormat,
       });
 
-      // uploads 테이블에 저장 (vendor_name, header_order, header_format 포함)
+      // uploads 테이블에 user_id 컬럼이 있는지 확인하고 없으면 추가
+      try {
+        const uploadsUserIdColumnExists = await sql`
+          SELECT EXISTS (
+            SELECT 1 
+            FROM information_schema.columns 
+            WHERE table_name = 'uploads' 
+            AND column_name = 'user_id'
+          )
+        `;
+
+        if (!uploadsUserIdColumnExists[0]?.exists) {
+          await sql`
+            ALTER TABLE uploads 
+            ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+          `;
+          console.log("✅ uploads 테이블에 user_id 컬럼 추가 완료");
+        }
+      } catch (error) {
+        console.error("uploads user_id 컬럼 확인/추가 실패:", error);
+      }
+
+      // uploads 테이블에 original_data 컬럼이 있는지 확인하고 없으면 추가
+      try {
+        const originalDataColumnExists = await sql`
+          SELECT EXISTS (
+            SELECT 1 
+            FROM information_schema.columns 
+            WHERE table_name = 'uploads' 
+            AND column_name = 'original_data'
+          )
+        `;
+
+        if (!originalDataColumnExists[0]?.exists) {
+          await sql`
+            ALTER TABLE uploads 
+            ADD COLUMN original_data JSONB
+          `;
+          console.log("✅ uploads 테이블에 original_data 컬럼 추가 완료");
+        }
+      } catch (error) {
+        console.error("uploads original_data 컬럼 확인/추가 실패:", error);
+      }
+
+      // temp_files의 user_id 가져오기
+      const fileUserId = file.user_id ? parseInt(file.user_id, 10) : null;
+
+      // 디버깅: user_id 확인
+      console.log(`🔍 파일 "${file.file_name}" 처리 중:`, {
+        fileUserId: fileUserId,
+        fileUserIdRaw: file.user_id,
+        userIdFromRequest: userId,
+      });
+
+      // 원본 데이터 가져오기 (original_table_data가 있으면 사용, 없으면 table_data 사용)
+      const originalTableData =
+        file.original_table_data &&
+        Array.isArray(file.original_table_data) &&
+        file.original_table_data.length > 0
+          ? file.original_table_data
+          : file.table_data; // 하위 호환성을 위해 table_data 사용
+
+      // uploads 테이블에 저장 (vendor_name, header_order, header_format, user_id, original_data 포함)
       // header_order와 header_format에는 원본 헤더 저장
+      // original_data에는 원본 테이블 데이터 저장 (업로드 후에도 변하지 않음)
       const uploadResult = await sql`
-        INSERT INTO uploads (file_name, row_count, data, company_id, vendor_name, header_order, header_format, created_at)
+        INSERT INTO uploads (file_name, row_count, data, company_id, vendor_name, header_order, header_format, user_id, original_data, created_at)
         VALUES (
           ${file.file_name},
           ${rowObjects.length},
@@ -491,23 +558,52 @@ export async function POST(request: NextRequest) {
           ${vendorName},
           ${JSON.stringify(originalHeader)},
           ${JSON.stringify(headerFormat)},
+          ${fileUserId},
+          ${JSON.stringify(originalTableData)},
           ${koreaTime.toISOString()}::timestamp
         )
-        RETURNING id, created_at, header_order, header_format
+        RETURNING id, created_at, header_order, header_format, original_data
       `;
 
-      // 디버깅: 저장된 헤더 정보 확인
+      // 디버깅: 저장된 헤더 정보 및 원본 데이터 확인
       console.log(`✅ 파일 "${file.file_name}" 저장 완료:`, {
         uploadId: uploadResult[0].id,
         savedHeaderOrder: uploadResult[0].header_order,
         savedHeaderFormat: uploadResult[0].header_format,
+        hasOriginalData: !!uploadResult[0].original_data,
+        originalDataLength: uploadResult[0].original_data
+          ? Array.isArray(uploadResult[0].original_data)
+            ? uploadResult[0].original_data.length
+            : "not array"
+          : null,
       });
 
       const uploadId = uploadResult[0].id;
       const createdAt = uploadResult[0].created_at;
       console.log(
-        `✅ uploads 저장 완료: upload_id=${uploadId}, vendor_name=${vendorName}`
+        `✅ uploads 저장 완료: upload_id=${uploadId}, vendor_name=${vendorName}, user_id=${fileUserId}`
       );
+
+      // uploads 테이블에 저장된 user_id 검증
+      try {
+        const verifyUpload = await sql`
+          SELECT id, file_name, user_id 
+          FROM uploads 
+          WHERE id = ${uploadId}
+        `;
+        if (verifyUpload.length > 0) {
+          console.log(
+            `🔍 uploads 테이블 검증: id=${verifyUpload[0].id}, file_name="${verifyUpload[0].file_name}", user_id=${verifyUpload[0].user_id} (예상: ${fileUserId})`
+          );
+          if (verifyUpload[0].user_id !== fileUserId) {
+            console.error(
+              `❌ 경고: uploads 테이블에 저장된 user_id(${verifyUpload[0].user_id})가 예상값(${fileUserId})과 다릅니다!`
+            );
+          }
+        }
+      } catch (error) {
+        console.error("uploads 테이블 검증 실패:", error);
+      }
 
       // upload_rows 테이블에 vendor_name 컬럼이 있는지 확인하고 없으면 추가
       try {
@@ -527,6 +623,28 @@ export async function POST(request: NextRequest) {
         }
       } catch (error) {
         console.error("upload_rows vendor_name 컬럼 확인/추가 실패:", error);
+      }
+
+      // upload_rows 테이블에 user_id 컬럼이 있는지 확인하고 없으면 추가
+      try {
+        const uploadRowsUserIdColumnExists = await sql`
+          SELECT EXISTS (
+            SELECT 1 
+            FROM information_schema.columns 
+            WHERE table_name = 'upload_rows' 
+            AND column_name = 'user_id'
+          )
+        `;
+
+        if (!uploadRowsUserIdColumnExists[0]?.exists) {
+          await sql`
+            ALTER TABLE upload_rows 
+            ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+          `;
+          console.log("✅ upload_rows 테이블에 user_id 컬럼 추가 완료");
+        }
+      } catch (error) {
+        console.error("upload_rows user_id 컬럼 확인/추가 실패:", error);
       }
 
       // upload_rows 테이블에 row_order 컬럼이 있는지 확인하고 없으면 추가
@@ -563,7 +681,7 @@ export async function POST(request: NextRequest) {
         }
 
         return sql`
-          INSERT INTO upload_rows (upload_id, row_data, shop_name, company_id, mall_id, vendor_name, row_order, created_at)
+          INSERT INTO upload_rows (upload_id, row_data, shop_name, company_id, mall_id, vendor_name, row_order, user_id, created_at)
           VALUES (
             ${uploadId},
             ${JSON.stringify(rowObj)},
@@ -572,9 +690,10 @@ export async function POST(request: NextRequest) {
             ${mallId},
             ${vendorName},
             ${index + 1},
+            ${fileUserId},
             ${koreaTime.toISOString()}::timestamp
           )
-          RETURNING id, mall_id, vendor_name, row_order
+          RETURNING id, mall_id, vendor_name, row_order, user_id
         `;
       });
 
@@ -584,7 +703,7 @@ export async function POST(request: NextRequest) {
       if (rowResults.length > 0) {
         const firstRowResult = rowResults[0][0];
         console.log(
-          `✅ upload_rows 저장 완료: 첫 번째 row - id=${firstRowResult.id}, mall_id=${firstRowResult.mall_id}, vendor_name="${firstRowResult.vendor_name}"`
+          `✅ upload_rows 저장 완료: 첫 번째 row - id=${firstRowResult.id}, mall_id=${firstRowResult.mall_id}, vendor_name="${firstRowResult.vendor_name}", user_id=${firstRowResult.user_id}`
         );
 
         // 전체 저장된 row 중 mall_id가 있는지 확인
@@ -604,7 +723,7 @@ export async function POST(request: NextRequest) {
         // DB에서 실제로 저장된 값 다시 조회하여 검증
         try {
           const verifyResult = await sql`
-            SELECT id, mall_id, vendor_name 
+            SELECT id, mall_id, vendor_name, user_id 
             FROM upload_rows 
             WHERE upload_id = ${uploadId} 
             LIMIT 5
@@ -615,8 +734,23 @@ export async function POST(request: NextRequest) {
               id: r.id,
               mall_id: r.mall_id,
               vendor_name: r.vendor_name,
+              user_id: r.user_id,
             }))
           );
+
+          // user_id 검증
+          const savedUserIds = verifyResult
+            .map((r: any) => r.user_id)
+            .filter((id: any) => id !== null);
+          console.log(
+            `📊 user_id 저장 통계: 총 ${verifyResult.length}개 row 중 ${savedUserIds.length}개에 user_id가 설정됨 (예상: ${fileUserId})`
+          );
+
+          if (savedUserIds.length === 0 && fileUserId) {
+            console.error(
+              `❌ 경고: fileUserId=${fileUserId}이 있지만 upload_rows에 user_id가 저장되지 않았습니다!`
+            );
+          }
         } catch (error) {
           console.error("DB 검증 쿼리 실패:", error);
         }

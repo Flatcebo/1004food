@@ -13,10 +13,9 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
 
   toggleMenu: (menuId: string) => {
     const {openMenus} = get();
-    const newOpenMenus = new Set(openMenus);
-    if (newOpenMenus.has(menuId)) {
-      newOpenMenus.delete(menuId);
-    } else {
+    const newOpenMenus = new Set<string>();
+    // 클릭한 메뉴가 이미 열려있으면 닫고, 닫혀있으면 다른 모든 메뉴를 닫고 해당 메뉴만 열기
+    if (!openMenus.has(menuId)) {
       newOpenMenus.add(menuId);
     }
     set({openMenus: newOpenMenus});

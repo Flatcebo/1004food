@@ -308,50 +308,7 @@ function OrderPageContent() {
     return fileValidationStatus[fileId]?.isValid ?? true;
   };
 
-  // 검증이 통과한 파일들을 자동으로 확인 처리
-  useEffect(() => {
-    if (uploadedFiles.length === 0) return;
-
-    // 약간의 지연을 두어 검증 완료 후 실행
-    const timeoutId = setTimeout(() => {
-      uploadedFiles.forEach((file) => {
-        const isValid = getValidationStatus(file.id);
-        const isConfirmed = confirmedFiles.has(file.id);
-
-        // 검증이 통과했고 아직 확인되지 않은 파일만 자동 확인
-        if (isValid && !isConfirmed) {
-          // sessionStorage에서 최신 파일 데이터 가져오기
-          const storedFile = sessionStorage.getItem(`uploadedFile_${file.id}`);
-          let fileToConfirm = file;
-
-          if (storedFile) {
-            try {
-              fileToConfirm = JSON.parse(storedFile);
-            } catch (error) {
-              console.error("파일 데이터 파싱 실패:", error);
-            }
-          }
-
-          // sessionStorage에 최신 상태 저장 (확인 처리와 동일한 로직)
-          try {
-            sessionStorage.setItem(
-              `uploadedFile_${file.id}`,
-              JSON.stringify(fileToConfirm)
-            );
-          } catch (error) {
-            console.error("sessionStorage 업데이트 실패:", error);
-          }
-
-          // 자동 확인 처리
-          confirmFile(file.id);
-        }
-      });
-    }, 500); // 검증 완료 후 약간의 지연
-
-    return () => {
-      clearTimeout(timeoutId);
-    };
-  }, [fileValidationStatus, uploadedFiles, confirmedFiles, confirmFile]);
+  // 자동 확인 처리 제거 - 사용자가 직접 체크박스를 선택해야 함
 
   // 메시지 핸들러 훅
   useFileMessageHandler({
@@ -712,6 +669,11 @@ function OrderPageContent() {
       removeUploadedFile(fileId);
       unconfirmFile(fileId);
       sessionStorage.removeItem(`uploadedFile_${fileId}`);
+    } finally {
+      // 파일 삭제 후 input value 초기화 (같은 파일을 다시 선택할 수 있도록)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     }
   };
 

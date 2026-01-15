@@ -86,6 +86,7 @@ export async function POST(request: NextRequest) {
       // 제약조건이 있으면 ON CONFLICT 사용
       const insertPromises = products.map((product: any) => {
         const {
+          productId,
           type,
           postType,
           name,
@@ -109,6 +110,9 @@ export async function POST(request: NextRequest) {
         // 택배사가 null이면 빈 문자열로 변환
         const normalizedPostType = postType || "";
 
+        // productId가 있어도 기존 상품을 업데이트하지 않고 새로운 상품을 생성
+        // (검색 모달에서 선택한 상품의 정보를 참고하되, 주문의 상품명으로 새 상품 생성)
+        // 상품명, 매핑코드, 택배사가 모두 같은 상품이 이미 있으면 그대로 유지 (DO NOTHING), 없으면 신규 생성
         return sql`
           INSERT INTO products (
             company_id, type, post_type, name, code, pkg, price, sale_price, post_fee,
@@ -130,20 +134,7 @@ export async function POST(request: NextRequest) {
             ${sabangName || null},
             ${etc || null}
           )
-          ON CONFLICT (company_id, name, code, post_type) DO UPDATE SET
-            type = EXCLUDED.type,
-            post_type = COALESCE(EXCLUDED.post_type, ''),
-            pkg = EXCLUDED.pkg,
-            price = EXCLUDED.price,
-            sale_price = EXCLUDED.sale_price,
-            post_fee = EXCLUDED.post_fee,
-            purchase = EXCLUDED.purchase,
-            bill_type = EXCLUDED.bill_type,
-            category = EXCLUDED.category,
-            product_type = EXCLUDED.product_type,
-            sabang_name = EXCLUDED.sabang_name,
-            etc = EXCLUDED.etc,
-            updated_at = (NOW() + INTERVAL '9 hours')
+          ON CONFLICT (company_id, name, code, post_type) DO NOTHING
         `;
       });
 
@@ -152,6 +143,7 @@ export async function POST(request: NextRequest) {
       // 제약조건이 없으면 각 상품을 순차적으로 처리
       for (const product of products) {
         const {
+          productId,
           type,
           postType,
           name,
@@ -175,7 +167,9 @@ export async function POST(request: NextRequest) {
         // 택배사가 null이면 빈 문자열로 변환
         const normalizedPostType = postType || "";
 
-        // 기존 상품 확인
+        // productId가 있어도 기존 상품을 업데이트하지 않고 새로운 상품을 생성
+        // (검색 모달에서 선택한 상품의 정보를 참고하되, 주문의 상품명으로 새 상품 생성)
+        // 상품명, 매핑코드, 택배사가 모두 같은 상품이 이미 있으면 그대로 유지, 없으면 신규 생성
         const existing = await sql`
           SELECT id FROM products 
           WHERE company_id = ${companyId}
@@ -185,30 +179,8 @@ export async function POST(request: NextRequest) {
           LIMIT 1
         `;
 
-        if (existing.length > 0) {
-          // 업데이트
-          await sql`
-            UPDATE products SET
-              type = ${type || null},
-              pkg = ${pkg || null},
-              price = ${price !== undefined && price !== null ? price : null},
-              sale_price = ${
-                salePrice !== undefined && salePrice !== null ? salePrice : null
-              },
-              post_fee = ${
-                postFee !== undefined && postFee !== null ? postFee : null
-              },
-              purchase = ${purchase || null},
-              bill_type = ${billType || null},
-              category = ${category || null},
-              product_type = ${productType || null},
-              sabang_name = ${sabangName || null},
-              etc = ${etc || null},
-              updated_at = (NOW() + INTERVAL '9 hours')
-            WHERE id = ${existing[0].id}
-          `;
-        } else {
-          // 새로 INSERT
+        if (existing.length === 0) {
+          // 기존 상품이 없을 때만 신규 생성
           await sql`
             INSERT INTO products (
               company_id, type, post_type, name, code, pkg, price, sale_price, post_fee,
@@ -234,6 +206,7 @@ export async function POST(request: NextRequest) {
             )
           `;
         }
+        // 기존 상품이 있으면 그대로 유지 (업데이트하지 않음)
       }
     }
 

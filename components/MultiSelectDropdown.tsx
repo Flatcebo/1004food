@@ -16,6 +16,8 @@ interface MultiSelectDropdownProps {
   className?: string;
   showSelectedTags?: boolean;
   enableAutocomplete?: boolean;
+  customPadding?: string;
+  labelOnTop?: boolean;
 }
 
 export default function MultiSelectDropdown({
@@ -27,6 +29,8 @@ export default function MultiSelectDropdown({
   className = "",
   showSelectedTags = false,
   enableAutocomplete = false,
+  customPadding,
+  labelOnTop = false,
 }: MultiSelectDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState("");
@@ -155,7 +159,9 @@ export default function MultiSelectDropdown({
   // 선택된 인덱스가 변경될 때 스크롤 처리
   useEffect(() => {
     if (selectedIndex >= 0 && dropdownRef.current) {
-      const selectedElement = dropdownRef.current.children[selectedIndex] as HTMLElement;
+      const selectedElement = dropdownRef.current.children[
+        selectedIndex
+      ] as HTMLElement;
       if (selectedElement) {
         selectedElement.scrollIntoView({
           block: "nearest",
@@ -186,7 +192,7 @@ export default function MultiSelectDropdown({
       // 추가: 원본 타입 유지하면서 추가
       onChange([...selectedValues, optionValue]);
     }
-    
+
     // 자동완성 모드일 때 인풋 초기화
     if (enableAutocomplete) {
       setInputValue("");
@@ -225,126 +231,134 @@ export default function MultiSelectDropdown({
         /\s+/g,
         "-"
       )} relative ${
-        showSelectedTags ? "flex flex-col" : "flex items-center"
+        labelOnTop || showSelectedTags ? "flex flex-col" : "flex items-center"
       } ${className}`}
     >
-      <div className={`flex items-center ${showSelectedTags ? "mb-2" : ""}`}>
+      {labelOnTop ? (
+        <label className="mb-1">{label} :</label>
+      ) : (
         <label className="mr-0">{label} :</label>
-        <div className={`relative ml-2 ${showSelectedTags ? "flex-1" : ""}`}>
-          <div
-            className={`px-2 py-1 border border-gray-300 rounded bg-white text-left ${
-              showSelectedTags ? "w-full" : "min-w-[150px]"
-            } flex items-center justify-between hover:border-gray-400 focus-within:ring-2 focus-within:ring-blue-500`}
-            onClick={(e) => {
-              if (!enableAutocomplete) {
-                toggleDropdown();
-              }
-            }}
-          >
-            {enableAutocomplete && isOpen ? (
-              <input
-                ref={inputRef}
-                type="text"
-                value={inputValue}
-                onChange={handleInputChange}
-                onKeyDown={handleInputKeyDown}
-                placeholder={placeholder}
-                className="flex-1 outline-none text-sm"
-                onClick={(e) => e.stopPropagation()}
-              />
-            ) : (
-              <button
-                type="button"
-                onClick={toggleDropdown}
-                className="flex-1 text-left flex items-center justify-between focus:outline-none"
-              >
-                <span className="truncate">{displayText}</span>
-              </button>
-            )}
-            {isOpen && selectedValues.length > 0 ? (
-              <button
-                type="button"
-                onClick={handleClearAll}
-                className="w-4 h-4 ml-2 flex items-center justify-center text-gray-500 hover:text-red-600 transition-colors shrink-0"
-                title="전체 해제"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={toggleDropdown}
-                className="w-4 h-4 ml-2 flex items-center justify-center shrink-0 focus:outline-none"
-              >
-                <svg
-                  className={`w-4 h-4 transition-transform ${
-                    isOpen ? "rotate-180" : ""
-                  }`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
-              </button>
-            )}
-          </div>
-          {isOpen && (
-            <div
-              ref={dropdownRef}
-              className="absolute z-9999 mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-48 overflow-y-auto min-w-[150px]"
+      )}
+      <div
+        className={`relative ${labelOnTop ? "" : "ml-2"} ${
+          showSelectedTags ? "w-full" : ""
+        }`}
+      >
+        <div
+          className={`px-2 ${
+            customPadding || "py-1"
+          } border border-gray-300 rounded-lg bg-white text-left ${
+            showSelectedTags ? "w-full" : "min-w-[150px]"
+          } flex items-center justify-between hover:border-gray-400 focus-within:ring-2 focus-within:ring-blue-500`}
+          onClick={(e) => {
+            if (!enableAutocomplete) {
+              toggleDropdown();
+            }
+          }}
+        >
+          {enableAutocomplete && isOpen ? (
+            <input
+              ref={inputRef}
+              type="text"
+              value={inputValue}
+              onChange={handleInputChange}
+              onKeyDown={handleInputKeyDown}
+              placeholder={placeholder}
+              className="flex-1 outline-none text-sm"
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={toggleDropdown}
+              className="flex-1 text-left flex items-center justify-between focus:outline-none"
             >
-              {filteredOptions && filteredOptions.length > 0 ? (
-                filteredOptions.map((option, index) => {
-                  const isChecked = isOptionSelected(option.value);
-                  const isHighlighted = index === selectedIndex;
-                  return (
-                    <div
-                      key={String(option.value)}
-                      className={`flex items-center px-3 py-2 hover:bg-gray-100 cursor-pointer ${
-                        isHighlighted ? "bg-blue-50" : ""
-                      }`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleToggleOption(option.value);
-                      }}
-                      onMouseEnter={() => setSelectedIndex(index)}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        readOnly
-                        className="mr-2 pointer-events-none"
-                      />
-                      <span className="text-sm">{option.label}</span>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="px-3 py-2 text-sm text-gray-500">
-                  옵션이 없습니다
-                </div>
-              )}
-            </div>
+              <span className="truncate">{displayText}</span>
+            </button>
+          )}
+          {isOpen && selectedValues.length > 0 ? (
+            <button
+              type="button"
+              onClick={handleClearAll}
+              className="w-4 h-4 ml-2 flex items-center justify-center text-gray-500 hover:text-red-600 transition-colors shrink-0"
+              title="전체 해제"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={toggleDropdown}
+              className="w-4 h-4 ml-2 flex items-center justify-center shrink-0 focus:outline-none"
+            >
+              <svg
+                className={`w-4 h-4 transition-transform ${
+                  isOpen ? "rotate-180" : ""
+                }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
           )}
         </div>
+        {isOpen && (
+          <div
+            ref={dropdownRef}
+            className="absolute z-9999 mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-48 overflow-y-auto min-w-[150px]"
+          >
+            {filteredOptions && filteredOptions.length > 0 ? (
+              filteredOptions.map((option, index) => {
+                const isChecked = isOptionSelected(option.value);
+                const isHighlighted = index === selectedIndex;
+                return (
+                  <div
+                    key={String(option.value)}
+                    className={`flex items-center px-3 py-2 hover:bg-gray-100 cursor-pointer ${
+                      isHighlighted ? "bg-blue-50" : ""
+                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleToggleOption(option.value);
+                    }}
+                    onMouseEnter={() => setSelectedIndex(index)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      readOnly
+                      className="mr-2 pointer-events-none"
+                    />
+                    <span className="text-sm">{option.label}</span>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="px-3 py-2 text-sm text-gray-500">
+                옵션이 없습니다
+              </div>
+            )}
+          </div>
+        )}
       </div>
       {/* 선택된 항목들 표시 */}
       {showSelectedTags && selectedValues.length > 0 && (

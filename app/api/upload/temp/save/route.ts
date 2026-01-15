@@ -3,33 +3,22 @@ import sql from "@/lib/db";
 import {checkFileValidation} from "@/utils/fileValidation";
 import {getCompanyIdFromRequest, getUserIdFromRequest} from "@/lib/company";
 
-// 중복 파일명 체크 함수 (세션별, company_id 필터링)
+// 중복 파일명 체크 함수 (전역적으로 파일명만 체크, company_id만 필터링)
 async function checkDuplicateFileName(
   fileName: string,
-  sessionId: string,
   companyId: number
 ): Promise<boolean> {
   try {
+    // 같은 회사 내에서 파일명이 이미 존재하는지 체크 (모든 세션, 모든 유저)
     const existingFiles = await sql`
       SELECT file_name FROM temp_files
       WHERE file_name = ${fileName} 
-        AND COALESCE(session_id, 'default-session') = ${sessionId}
         AND company_id = ${companyId}
     `;
 
     return existingFiles.length > 0;
   } catch (error: any) {
-    // session_id 컬럼이 없으면 파일명과 company_id만으로 체크
-    if (
-      error.message &&
-      error.message.includes('column "session_id" does not exist')
-    ) {
-      const existingFiles = await sql`
-        SELECT file_name FROM temp_files 
-        WHERE file_name = ${fileName} AND company_id = ${companyId}
-      `;
-      return existingFiles.length > 0;
-    }
+    console.error("중복 파일명 체크 실패:", error);
     throw error;
   }
 }
@@ -91,8 +80,14 @@ export async function POST(request: NextRequest) {
 
       // 디버깅: 원본 헤더 확인
       console.log(`📋 파일 "${fileName}"의 originalHeader:`, originalHeader);
-      console.log(`📋 파일 "${fileName}"의 originalHeader 타입:`, typeof originalHeader);
-      console.log(`📋 파일 "${fileName}"의 originalHeader 배열 여부:`, Array.isArray(originalHeader));
+      console.log(
+        `📋 파일 "${fileName}"의 originalHeader 타입:`,
+        typeof originalHeader
+      );
+      console.log(
+        `📋 파일 "${fileName}"의 originalHeader 배열 여부:`,
+        Array.isArray(originalHeader)
+      );
 
       // 파일 객체의 userId가 있으면 우선 사용, 없으면 헤더의 userId 사용
       const finalUserId = fileUserId || userId;
@@ -103,13 +98,9 @@ export async function POST(request: NextRequest) {
           SELECT file_id FROM temp_files WHERE file_id = ${id}
         `;
 
-        // 같은 file_id가 없으면 중복 파일명 체크 (세션별, company_id 필터링)
+        // 같은 file_id가 없으면 중복 파일명 체크 (전역적으로 파일명만 체크)
         if (existingFile.length === 0) {
-          const isDuplicate = await checkDuplicateFileName(
-            fileName,
-            sessionId,
-            companyId
-          );
+          const isDuplicate = await checkDuplicateFileName(fileName, companyId);
 
           if (isDuplicate) {
             console.log(`❌ 중복 파일명 감지로 저장 거부: "${fileName}"`);
@@ -131,7 +122,7 @@ export async function POST(request: NextRequest) {
           productCodeMap,
         });
 
-        // validation_status, user_id, original_header 컬럼이 없으면 추가
+        // validation_status, user_id, original_header, original_table_data 컬럼이 없으면 추가
         try {
           await sql`
             DO $$
@@ -156,6 +147,10 @@ export async function POST(request: NextRequest) {
                             WHERE table_name = 'temp_files' AND column_name = 'original_header') THEN
                 ALTER TABLE temp_files ADD COLUMN original_header JSONB;
               END IF;
+              IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                            WHERE table_name = 'temp_files' AND column_name = 'original_table_data') THEN
+                ALTER TABLE temp_files ADD COLUMN original_table_data JSONB;
+              END IF;
             END
             $$;
           `;
@@ -171,7 +166,7 @@ export async function POST(request: NextRequest) {
             INSERT INTO temp_files (
               file_id, file_name, session_id, company_id, user_id, row_count,
               table_data, header_index, product_code_map, product_id_map,
-              validation_status, vendor_name, original_header, created_at, updated_at
+              validation_status, vendor_name, original_header, original_table_data, created_at, updated_at
             )
             VALUES (
               ${id},
@@ -186,7 +181,12 @@ export async function POST(request: NextRequest) {
               ${JSON.stringify(productIdMap || {})},
               ${JSON.stringify(validationResult)},
               ${vendorName || null},
-              ${originalHeader && Array.isArray(originalHeader) ? JSON.stringify(originalHeader) : null},
+              ${
+                originalHeader && Array.isArray(originalHeader)
+                  ? JSON.stringify(originalHeader)
+                  : null
+              },
+              ${JSON.stringify(tableData)},
               ${now.toISOString()}::timestamp,
               ${now.toISOString()}::timestamp
             )
@@ -203,8 +203,9 @@ export async function POST(request: NextRequest) {
               validation_status = EXCLUDED.validation_status,
               vendor_name = EXCLUDED.vendor_name,
               original_header = COALESCE(EXCLUDED.original_header, temp_files.original_header),
+              original_table_data = COALESCE(temp_files.original_table_data, EXCLUDED.original_table_data),
               updated_at = ${now.toISOString()}::timestamp
-            RETURNING id, created_at, original_header
+            RETURNING id, created_at, original_header, original_table_data
           `;
         } catch (error: any) {
           // validation_status 또는 user_id 컬럼이 없으면 다시 시도 (컬럼 추가 후)
@@ -236,7 +237,7 @@ export async function POST(request: NextRequest) {
               INSERT INTO temp_files (
                 file_id, file_name, session_id, company_id, user_id, row_count,
                 table_data, header_index, product_code_map, product_id_map,
-                validation_status, vendor_name, original_header, created_at, updated_at
+                validation_status, vendor_name, original_header, original_table_data, created_at, updated_at
               )
               VALUES (
                 ${id},
@@ -251,7 +252,12 @@ export async function POST(request: NextRequest) {
                 ${JSON.stringify(productIdMap || {})},
                 ${JSON.stringify(validationResult)},
                 ${vendorName || null},
-                ${originalHeader && Array.isArray(originalHeader) ? JSON.stringify(originalHeader) : null},
+                ${
+                  originalHeader && Array.isArray(originalHeader)
+                    ? JSON.stringify(originalHeader)
+                    : null
+                },
+                ${JSON.stringify(tableData)},
                 ${now.toISOString()}::timestamp,
                 ${now.toISOString()}::timestamp
               )
@@ -268,8 +274,9 @@ export async function POST(request: NextRequest) {
                 validation_status = EXCLUDED.validation_status,
                 vendor_name = EXCLUDED.vendor_name,
                 original_header = COALESCE(EXCLUDED.original_header, temp_files.original_header),
+                original_table_data = COALESCE(temp_files.original_table_data, EXCLUDED.original_table_data),
                 updated_at = ${now.toISOString()}::timestamp
-              RETURNING id, created_at, original_header
+              RETURNING id, created_at, original_header, original_table_data
             `;
           } else if (
             error.message &&
@@ -293,7 +300,7 @@ export async function POST(request: NextRequest) {
                 INSERT INTO temp_files (
                   file_id, file_name, company_id, user_id, row_count,
                   table_data, header_index, product_code_map, product_id_map,
-                  validation_status, vendor_name, original_header, created_at, updated_at
+                  validation_status, vendor_name, original_header, original_table_data, created_at, updated_at
                 )
                 VALUES (
                 ${id},
@@ -307,7 +314,12 @@ export async function POST(request: NextRequest) {
                   ${JSON.stringify(productIdMap || {})},
                   ${JSON.stringify(validationResult)},
                   ${vendorName || null},
-                  ${originalHeader && Array.isArray(originalHeader) ? JSON.stringify(originalHeader) : null},
+                  ${
+                    originalHeader && Array.isArray(originalHeader)
+                      ? JSON.stringify(originalHeader)
+                      : null
+                  },
+                  ${JSON.stringify(tableData)},
                   ${now.toISOString()}::timestamp,
                   ${now.toISOString()}::timestamp
                 )
@@ -323,15 +335,16 @@ export async function POST(request: NextRequest) {
                   validation_status = EXCLUDED.validation_status,
                   vendor_name = EXCLUDED.vendor_name,
                   original_header = COALESCE(EXCLUDED.original_header, temp_files.original_header),
+                  original_table_data = COALESCE(temp_files.original_table_data, EXCLUDED.original_table_data),
                   updated_at = ${now.toISOString()}::timestamp
-                RETURNING id, created_at, original_header
+                RETURNING id, created_at, original_header, original_table_data
               `;
             } else {
               result = await sql`
                 INSERT INTO temp_files (
                   file_id, file_name, company_id, row_count,
                   table_data, header_index, product_code_map, product_id_map,
-                  validation_status, vendor_name, original_header, created_at, updated_at
+                  validation_status, vendor_name, original_header, original_table_data, created_at, updated_at
                 )
                 VALUES (
                   ${id},
@@ -344,7 +357,12 @@ export async function POST(request: NextRequest) {
                   ${JSON.stringify(productIdMap || {})},
                   ${JSON.stringify(validationResult)},
                   ${vendorName || null},
-                  ${originalHeader && Array.isArray(originalHeader) ? JSON.stringify(originalHeader) : null},
+                  ${
+                    originalHeader && Array.isArray(originalHeader)
+                      ? JSON.stringify(originalHeader)
+                      : null
+                  },
+                  ${JSON.stringify(tableData)},
                   ${now.toISOString()}::timestamp,
                   ${now.toISOString()}::timestamp
                 )
@@ -359,8 +377,9 @@ export async function POST(request: NextRequest) {
                   validation_status = EXCLUDED.validation_status,
                   vendor_name = EXCLUDED.vendor_name,
                   original_header = COALESCE(EXCLUDED.original_header, temp_files.original_header),
+                  original_table_data = COALESCE(temp_files.original_table_data, EXCLUDED.original_table_data),
                   updated_at = ${now.toISOString()}::timestamp
-                RETURNING id, created_at, original_header
+                RETURNING id, created_at, original_header, original_table_data
               `;
             }
           } else {

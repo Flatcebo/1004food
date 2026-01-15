@@ -556,17 +556,22 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
           const existingFile = existingFilesMap.get(file.id);
           // 서버에서 불러온 vendorName을 우선 사용 (서버가 최신 데이터)
           const serverVendorName = file.vendorName || file.vendor_name;
-          const trimmedVendorName = serverVendorName !== null && serverVendorName !== undefined
-            ? String(serverVendorName).trim()
-            : null;
-          
-          console.log(`📥 서버에서 파일 로드: fileId=${file.id}, fileName="${file.fileName}"`, {
-            serverVendorName,
-            trimmedVendorName,
-            existingVendorName: existingFile?.vendorName,
-            finalVendorName: trimmedVendorName || existingFile?.vendorName || undefined,
-          });
-          
+          const trimmedVendorName =
+            serverVendorName !== null && serverVendorName !== undefined
+              ? String(serverVendorName).trim()
+              : null;
+
+          console.log(
+            `📥 서버에서 파일 로드: fileId=${file.id}, fileName="${file.fileName}"`,
+            {
+              serverVendorName,
+              trimmedVendorName,
+              existingVendorName: existingFile?.vendorName,
+              finalVendorName:
+                trimmedVendorName || existingFile?.vendorName || undefined,
+            }
+          );
+
           return {
             ...file,
             uploadTime:
@@ -575,7 +580,8 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
               file.createdAt || file.uploadTime || new Date().toISOString(),
             // 서버에서 불러온 vendorName이 있으면 무조건 사용 (서버가 최신 데이터)
             // 서버에 없으면 기존 vendorName 유지 (하위 호환성)
-            vendorName: trimmedVendorName || existingFile?.vendorName || undefined,
+            vendorName:
+              trimmedVendorName || existingFile?.vendorName || undefined,
             // 서버에서 불러온 originalHeader가 있으면 우선 사용, 없으면 기존 originalHeader 유지
             originalHeader:
               file.originalHeader ||
@@ -595,7 +601,9 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
 
           // sessionStorage에도 저장 (vendorName 포함 확인)
           try {
-            console.log(`💾 sessionStorage 저장: fileId=${file.id}, vendorName="${file.vendorName}"`);
+            console.log(
+              `💾 sessionStorage 저장: fileId=${file.id}, vendorName="${file.vendorName}"`
+            );
             sessionStorage.setItem(
               `uploadedFile_${file.id}`,
               JSON.stringify(file)
@@ -604,7 +612,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             console.error("sessionStorage 저장 실패:", error);
           }
         });
-        
+
         return updatedFiles; // Promise 반환을 위해 파일 목록 반환
       }
     } catch (error) {
@@ -1122,7 +1130,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             if (h === null || h === undefined) return "";
             return String(h).trim();
           });
-          
+
           // 디버깅: 원본 헤더 추출 확인
           console.log(`📋 원본 헤더 추출:`, {
             fileName: file.name,
@@ -1130,7 +1138,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             originalHeaderLength: originalHeader.length,
             originalHeader: originalHeader,
           });
-          
+
           // 데이터는 정규화된 헤더로 저장 (기존 방식 유지)
           let jsonData = [canonicalHeader, ...canonicalRows];
 
@@ -1394,6 +1402,10 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
         alert(
           `❌ 동일한 파일명 "${file.name}"이 이미 존재합니다.\n업로드가 취소되었습니다.`
         );
+        // 중복 파일명인 경우에도 input value 초기화
+        if (get().fileInputRef.current) {
+          get().fileInputRef.current.value = "";
+        }
         return; // 중복 파일명인 경우 업로드 차단
       }
 
@@ -1423,6 +1435,10 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     } finally {
       // 로딩 종료
       useLoadingStore.getState().stopLoading();
+      // 파일 처리 완료 후 input value 초기화 (같은 파일을 다시 선택할 수 있도록)
+      if (get().fileInputRef.current) {
+        get().fileInputRef.current.value = "";
+      }
     }
   },
   handleFiles: async (files: File[]) => {
@@ -1460,6 +1476,10 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
           alert(
             `❌ 다음 파일명들이 이미 존재합니다:\n\n${duplicateList}\n\n모든 파일의 업로드가 취소되었습니다.`
           );
+          // 모든 파일이 중복인 경우에도 input value 초기화
+          if (get().fileInputRef.current) {
+            get().fileInputRef.current.value = "";
+          }
           return;
         } else {
           // 일부 파일만 중복인 경우
@@ -1514,6 +1534,10 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     } finally {
       // 로딩 종료
       useLoadingStore.getState().stopLoading();
+      // 파일 처리 완료 후 input value 초기화 (같은 파일을 다시 선택할 수 있도록)
+      if (get().fileInputRef.current) {
+        get().fileInputRef.current.value = "";
+      }
     }
   },
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1523,6 +1547,10 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       get().handleFile(files[0]);
     } else {
       get().handleFiles(Array.from(files));
+    }
+    // 같은 파일을 다시 선택할 수 있도록 input value 초기화
+    if (event.target) {
+      event.target.value = "";
     }
   },
   openFileInNewWindow: (fileId: string) => {

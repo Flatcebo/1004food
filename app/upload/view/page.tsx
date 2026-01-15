@@ -87,6 +87,8 @@ function FileViewContent() {
   // 일괄 적용 인풋 상태
   const [bulkProductName, setBulkProductName] = useState("");
   const [bulkQuantity, setBulkQuantity] = useState("");
+  // 신규 생성 모달에서 상품명 편집 가능 여부
+  const [isNewProductModal, setIsNewProductModal] = useState(false);
 
   // 상품 수정 모달 상태
   const [productEditModal, setProductEditModal] = useState({
@@ -1957,6 +1959,22 @@ function FileViewContent() {
                     ? `${selectedRows.size}건 삭제`
                     : "선택 삭제"}
                 </button>
+                <button
+                  onClick={() => {
+                    // 신규 생성 모달임을 표시
+                    setIsNewProductModal(true);
+                    // 상품명이 입력되어 있으면 기본값으로 사용
+                    if (bulkProductName && bulkProductName.trim()) {
+                      openDirectInputModal(bulkProductName.trim(), null);
+                    } else {
+                      // 상품명이 없으면 빈 값으로 모달 열기
+                      openDirectInputModal("", null);
+                    }
+                  }}
+                  className="px-4 py-1 bg-green-500 hover:bg-green-600 text-white rounded text-sm font-semibold ml-auto"
+                >
+                  신규 생성
+                </button>
               </div>
             </div>
           )}
@@ -2899,7 +2917,11 @@ function FileViewContent() {
         fields={directInputModal.fields}
         values={directInputModal.values}
         fieldNameMap={fieldNameMap}
-        onClose={closeDirectInputModal}
+        onClose={() => {
+          setIsNewProductModal(false);
+          closeDirectInputModal();
+        }}
+        nameReadOnly={!isNewProductModal}
         onSave={async () => {
           const savedProductName = directInputModal.values.name; // 저장된 상품명 기억
           await saveDirectInputModal();
@@ -3007,6 +3029,8 @@ function FileViewContent() {
           } catch (error) {
             console.error("상품 목록 조회 실패:", error);
           }
+          // 저장 후 신규 생성 모달 플래그 리셋
+          setIsNewProductModal(false);
         }}
         onValueChange={setDirectInputValue}
       />

@@ -76,7 +76,7 @@ export default function ProfilePage() {
 
       const userData = result.data;
       setUser(userData);
-      
+
       // assignedMallIds를 숫자 배열로 변환
       const mallIds = Array.isArray(userData.assignedMallIds)
         ? userData.assignedMallIds
@@ -202,7 +202,7 @@ export default function ProfilePage() {
 
       // 성공 메시지 표시
       setSuccessMessage("정보가 성공적으로 수정되었습니다.");
-      
+
       // 폼에서 비밀번호 필드 초기화
       setFormData((prev) => ({
         ...prev,
@@ -212,7 +212,7 @@ export default function ProfilePage() {
 
       // 사용자 정보 다시 조회
       fetchCurrentUser();
-      
+
       // authStore 업데이트 (이름이 변경되었을 수 있음)
       if (currentUser) {
         updateUser({
@@ -247,7 +247,9 @@ export default function ProfilePage() {
   if (!user) {
     return (
       <div className="w-full h-screen flex items-center justify-center">
-        <div className="text-lg text-red-600">사용자 정보를 불러올 수 없습니다.</div>
+        <div className="text-lg text-red-600">
+          사용자 정보를 불러올 수 없습니다.
+        </div>
       </div>
     );
   }
@@ -299,63 +301,63 @@ export default function ProfilePage() {
             </div>
 
             {/* 담당 쇼핑몰 선택 */}
-            <div className="w-full">
-              <MultiSelectDropdown
-                label="담당 쇼핑몰"
-                options={(() => {
-                  // 현재 편집 중인 사용자를 제외한 다른 사용자들에게 이미 할당된 mall ID 수집
-                  const assignedMallIds = new Set<number>();
-                  users.forEach((u) => {
-                    // 현재 사용자는 제외
-                    if (u.id !== user?.id && u.assignedMallIds) {
-                      u.assignedMallIds.forEach((mallId) => {
-                        assignedMallIds.add(mallId);
-                      });
-                    }
-                  });
-
-                  // 현재 사용자가 이미 선택한 mall은 포함 (자신이 선택한 것은 유지)
-                  const currentSelectedIds = new Set(
-                    formData.assignedMallIds || []
-                  );
-
-                  // 사용 가능한 malls: 다른 사용자에게 할당되지 않은 것들
-                  // 또는 현재 사용자가 이미 선택한 것들
-                  return malls
-                    .filter((m: Mall) => {
-                      // 이미 다른 사용자에게 할당되었고, 현재 사용자가 선택하지 않은 경우 제외
-                      if (
-                        assignedMallIds.has(m.id) &&
-                        !currentSelectedIds.has(m.id)
-                      ) {
-                        return false;
+            {user.grade === "납품업체" && (
+              <div className="w-full">
+                <MultiSelectDropdown
+                  label="담당 쇼핑몰"
+                  options={(() => {
+                    // 현재 편집 중인 사용자를 제외한 다른 사용자들에게 이미 할당된 mall ID 수집
+                    const assignedMallIds = new Set<number>();
+                    users.forEach((u) => {
+                      // 현재 사용자는 제외
+                      if (u.id !== user?.id && u.assignedMallIds) {
+                        u.assignedMallIds.forEach((mallId) => {
+                          assignedMallIds.add(mallId);
+                        });
                       }
-                      return true;
-                    })
-                    .map((mall: Mall) => ({
-                      value: mall.id,
-                      label: `${mall.name}${mall.code ? ` (${mall.code})` : ""}`,
+                    });
+
+                    // 현재 사용자가 이미 선택한 mall은 포함 (자신이 선택한 것은 유지)
+                    const currentSelectedIds = new Set(
+                      formData.assignedMallIds || []
+                    );
+
+                    // 사용 가능한 malls: 다른 사용자에게 할당되지 않은 것들
+                    // 또는 현재 사용자가 이미 선택한 것들
+                    return malls
+                      .filter((m: Mall) => {
+                        // 이미 다른 사용자에게 할당되었고, 현재 사용자가 선택하지 않은 경우 제외
+                        if (
+                          assignedMallIds.has(m.id) &&
+                          !currentSelectedIds.has(m.id)
+                        ) {
+                          return false;
+                        }
+                        return true;
+                      })
+                      .map((mall: Mall) => ({
+                        value: mall.id,
+                        label: mall.name,
+                      }));
+                  })()}
+                  selectedValues={
+                    (formData.assignedMallIds || []) as (string | number)[]
+                  }
+                  onChange={(values) => {
+                    setFormData((prev) => ({
+                      ...prev,
+                      assignedMallIds: values.map((v) => Number(v)) as number[],
                     }));
-                })()}
-                selectedValues={
-                  (formData.assignedMallIds || []) as (
-                    | string
-                    | number
-                  )[]
-                }
-                onChange={(values) => {
-                  setFormData((prev) => ({
-                    ...prev,
-                    assignedMallIds: values.map((v) =>
-                      Number(v)
-                    ) as number[],
-                  }));
-                }}
-                placeholder="담당 쇼핑몰 선택"
-                className="mb-2 w-full"
-                showSelectedTags={true}
-              />
-            </div>
+                  }}
+                  placeholder="담당 쇼핑몰 선택"
+                  className="mb-2 w-full"
+                  showSelectedTags={true}
+                  enableAutocomplete={true}
+                  customPadding="py-2.5"
+                  labelOnTop={true}
+                />
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">

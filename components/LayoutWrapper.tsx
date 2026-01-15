@@ -11,6 +11,7 @@ export default function LayoutWrapper({children}: {children: React.ReactNode}) {
   const isPreviewPage = pathname?.startsWith("/upload/preview");
   const isLoginPage = pathname === "/login";
   const isRegisterPage = pathname === "/register";
+  const isUserLogPage = pathname?.startsWith("/logs/users/");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState<boolean | null>(null); // null로 초기화하여 hydration mismatch 방지
   const [mounted, setMounted] = useState(false);
@@ -37,7 +38,7 @@ export default function LayoutWrapper({children}: {children: React.ReactNode}) {
     setIsSidebarOpen(!isSidebarOpen);
   };
 
-  if (isViewPage || isPreviewPage || isLoginPage || isRegisterPage) {
+  if (isViewPage || isPreviewPage || isLoginPage || isRegisterPage || isUserLogPage) {
     return <>{children}</>;
   }
 

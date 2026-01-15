@@ -24,6 +24,9 @@ export default function UploadedFilesList({
 }: UploadedFilesListProps) {
   const {isLoading} = useLoadingStore();
   const {confirmedFiles, confirmFile, unconfirmFile} = useUploadStore();
+  
+  // confirmedFiles Set을 배열로 변환하여 React가 변경을 감지하도록 함
+  const confirmedFilesArray = useMemo(() => Array.from(confirmedFiles), [confirmedFiles]);
 
   // 전체 체크 상태 계산
   const isAllChecked = useMemo(() => {
@@ -63,15 +66,64 @@ export default function UploadedFilesList({
     [confirmedFiles, confirmFile, unconfirmFile]
   );
 
+  // 선택된 파일 개수 계산
+  const selectedFileCount = useMemo(() => {
+    return confirmedFilesArray.filter((fileId) =>
+      uploadedFiles.some((file) => file.id === fileId)
+    ).length;
+  }, [uploadedFiles, confirmedFilesArray]);
+
+  // 선택된 파일들 일괄 삭제 핸들러
+  const handleDeleteSelected = useCallback(() => {
+    const selectedFiles = uploadedFiles.filter((file) =>
+      confirmedFiles.has(file.id)
+    );
+    
+    if (selectedFiles.length === 0) {
+      alert("삭제할 파일을 선택해주세요.");
+      return;
+    }
+
+    if (
+      confirm(
+        `선택된 ${selectedFiles.length}개의 파일을 삭제하시겠습니까?`
+      )
+    ) {
+      selectedFiles.forEach((file) => {
+        onFileDelete(file.id);
+        // 삭제된 파일의 체크박스도 해제
+        unconfirmFile(file.id);
+      });
+      
+      // 모든 파일이 삭제되면 데이터 리셋
+      const remainingFiles = uploadedFiles.filter(
+        (f) => !confirmedFiles.has(f.id)
+      );
+      if (remainingFiles.length === 0) {
+        onResetData();
+      }
+    }
+  }, [uploadedFiles, confirmedFiles, onFileDelete, onResetData, unconfirmFile]);
+
   if (isLoading) return <div>Loading...</div>;
 
   return (
     <div className="w-full h-auto mt-4">
-      <div className="font-bold text-lg mb-2 text-black flex flex-row justify-between">
+      <div className="font-bold text-lg mb-2 text-black flex flex-row justify-between items-center">
         <span>업로드된 파일 목록 ({uploadedFiles.length}개)</span>
-        <span>
-          전체 {uploadedFiles.reduce((sum, file) => sum + file.rowCount, 0)}건
-        </span>
+        <div className="flex items-center gap-4">
+          <span>
+            전체 {uploadedFiles.reduce((sum, file) => sum + file.rowCount, 0)}건
+          </span>
+          {selectedFileCount > 0 ? (
+            <button
+              className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold rounded transition-colors"
+              onClick={handleDeleteSelected}
+            >
+              삭제 ({selectedFileCount})
+            </button>
+          ) : null}
+        </div>
       </div>
       <div className="w-full h-[500px] border border-gray-300 rounded-lg overflow-y-auto">
         <table className="w-full text-sm border-collapse">

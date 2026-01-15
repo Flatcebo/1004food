@@ -90,6 +90,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 로그인 성공 시 last_login_at 업데이트 (한국 시간)
+    try {
+      // last_login_at 컬럼 존재 여부 확인
+      const lastLoginColumnExists = await sql`
+        SELECT EXISTS (
+          SELECT 1 
+          FROM information_schema.columns 
+          WHERE table_name = 'users' 
+          AND column_name = 'last_login_at'
+        )
+      `;
+
+      if (lastLoginColumnExists[0]?.exists) {
+        // JavaScript에서 한국 시간 계산 (Asia/Seoul)
+        // 'sv-SE' 로케일을 사용하면 'YYYY-MM-DD HH:mm:ss' 형식으로 반환됨
+        const koreaTimeString = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' });
+        
+        await sql`
+          UPDATE users 
+          SET last_login_at = ${koreaTimeString}::TIMESTAMP
+          WHERE id = ${user.id}
+        `;
+      }
+    } catch (error) {
+      // last_login_at 업데이트 실패해도 로그인은 계속 진행
+      console.error("last_login_at 업데이트 실패:", error);
+    }
+
     // assigned_vendor_ids를 배열로 변환 (JSONB 타입 처리, mall ID가 저장됨)
     let assignedMallIds: number[] = [];
     if (hasAssignedVendorIds && user.assigned_vendor_ids) {
