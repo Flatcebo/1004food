@@ -1,4 +1,4 @@
-import React, {useMemo} from "react";
+import React, {useMemo, useState} from "react";
 import FileUploadArea from "@/components/FileUploadArea";
 import UploadedFilesList from "@/components/UploadedFilesList";
 import DirectInputModal from "@/components/DirectInputModal";
@@ -101,6 +101,8 @@ export default function OrderModalContent({
   deliveryError,
 }: OrderModalContentProps) {
   const {uploadedFiles} = useUploadStore();
+  const [isHovered, setIsHovered] = useState(false);
+  const [isClicked, setIsClicked] = useState(false);
 
   // 운송장 업로드 실시간 통계 계산
   const deliveryStats = useMemo(() => {
@@ -184,9 +186,13 @@ export default function OrderModalContent({
           {/* 파일 업로드 영역 - 모달 전체가 클릭 가능 */}
           {!isUploading && !finalResult && (
             <div
-              className={`w-full border-2 border-dashed rounded-lg flex flex-col items-center justify-center transition-colors ${
+              className={`w-full border-2 border-dashed rounded-lg flex flex-col items-center justify-center transition-all duration-200 ${
                 dragActive
                   ? "border-blue-500 bg-blue-50"
+                  : isClicked
+                  ? "border-blue-600 bg-blue-100 scale-[0.98]"
+                  : isHovered
+                  ? "border-blue-400 bg-blue-50"
                   : "border-gray-300 bg-gray-100"
               }`}
               style={{
@@ -195,8 +201,21 @@ export default function OrderModalContent({
               }}
               onDrop={handleDeliveryDrop}
               onDragOver={handleDeliveryDragOver}
-              onDragLeave={handleDragLeave}
-              onClick={() => deliveryFileInputRef?.current?.click()}
+              onDragLeave={(e) => {
+                handleDragLeave(e);
+                setIsHovered(false);
+              }}
+              onMouseEnter={() => setIsHovered(true)}
+              onMouseLeave={() => {
+                setIsHovered(false);
+                setIsClicked(false);
+              }}
+              onMouseDown={() => setIsClicked(true)}
+              onMouseUp={() => setIsClicked(false)}
+              onClick={() => {
+                deliveryFileInputRef?.current?.click();
+                setIsClicked(false);
+              }}
             >
               <input
                 type="file"
