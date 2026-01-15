@@ -715,7 +715,16 @@ export function useFileSave({
 
         const result = await response.json();
         if (!result.success) {
-          throw new Error(result.error || "데이터 저장 실패");
+          // 중복 파일명 에러인 경우 특별 처리
+          if (result.error === "DUPLICATE_FILENAMES") {
+            const duplicateList = result.duplicateFiles
+              ? result.duplicateFiles.join("\n• ")
+              : "알 수 없는 파일";
+            throw new Error(
+              `❌ 중복된 파일명이 발견되었습니다:\n\n• ${duplicateList}\n\n업로드가 취소되었습니다.`
+            );
+          }
+          throw new Error(result.error || result.message || "데이터 저장 실패");
         }
 
         updateLoadingMessage("저장 완료! 데이터 새로고침 중...");

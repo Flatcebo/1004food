@@ -53,7 +53,7 @@ export default function LoginPage() {
         position: result.data.position || "",
         role: result.data.role || "",
         grade: result.data.grade,
-        assignedVendorIds: result.data.assignedVendorIds || [],
+        assignedMallIds: result.data.assignedMallIds || [],
       });
 
       router.push("/");

@@ -182,29 +182,29 @@ export function useUploadData() {
         if (stored) {
           const parsed = JSON.parse(stored);
           const user = parsed.state?.user;
-          if (user?.assignedVendorIds && user.assignedVendorIds.length > 0) {
-            console.log("assignedVendorIds 발견:", user.assignedVendorIds);
-            // vendors API를 호출하여 ID를 이름으로 변환
+          if (user?.assignedMallIds && user.assignedMallIds.length > 0) {
+            console.log("assignedMallIds 발견:", user.assignedMallIds);
+            // mall API를 호출하여 ID를 이름으로 변환
             const headers: HeadersInit = {};
             if (user?.companyId) {
               headers["company-id"] = user.companyId.toString();
             }
-            const vendorsResponse = await fetch("/api/vendors", {
+            const mallsResponse = await fetch("/api/mall?limit=1000", {
               headers,
             });
-            const vendorsResult = await vendorsResponse.json();
+            const mallsResult = await mallsResponse.json();
             
-            if (vendorsResult.success && vendorsResult.data) {
-              const vendorNames = vendorsResult.data
-                .filter((v: any) => user.assignedVendorIds.includes(v.id))
-                .map((v: any) => v.name);
+            if (mallsResult.success && mallsResult.data) {
+              const mallNames = mallsResult.data
+                .filter((m: any) => user.assignedMallIds.includes(m.id))
+                .map((m: any) => m.name);
               
-              console.log("vendorNames:", vendorNames);
+              console.log("mallNames:", mallNames);
               console.log("filters.companies:", filters.companies);
               
-              if (vendorNames.length > 0) {
+              if (mallNames.length > 0) {
                 // 실제 업체명 필터 옵션과 일치하는 것만 필터링
-                const validCompanyNames = vendorNames.filter((name: string) =>
+                const validCompanyNames = mallNames.filter((name: string) =>
                   filters.companies.includes(name)
                 );
                 
@@ -217,15 +217,15 @@ export function useUploadData() {
                   // 필터 적용을 위해 appliedCompany도 설정
                   setAppliedCompany(validCompanyNames);
                 } else {
-                  console.log("업체명 필터 옵션과 일치하는 vendor name이 없습니다:", {
-                    vendorNames,
+                  console.log("업체명 필터 옵션과 일치하는 mall name이 없습니다:", {
+                    mallNames,
                     availableCompanies: filters.companies,
                   });
                 }
               }
             }
           } else {
-            console.log("assignedVendorIds가 없거나 비어있습니다:", user);
+            console.log("assignedMallIds가 없거나 비어있습니다:", user);
           }
         }
       } catch (error) {

@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
       companyId = await getCompanyIdFromRequest(request);
     }
 
-    // assigned_vendor_ids 컬럼 존재 여부 확인
+    // assigned_vendor_ids 컬럼 존재 여부 확인 (기존 컬럼명 유지)
     const columnExists = await sql`
       SELECT EXISTS (
         SELECT 1 
@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
             u.is_active as "isActive",
             u.created_at as "createdAt",
             u.updated_at as "updatedAt",
-            COALESCE(u.assigned_vendor_ids, '[]'::jsonb) as "assignedVendorIds",
+            COALESCE(u.assigned_vendor_ids, '[]'::jsonb) as "assignedMallIds",
             c.name as "companyName"
           FROM users u
           INNER JOIN companies c ON u.company_id = c.id
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
             u.is_active as "isActive",
             u.created_at as "createdAt",
             u.updated_at as "updatedAt",
-            '[]'::jsonb as "assignedVendorIds",
+            '[]'::jsonb as "assignedMallIds",
             c.name as "companyName"
           FROM users u
           INNER JOIN companies c ON u.company_id = c.id
@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
             u.is_active as "isActive",
             u.created_at as "createdAt",
             u.updated_at as "updatedAt",
-            COALESCE(u.assigned_vendor_ids, '[]'::jsonb) as "assignedVendorIds",
+            COALESCE(u.assigned_vendor_ids, '[]'::jsonb) as "assignedMallIds",
             c.name as "companyName"
           FROM users u
           INNER JOIN companies c ON u.company_id = c.id
@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
             u.is_active as "isActive",
             u.created_at as "createdAt",
             u.updated_at as "updatedAt",
-            '[]'::jsonb as "assignedVendorIds",
+            '[]'::jsonb as "assignedMallIds",
             c.name as "companyName"
           FROM users u
           INNER JOIN companies c ON u.company_id = c.id
@@ -189,7 +189,7 @@ export async function POST(request: NextRequest) {
     // 비밀번호 해싱
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // assigned_vendor_ids 컬럼 존재 여부 확인
+    // assigned_vendor_ids 컬럼 존재 여부 확인 (기존 컬럼명 유지)
     const columnExists = await sql`
       SELECT EXISTS (
         SELECT 1 
@@ -227,7 +227,7 @@ export async function POST(request: NextRequest) {
           position,
           role,
           is_active as "isActive",
-          COALESCE(assigned_vendor_ids, '[]'::jsonb) as "assignedVendorIds",
+          COALESCE(assigned_vendor_ids, '[]'::jsonb) as "assignedMallIds",
           created_at as "createdAt",
           updated_at as "updatedAt"
       `;
@@ -254,7 +254,7 @@ export async function POST(request: NextRequest) {
           position,
           role,
           is_active as "isActive",
-          '[]'::jsonb as "assignedVendorIds",
+          '[]'::jsonb as "assignedMallIds",
           created_at as "createdAt",
           updated_at as "updatedAt"
       `;

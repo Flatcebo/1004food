@@ -100,11 +100,11 @@ export async function GET(request: NextRequest) {
         });
       }
 
-      // vendors 테이블에서 업체명 조회
+      // mall 테이블에서 쇼핑몰명 조회 (assigned_vendor_ids에 mall ID가 저장됨)
       const vendorNamesResult = await sql`
         SELECT name
-        FROM vendors
-        WHERE id = ANY(${assignedVendorIds}) AND company_id = ${companyId}
+        FROM mall
+        WHERE id = ANY(${assignedVendorIds})
       `;
       
       const vendorNames = vendorNamesResult.map((v: any) => v.name);

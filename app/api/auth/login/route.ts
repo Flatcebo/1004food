@@ -18,25 +18,58 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 사용자 조회 (username과 company_id로)
-    const users = await sql`
-      SELECT 
-        u.id,
-        u.company_id,
-        u.username,
-        u.password,
-        u.name,
-        u.grade,
-        u.position,
-        u.role,
-        u.is_active,
-        u.assigned_vendor_ids,
-        c.name as company_name
-      FROM users u
-      INNER JOIN companies c ON u.company_id = c.id
-      WHERE u.username = ${username}
-      AND u.is_active = TRUE
+    // assigned_vendor_ids 컬럼 존재 여부 확인 (기존 컬럼명 유지)
+    const columnExists = await sql`
+      SELECT EXISTS (
+        SELECT 1 
+        FROM information_schema.columns 
+        WHERE table_name = 'users' 
+        AND column_name = 'assigned_vendor_ids'
+      )
     `;
+
+    const hasAssignedVendorIds = columnExists[0]?.exists || false;
+
+    // 사용자 조회 (username과 company_id로)
+    let users;
+    if (hasAssignedVendorIds) {
+      users = await sql`
+        SELECT 
+          u.id,
+          u.company_id,
+          u.username,
+          u.password,
+          u.name,
+          u.grade,
+          u.position,
+          u.role,
+          u.is_active,
+          u.assigned_vendor_ids,
+          c.name as company_name
+        FROM users u
+        INNER JOIN companies c ON u.company_id = c.id
+        WHERE u.username = ${username}
+        AND u.is_active = TRUE
+      `;
+    } else {
+      users = await sql`
+        SELECT 
+          u.id,
+          u.company_id,
+          u.username,
+          u.password,
+          u.name,
+          u.grade,
+          u.position,
+          u.role,
+          u.is_active,
+          c.name as company_name
+        FROM users u
+        INNER JOIN companies c ON u.company_id = c.id
+        WHERE u.username = ${username}
+        AND u.is_active = TRUE
+      `;
+    }
 
     if (users.length === 0) {
       return NextResponse.json(
@@ -57,20 +90,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // assigned_vendor_ids를 배열로 변환 (JSONB 타입 처리)
-    let assignedVendorIds: number[] = [];
-    if (user.assigned_vendor_ids) {
+    // assigned_vendor_ids를 배열로 변환 (JSONB 타입 처리, mall ID가 저장됨)
+    let assignedMallIds: number[] = [];
+    if (hasAssignedVendorIds && user.assigned_vendor_ids) {
       try {
         // JSONB가 이미 파싱된 객체인 경우
         if (Array.isArray(user.assigned_vendor_ids)) {
-          assignedVendorIds = user.assigned_vendor_ids;
+          assignedMallIds = user.assigned_vendor_ids;
         } else if (typeof user.assigned_vendor_ids === 'string') {
           // 문자열인 경우 JSON 파싱
-          assignedVendorIds = JSON.parse(user.assigned_vendor_ids);
+          assignedMallIds = JSON.parse(user.assigned_vendor_ids);
         }
       } catch (e) {
         console.error("assigned_vendor_ids 파싱 실패:", e);
-        assignedVendorIds = [];
+        assignedMallIds = [];
       }
     }
 
@@ -85,7 +118,7 @@ export async function POST(request: NextRequest) {
         grade: user.grade,
         position: user.position,
         role: user.role,
-        assignedVendorIds: assignedVendorIds,
+        assignedMallIds: assignedMallIds,
       },
     });
   } catch (error: any) {

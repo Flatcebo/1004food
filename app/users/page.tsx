@@ -18,13 +18,14 @@ interface User {
   createdAt: string;
   updatedAt: string;
   companyName: string;
-  assignedVendorIds?: number[];
+  assignedMallIds?: number[];
 }
 
-interface Vendor {
+interface Mall {
   id: number;
   name: string;
-  companyId: number;
+  code: string;
+  companyName?: string;
 }
 
 interface Company {
@@ -38,7 +39,7 @@ export default function UsersPage() {
   const [mounted, setMounted] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [malls, setMalls] = useState<Mall[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string>("");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -62,7 +63,7 @@ export default function UsersPage() {
     password: "",
     confirmPassword: "",
     isActive: true,
-    assignedVendorIds: [] as number[],
+    assignedMallIds: [] as number[],
   });
 
   // 클라이언트 마운트 확인
@@ -122,22 +123,22 @@ export default function UsersPage() {
     }
   };
 
-  // 납품업체 목록 조회
-  const fetchVendors = async () => {
+  // 쇼핑몰 목록 조회
+  const fetchMalls = async () => {
     try {
       const headers = getAuthHeaders();
-      const response = await fetch("/api/vendors", {
+      const response = await fetch("/api/mall?limit=1000", {
         headers,
       });
       const result = await response.json();
 
       if (result.success) {
-        const vendorsData = result.data || [];
-        console.log("납품업체 목록 로드:", vendorsData);
-        setVendors(vendorsData);
+        const mallsData = result.data || [];
+        console.log("쇼핑몰 목록 로드:", mallsData);
+        setMalls(mallsData);
       }
     } catch (err: any) {
-      console.error("납품업체 목록 조회 오류:", err);
+      console.error("쇼핑몰 목록 조회 오류:", err);
     }
   };
 
@@ -145,7 +146,7 @@ export default function UsersPage() {
     if (currentUser?.grade === "관리자") {
       fetchUsers();
       fetchCompanies();
-      fetchVendors();
+      fetchMalls();
     }
   }, [currentUser]);
 
@@ -223,11 +224,11 @@ export default function UsersPage() {
   // 사용자 수정 모달 열기
   const handleEditClick = (user: User) => {
     setEditingUser(user);
-    // assignedVendorIds를 숫자 배열로 변환
-    const vendorIds = Array.isArray(user.assignedVendorIds)
-      ? user.assignedVendorIds
-          .map((id) => Number(id))
-          .filter((id) => !isNaN(id))
+    // assignedMallIds를 숫자 배열로 변환
+    const mallIds = Array.isArray(user.assignedMallIds)
+      ? user.assignedMallIds
+          .map((id: any) => Number(id))
+          .filter((id: number) => !isNaN(id))
       : [];
     setEditFormData({
       name: user.name,
@@ -237,7 +238,7 @@ export default function UsersPage() {
       password: "",
       confirmPassword: "",
       isActive: user.isActive,
-      assignedVendorIds: vendorIds,
+      assignedMallIds: mallIds,
     });
     setIsEditModalOpen(true);
   };
@@ -276,15 +277,15 @@ export default function UsersPage() {
         updateData.password = editFormData.password;
       }
 
-      // assignedVendorIds는 항상 배열로 보장
+      // assignedMallIds는 항상 배열로 보장
       // grade가 '납품업체'인 경우 선택된 값, 아닌 경우 빈 배열
-      const vendorIds = Array.isArray(editFormData.assignedVendorIds)
-        ? editFormData.assignedVendorIds
+      const mallIds = Array.isArray(editFormData.assignedMallIds)
+        ? editFormData.assignedMallIds
         : [];
 
-      // grade가 '납품업체'인 경우에만 assignedVendorIds 포함
+      // grade가 '납품업체'인 경우에만 assignedMallIds 포함
       if (editFormData.grade === "납품업체") {
-        updateData.assignedVendorIds = vendorIds;
+        updateData.assignedMallIds = mallIds;
       }
 
       const headers = getAuthHeaders();
@@ -701,9 +702,9 @@ export default function UsersPage() {
                     setEditFormData((prev) => ({
                       ...prev,
                       grade: newGrade,
-                      // grade가 '납품업체'가 아닐 때 assignedVendorIds 초기화
-                      assignedVendorIds:
-                        newGrade === "납품업체" ? prev.assignedVendorIds : [],
+                      // grade가 '납품업체'가 아닐 때 assignedMallIds 초기화
+                      assignedMallIds:
+                        newGrade === "납품업체" ? prev.assignedMallIds : [],
                     }));
                   }}
                   className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -715,54 +716,53 @@ export default function UsersPage() {
                 </select>
               </div>
 
-              {/* 납품업체인 경우 담당 납품업체 선택 */}
+              {/* 납품업체인 경우 담당 쇼핑몰 선택 */}
               {editFormData.grade === "납품업체" && (
                 <div className="w-full">
                   <MultiSelectDropdown
-                    label="담당 납품업체"
+                    label="담당 쇼핑몰"
                     options={(() => {
-                      // 현재 편집 중인 사용자를 제외한 다른 사용자들에게 이미 할당된 vendor ID 수집
-                      const assignedVendorIds = new Set<number>();
+                      // 현재 편집 중인 사용자를 제외한 다른 사용자들에게 이미 할당된 mall ID 수집
+                      const assignedMallIds = new Set<number>();
                       users.forEach((user) => {
                         // 현재 편집 중인 사용자는 제외
                         if (
                           user.id !== editingUser?.id &&
-                          user.assignedVendorIds
+                          user.assignedMallIds
                         ) {
-                          user.assignedVendorIds.forEach((vendorId) => {
-                            assignedVendorIds.add(vendorId);
+                          user.assignedMallIds.forEach((mallId) => {
+                            assignedMallIds.add(mallId);
                           });
                         }
                       });
 
-                      // 현재 사용자가 이미 선택한 vendor는 포함 (자신이 선택한 것은 유지)
+                      // 현재 사용자가 이미 선택한 mall은 포함 (자신이 선택한 것은 유지)
                       const currentSelectedIds = new Set(
-                        editFormData.assignedVendorIds || []
+                        editFormData.assignedMallIds || []
                       );
 
-                      // 사용 가능한 vendors: 같은 회사이고, 다른 사용자에게 할당되지 않은 것들
+                      // 사용 가능한 malls: 다른 사용자에게 할당되지 않은 것들
                       // 또는 현재 사용자가 이미 선택한 것들
-                      return vendors
-                        .filter((v) => {
-                          if (v.companyId !== editingUser?.companyId) {
-                            return false;
-                          }
+                      return malls
+                        .filter((m: Mall) => {
                           // 이미 다른 사용자에게 할당되었고, 현재 사용자가 선택하지 않은 경우 제외
                           if (
-                            assignedVendorIds.has(v.id) &&
-                            !currentSelectedIds.has(v.id)
+                            assignedMallIds.has(m.id) &&
+                            !currentSelectedIds.has(m.id)
                           ) {
                             return false;
                           }
                           return true;
                         })
-                        .map((vendor) => ({
-                          value: vendor.id,
-                          label: vendor.name,
+                        .map((mall: Mall) => ({
+                          value: mall.id,
+                          label: `${mall.name}${
+                            mall.code ? ` (${mall.code})` : ""
+                          }`,
                         }));
                     })()}
                     selectedValues={
-                      (editFormData.assignedVendorIds || []) as (
+                      (editFormData.assignedMallIds || []) as (
                         | string
                         | number
                       )[]
@@ -770,12 +770,12 @@ export default function UsersPage() {
                     onChange={(values) => {
                       setEditFormData((prev) => ({
                         ...prev,
-                        assignedVendorIds: values.map((v) =>
+                        assignedMallIds: values.map((v) =>
                           Number(v)
                         ) as number[],
                       }));
                     }}
-                    placeholder="담당 납품업체 선택"
+                    placeholder="담당 쇼핑몰 선택"
                     className="mb-2 w-full"
                     showSelectedTags={true}
                   />

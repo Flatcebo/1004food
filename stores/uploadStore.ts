@@ -1349,12 +1349,30 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
         }
       }
 
-      const response = await fetch("/api/upload/temp/list", {headers});
-      const result = await response.json();
+      // temp_files 테이블 체크
+      const tempResponse = await fetch("/api/upload/temp/list", {headers});
+      const tempResult = await tempResponse.json();
+      const isDuplicateInTemp =
+        tempResult.success && tempResult.data
+          ? tempResult.data.some((file: any) => file.fileName === fileName)
+          : false;
 
-      if (result.success && result.data) {
-        return result.data.some((file: any) => file.fileName === fileName);
+      if (isDuplicateInTemp) {
+        return true;
       }
+
+      // uploads 테이블 체크 (최종 저장된 파일명)
+      const uploadsResponse = await fetch("/api/upload/check-duplicate", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({fileName}),
+      });
+      const uploadsResult = await uploadsResponse.json();
+
+      if (uploadsResult.success && uploadsResult.isDuplicate) {
+        return true;
+      }
+
       return false;
     } catch (error) {
       console.error("중복 파일명 체크 실패:", error);
@@ -1373,9 +1391,9 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       const isDuplicate = await get().checkForDuplicateFileName(file.name);
 
       if (isDuplicate) {
-        // alert(
-        //   `❌ 동일한 파일명 "${file.name}"이 이미 존재합니다.\n업로드가 취소되었습니다.`
-        // );
+        alert(
+          `❌ 동일한 파일명 "${file.name}"이 이미 존재합니다.\n업로드가 취소되었습니다.`
+        );
         return; // 중복 파일명인 경우 업로드 차단
       }
 

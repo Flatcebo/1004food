@@ -65,8 +65,8 @@ export async function POST(request: NextRequest) {
     if (!isAdmin && assignedVendorIds.length > 0) {
       const vendorResult = await sql`
         SELECT name
-        FROM vendors
-        WHERE id = ANY(${assignedVendorIds}) AND company_id = ${companyId}
+        FROM mall
+        WHERE id = ANY(${assignedVendorIds})
       `;
 
       const allowedVendorNames = vendorResult.map((v: any) => v.name);

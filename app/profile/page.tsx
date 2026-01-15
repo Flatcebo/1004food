@@ -18,13 +18,14 @@ interface User {
   createdAt: string;
   updatedAt: string;
   companyName: string;
-  assignedVendorIds?: number[];
+  assignedMallIds?: number[];
 }
 
-interface Vendor {
+interface Mall {
   id: number;
   name: string;
-  companyId: number;
+  code: string;
+  companyName?: string;
 }
 
 export default function ProfilePage() {
@@ -32,7 +33,7 @@ export default function ProfilePage() {
   const {user: currentUser, updateUser} = useAuthStore();
   const [mounted, setMounted] = useState(false);
   const [user, setUser] = useState<User | null>(null);
-  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [malls, setMalls] = useState<Mall[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string>("");
@@ -41,7 +42,7 @@ export default function ProfilePage() {
     name: "",
     password: "",
     confirmPassword: "",
-    assignedVendorIds: [] as number[],
+    assignedMallIds: [] as number[],
   });
 
   // 클라이언트 마운트 확인
@@ -76,9 +77,9 @@ export default function ProfilePage() {
       const userData = result.data;
       setUser(userData);
       
-      // assignedVendorIds를 숫자 배열로 변환
-      const vendorIds = Array.isArray(userData.assignedVendorIds)
-        ? userData.assignedVendorIds
+      // assignedMallIds를 숫자 배열로 변환
+      const mallIds = Array.isArray(userData.assignedMallIds)
+        ? userData.assignedMallIds
             .map((id: any) => Number(id))
             .filter((id: number) => !isNaN(id))
         : [];
@@ -87,7 +88,7 @@ export default function ProfilePage() {
         name: userData.name,
         password: "",
         confirmPassword: "",
-        assignedVendorIds: vendorIds,
+        assignedMallIds: mallIds,
       });
     } catch (err: any) {
       console.error("사용자 정보 조회 오류:", err);
@@ -97,21 +98,21 @@ export default function ProfilePage() {
     }
   };
 
-  // 납품업체 목록 조회
-  const fetchVendors = async () => {
+  // 쇼핑몰 목록 조회
+  const fetchMalls = async () => {
     try {
       const headers = getAuthHeaders();
-      const response = await fetch("/api/vendors", {
+      const response = await fetch("/api/mall?limit=1000", {
         headers,
       });
       const result = await response.json();
 
       if (result.success) {
-        const vendorsData = result.data || [];
-        setVendors(vendorsData);
+        const mallsData = result.data || [];
+        setMalls(mallsData);
       }
     } catch (err: any) {
-      console.error("납품업체 목록 조회 오류:", err);
+      console.error("쇼핑몰 목록 조회 오류:", err);
     }
   };
 
@@ -135,7 +136,7 @@ export default function ProfilePage() {
   useEffect(() => {
     if (currentUser?.id) {
       fetchCurrentUser();
-      fetchVendors();
+      fetchMalls();
       fetchUsers();
     }
   }, [currentUser]);
@@ -171,14 +172,14 @@ export default function ProfilePage() {
         updateData.password = formData.password;
       }
 
-      // assignedVendorIds는 항상 배열로 보장
-      const vendorIds = Array.isArray(formData.assignedVendorIds)
-        ? formData.assignedVendorIds
+      // assignedMallIds는 항상 배열로 보장
+      const mallIds = Array.isArray(formData.assignedMallIds)
+        ? formData.assignedMallIds
         : [];
 
-      // 등급이 '납품업체'인 경우에만 assignedVendorIds 포함
+      // 등급이 '납품업체'인 경우에만 assignedMallIds 포함
       if (user.grade === "납품업체") {
-        updateData.assignedVendorIds = vendorIds;
+        updateData.assignedMallIds = mallIds;
       }
 
       const headers = getAuthHeaders();
@@ -216,7 +217,7 @@ export default function ProfilePage() {
       if (currentUser) {
         updateUser({
           name: result.data.name,
-          assignedVendorIds: result.data.assignedVendorIds || [],
+          assignedMallIds: result.data.assignedMallIds || [],
         });
       }
     } catch (err: any) {
@@ -297,50 +298,47 @@ export default function ProfilePage() {
               />
             </div>
 
-            {/* 담당 납품업체 선택 */}
+            {/* 담당 쇼핑몰 선택 */}
             <div className="w-full">
               <MultiSelectDropdown
-                label="담당 납품업체"
+                label="담당 쇼핑몰"
                 options={(() => {
-                  // 현재 편집 중인 사용자를 제외한 다른 사용자들에게 이미 할당된 vendor ID 수집
-                  const assignedVendorIds = new Set<number>();
+                  // 현재 편집 중인 사용자를 제외한 다른 사용자들에게 이미 할당된 mall ID 수집
+                  const assignedMallIds = new Set<number>();
                   users.forEach((u) => {
                     // 현재 사용자는 제외
-                    if (u.id !== user?.id && u.assignedVendorIds) {
-                      u.assignedVendorIds.forEach((vendorId) => {
-                        assignedVendorIds.add(vendorId);
+                    if (u.id !== user?.id && u.assignedMallIds) {
+                      u.assignedMallIds.forEach((mallId) => {
+                        assignedMallIds.add(mallId);
                       });
                     }
                   });
 
-                  // 현재 사용자가 이미 선택한 vendor는 포함 (자신이 선택한 것은 유지)
+                  // 현재 사용자가 이미 선택한 mall은 포함 (자신이 선택한 것은 유지)
                   const currentSelectedIds = new Set(
-                    formData.assignedVendorIds || []
+                    formData.assignedMallIds || []
                   );
 
-                  // 사용 가능한 vendors: 같은 회사이고, 다른 사용자에게 할당되지 않은 것들
+                  // 사용 가능한 malls: 다른 사용자에게 할당되지 않은 것들
                   // 또는 현재 사용자가 이미 선택한 것들
-                  return vendors
-                    .filter((v) => {
-                      if (v.companyId !== user?.companyId) {
-                        return false;
-                      }
+                  return malls
+                    .filter((m: Mall) => {
                       // 이미 다른 사용자에게 할당되었고, 현재 사용자가 선택하지 않은 경우 제외
                       if (
-                        assignedVendorIds.has(v.id) &&
-                        !currentSelectedIds.has(v.id)
+                        assignedMallIds.has(m.id) &&
+                        !currentSelectedIds.has(m.id)
                       ) {
                         return false;
                       }
                       return true;
                     })
-                    .map((vendor) => ({
-                      value: vendor.id,
-                      label: vendor.name,
+                    .map((mall: Mall) => ({
+                      value: mall.id,
+                      label: `${mall.name}${mall.code ? ` (${mall.code})` : ""}`,
                     }));
                 })()}
                 selectedValues={
-                  (formData.assignedVendorIds || []) as (
+                  (formData.assignedMallIds || []) as (
                     | string
                     | number
                   )[]
@@ -348,12 +346,12 @@ export default function ProfilePage() {
                 onChange={(values) => {
                   setFormData((prev) => ({
                     ...prev,
-                    assignedVendorIds: values.map((v) =>
+                    assignedMallIds: values.map((v) =>
                       Number(v)
                     ) as number[],
                   }));
                 }}
-                placeholder="담당 납품업체 선택"
+                placeholder="담당 쇼핑몰 선택"
                 className="mb-2 w-full"
                 showSelectedTags={true}
               />

@@ -229,7 +229,7 @@ export default function SideBar() {
         </div>
 
         <div className="w-full text-center text-sm text-white py-2">
-          beta 3.1.0
+          beta 4.1.0
         </div>
       </div>
     </div>

@@ -236,6 +236,34 @@ export async function POST(request: NextRequest) {
     const results = [];
     let globalCodeIndex = 0;
 
+    // uploads 테이블에 이미 저장된 파일명 중복 체크
+    const duplicateFileNames: string[] = [];
+    for (const file of confirmedFiles) {
+      const existingFile = await sql`
+        SELECT file_name FROM uploads
+        WHERE file_name = ${file.file_name} AND company_id = ${companyId}
+        LIMIT 1
+      `;
+
+      if (existingFile.length > 0) {
+        duplicateFileNames.push(file.file_name);
+      }
+    }
+
+    // 중복 파일명이 있으면 에러 반환
+    if (duplicateFileNames.length > 0) {
+      const duplicateList = duplicateFileNames.join(", ");
+      return NextResponse.json(
+        {
+          success: false,
+          error: "DUPLICATE_FILENAMES",
+          message: `다음 파일명이 이미 존재합니다: ${duplicateList}`,
+          duplicateFiles: duplicateFileNames,
+        },
+        {status: 409}
+      );
+    }
+
     for (const file of confirmedFiles) {
       const tableData = file.table_data;
       const productCodeMap = file.product_code_map || {};

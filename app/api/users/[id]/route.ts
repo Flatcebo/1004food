@@ -21,7 +21,7 @@ export async function GET(
       );
     }
 
-    // assigned_vendor_ids 컬럼 존재 여부 확인
+    // assigned_vendor_ids 컬럼 존재 여부 확인 (기존 컬럼명 유지)
     const columnExists = await sql`
       SELECT EXISTS (
         SELECT 1 
@@ -47,7 +47,7 @@ export async function GET(
           u.is_active as "isActive",
           u.created_at as "createdAt",
           u.updated_at as "updatedAt",
-          COALESCE(u.assigned_vendor_ids, '[]'::jsonb) as "assignedVendorIds",
+          COALESCE(u.assigned_vendor_ids, '[]'::jsonb) as "assignedMallIds",
           c.name as "companyName"
         FROM users u
         INNER JOIN companies c ON u.company_id = c.id
@@ -66,7 +66,7 @@ export async function GET(
           u.is_active as "isActive",
           u.created_at as "createdAt",
           u.updated_at as "updatedAt",
-          '[]'::jsonb as "assignedVendorIds",
+          '[]'::jsonb as "assignedMallIds",
           c.name as "companyName"
         FROM users u
         INNER JOIN companies c ON u.company_id = c.id
@@ -121,7 +121,7 @@ export async function PUT(
       role,
       password,
       isActive,
-      assignedVendorIds,
+      assignedMallIds,
     } = body;
 
     // 사용자 존재 여부 확인
@@ -154,8 +154,8 @@ export async function PUT(
       updateFields.push(sql`grade = ${grade}`);
       hasUpdates = true;
     }
-    if (assignedVendorIds !== undefined) {
-      // assigned_vendor_ids 컬럼 존재 여부 확인
+    if (assignedMallIds !== undefined) {
+      // assigned_vendor_ids 컬럼 존재 여부 확인 (기존 컬럼명 유지)
       const columnExists = await sql`
         SELECT EXISTS (
           SELECT 1 
@@ -172,14 +172,14 @@ export async function PUT(
         );
       }
 
-      // assignedVendorIds가 배열인지 확인하고 JSONB로 변환
-      if (!Array.isArray(assignedVendorIds)) {
+      // assignedMallIds가 배열인지 확인하고 JSONB로 변환 (mall ID를 vendor_ids 컬럼에 저장)
+      if (!Array.isArray(assignedMallIds)) {
         return NextResponse.json(
-          {success: false, error: "assignedVendorIds는 배열이어야 합니다."},
+          {success: false, error: "assignedMallIds는 배열이어야 합니다."},
           {status: 400}
         );
       }
-      updateFields.push(sql`assigned_vendor_ids = ${JSON.stringify(assignedVendorIds)}::jsonb`);
+      updateFields.push(sql`assigned_vendor_ids = ${JSON.stringify(assignedMallIds)}::jsonb`);
       hasUpdates = true;
     }
     if (position !== undefined) {
@@ -209,17 +209,17 @@ export async function PUT(
 
     updateFields.push(sql`updated_at = CURRENT_TIMESTAMP`);
 
-    // assigned_vendor_ids 컬럼 존재 여부 확인
+    // assigned_mall_ids 컬럼 존재 여부 확인
     const columnExists = await sql`
       SELECT EXISTS (
         SELECT 1 
         FROM information_schema.columns 
         WHERE table_name = 'users' 
-        AND column_name = 'assigned_vendor_ids'
+        AND column_name = 'assigned_mall_ids'
       )
     `;
 
-    const hasAssignedVendorIds = columnExists[0]?.exists || false;
+    const hasAssignedMallIds = columnExists[0]?.exists || false;
 
     // 동적 쿼리 생성
     let query = sql`
@@ -231,7 +231,7 @@ export async function PUT(
       query = sql`${query}, ${updateFields[i]}`;
     }
 
-    if (hasAssignedVendorIds) {
+    if (hasAssignedMallIds) {
       query = sql`${query} WHERE id = ${userId} RETURNING 
         id,
         company_id as "companyId",
@@ -241,7 +241,7 @@ export async function PUT(
         position,
         role,
         is_active as "isActive",
-        COALESCE(assigned_vendor_ids, '[]'::jsonb) as "assignedVendorIds",
+        COALESCE(assigned_mall_ids, '[]'::jsonb) as "assignedMallIds",
         created_at as "createdAt",
         updated_at as "updatedAt"
       `;
@@ -255,7 +255,7 @@ export async function PUT(
         position,
         role,
         is_active as "isActive",
-        '[]'::jsonb as "assignedVendorIds",
+        '[]'::jsonb as "assignedMallIds",
         created_at as "createdAt",
         updated_at as "updatedAt"
       `;
