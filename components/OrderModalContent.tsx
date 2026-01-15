@@ -3,7 +3,7 @@ import FileUploadArea from "@/components/FileUploadArea";
 import UploadedFilesList from "@/components/UploadedFilesList";
 import DirectInputModal from "@/components/DirectInputModal";
 import DataTable from "@/components/DataTable";
-import {IoTime, IoCheckmarkCircle, IoCloseCircle} from "react-icons/io5";
+import {IoTime, IoCheckmarkCircle, IoCloseCircle, IoCloudUpload} from "react-icons/io5";
 import {useUploadStore} from "@/stores/uploadStore";
 import {fieldNameMap} from "@/constants/fieldMappings";
 
@@ -181,18 +181,41 @@ export default function OrderModalContent({
       {/* 운송장 업로드 모드 */}
       {modalMode === "delivery" && (
         <div className="space-y-6">
-          {/* 파일 업로드 영역 */}
+          {/* 파일 업로드 영역 - 모달 전체가 클릭 가능 */}
           {!isUploading && !finalResult && (
-            <FileUploadArea
-              dragActive={dragActive}
-              fileInputRef={deliveryFileInputRef}
+            <div
+              className={`w-full border-2 border-dashed rounded-lg flex flex-col items-center justify-center transition-colors ${
+                dragActive
+                  ? "border-blue-500 bg-blue-50"
+                  : "border-gray-300 bg-gray-100"
+              }`}
+              style={{
+                minHeight: "calc(90vh - 200px)",
+                cursor: "pointer",
+              }}
               onDrop={handleDeliveryDrop}
               onDragOver={handleDeliveryDragOver}
               onDragLeave={handleDragLeave}
-              onFileChange={handleDeliveryFileChange}
-              title="운송장 엑셀 파일을 업로드하세요"
-              description="주문번호, 운송장번호, 택배사 헤더가 포함된 엑셀 파일(.xlsx, .xls)"
-            />
+              onClick={() => deliveryFileInputRef?.current?.click()}
+            >
+              <input
+                type="file"
+                accept=".xlsx, .xls"
+                ref={deliveryFileInputRef}
+                onChange={handleDeliveryFileChange}
+                className="hidden"
+              />
+              <IoCloudUpload className="w-16 h-16 mx-auto text-gray-400 mb-4" />
+              <div className="text-xl mb-2 text-gray-600 font-semibold">
+                운송장 엑셀 파일을 업로드하세요
+              </div>
+              <div className="text-sm text-gray-400">
+                주문번호, 운송장번호, 택배사 헤더가 포함된 엑셀 파일(.xlsx, .xls)
+              </div>
+              <div className="text-xs text-gray-400 mt-2">
+                파일을 드래그하거나 클릭하여 선택하세요
+              </div>
+            </div>
           )}
 
           {/* 처리 중 상태 */}
