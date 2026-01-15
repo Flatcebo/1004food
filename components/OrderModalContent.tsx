@@ -103,6 +103,7 @@ export default function OrderModalContent({
   const {uploadedFiles} = useUploadStore();
   const [isHovered, setIsHovered] = useState(false);
   const [isClicked, setIsClicked] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // 운송장 업로드 실시간 통계 계산
   const deliveryStats = useMemo(() => {
@@ -187,7 +188,9 @@ export default function OrderModalContent({
           {!isUploading && !finalResult && (
             <div
               className={`w-full border-2 border-dashed rounded-lg flex flex-col items-center justify-center transition-all duration-200 ${
-                dragActive
+                isDragOver
+                  ? "border-blue-600 bg-blue-100 shadow-lg scale-[1.02]"
+                  : dragActive
                   ? "border-blue-500 bg-blue-50"
                   : isClicked
                   ? "border-blue-600 bg-blue-100 scale-[0.98]"
@@ -199,12 +202,20 @@ export default function OrderModalContent({
                 minHeight: "calc(90vh - 200px)",
                 cursor: "pointer",
               }}
-              onDrop={handleDeliveryDrop}
-              onDragOver={handleDeliveryDragOver}
+              onDrop={(e) => {
+                handleDeliveryDrop(e);
+                setIsDragOver(false);
+              }}
+              onDragOver={(e) => {
+                handleDeliveryDragOver(e);
+                setIsDragOver(true);
+              }}
               onDragLeave={(e) => {
                 handleDragLeave(e);
                 setIsHovered(false);
+                setIsDragOver(false);
               }}
+              onDragEnter={() => setIsDragOver(true)}
               onMouseEnter={() => setIsHovered(true)}
               onMouseLeave={() => {
                 setIsHovered(false);
@@ -224,15 +235,51 @@ export default function OrderModalContent({
                 onChange={handleDeliveryFileChange}
                 className="hidden"
               />
-              <IoCloudUpload className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-              <div className="text-xl mb-2 text-gray-600 font-semibold">
-                운송장 엑셀 파일을 업로드하세요
+              <IoCloudUpload
+                className={`mx-auto mb-4 transition-all duration-200 ${
+                  isDragOver
+                    ? "w-20 h-20 text-blue-600 animate-bounce"
+                    : isHovered
+                    ? "w-[4.5rem] h-[4.5rem] text-blue-500"
+                    : "w-16 h-16 text-gray-400"
+                }`}
+              />
+              <div
+                className={`text-xl mb-2 font-semibold transition-colors duration-200 ${
+                  isDragOver
+                    ? "text-blue-700"
+                    : isHovered
+                    ? "text-blue-600"
+                    : "text-gray-600"
+                }`}
+              >
+                {isDragOver
+                  ? "파일을 여기에 놓으세요!"
+                  : "운송장 엑셀 파일을 업로드하세요"}
               </div>
-              <div className="text-sm text-gray-400">
+              <div
+                className={`text-sm transition-colors duration-200 ${
+                  isDragOver
+                    ? "text-blue-600"
+                    : isHovered
+                    ? "text-blue-500"
+                    : "text-gray-400"
+                }`}
+              >
                 주문번호, 운송장번호, 택배사 헤더가 포함된 엑셀 파일(.xlsx, .xls)
               </div>
-              <div className="text-xs text-gray-400 mt-2">
-                파일을 드래그하거나 클릭하여 선택하세요
+              <div
+                className={`text-xs mt-2 transition-colors duration-200 ${
+                  isDragOver
+                    ? "text-blue-600 font-semibold"
+                    : isHovered
+                    ? "text-blue-500"
+                    : "text-gray-400"
+                }`}
+              >
+                {isDragOver
+                  ? "마우스를 놓으면 파일이 업로드됩니다"
+                  : "파일을 드래그하거나 클릭하여 선택하세요"}
               </div>
             </div>
           )}
