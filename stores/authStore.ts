@@ -16,6 +16,7 @@ interface AuthStoreState {
   lastActivityTime: number | null;
   login: (user: User) => void;
   logout: () => void;
+  updateUser: (updates: Partial<User>) => void;
   updateActivityTime: () => void;
   checkAutoLogout: () => boolean;
 }
@@ -99,6 +100,26 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
         localStorage.removeItem("last-activity-time");
       } catch (e) {
         console.error("Failed to remove auth from localStorage", e);
+      }
+    }
+  },
+  updateUser: (updates) => {
+    const currentUser = get().user;
+    if (!currentUser) return;
+    
+    const updatedUser = {...currentUser, ...updates};
+    set({user: updatedUser});
+    
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("auth-storage");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          parsed.state.user = updatedUser;
+          localStorage.setItem("auth-storage", JSON.stringify(parsed));
+        }
+      } catch (e) {
+        console.error("Failed to update user in localStorage", e);
       }
     }
   },

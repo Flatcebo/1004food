@@ -51,6 +51,8 @@ export default function Header({
       ? "회원 관리"
       : pathname === "/vendors"
       ? "납품업체 관리"
+      : pathname === "/profile"
+      ? "내 정보 수정"
       : "홈");
 
   const handleLogout = () => {
@@ -108,7 +110,12 @@ export default function Header({
           <>
             <div className="flex items-center gap-3 text-sm">
               <div className="flex flex-col items-end">
-                <span className="font-medium text-gray-800">{user.name}</span>
+                <button
+                  onClick={() => router.push("/profile")}
+                  className="font-medium text-gray-800 hover:text-blue-600 transition-colors cursor-pointer text-right"
+                >
+                  {user.name}
+                </button>
                 <span className="text-xs text-gray-500">
                   {user.position} / {user.role}
                 </span>

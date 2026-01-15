@@ -469,8 +469,108 @@ export async function POST(request: NextRequest) {
     // 정렬: 상품명 오름차순 후 수취인명 오름차순
     excelData = sortExcelData(excelData, columnOrder);
 
+    // 수취인 정보 필드 인덱스 찾기
+    const receiverNameIndex = headers.findIndex(
+      (h: string) =>
+        h.includes("수취인명") ||
+        h === "수취인명" ||
+        h === "수취인" ||
+        h === "받는사람"
+    );
+    const receiverPhoneIndex = headers.findIndex(
+      (h: string) =>
+        h.includes("수취인전화") ||
+        h === "수취인전화번호" ||
+        h === "수취인 전화번호"
+    );
+    const zipCodeIndex = headers.findIndex(
+      (h: string) => h.includes("우편") || h === "우편번호" || h === "우편"
+    );
+    const receiverAddressIndex = headers.findIndex(
+      (h: string) =>
+        h.includes("수취인주소") ||
+        h === "수취인주소" ||
+        h === "수취인 주소" ||
+        h === "받는사람주소"
+    );
+
+    // 중복값 찾기: 각 필드별로 값과 행 인덱스 매핑
+    const receiverNameMap = new Map<string, number[]>();
+    const receiverPhoneMap = new Map<string, number[]>();
+    const zipCodeMap = new Map<string, number[]>();
+    const receiverAddressMap = new Map<string, number[]>();
+
+    excelData.forEach((rowData: any[], rowIndex: number) => {
+      // 수취인명 중복 체크
+      if (receiverNameIndex >= 0 && rowData[receiverNameIndex]) {
+        const value = String(rowData[receiverNameIndex]).trim();
+        if (value) {
+          if (!receiverNameMap.has(value)) {
+            receiverNameMap.set(value, []);
+          }
+          receiverNameMap.get(value)!.push(rowIndex);
+        }
+      }
+
+      // 수취인전화번호 중복 체크
+      if (receiverPhoneIndex >= 0 && rowData[receiverPhoneIndex]) {
+        const value = String(rowData[receiverPhoneIndex]).trim();
+        if (value) {
+          if (!receiverPhoneMap.has(value)) {
+            receiverPhoneMap.set(value, []);
+          }
+          receiverPhoneMap.get(value)!.push(rowIndex);
+        }
+      }
+
+      // 우편번호 중복 체크
+      if (zipCodeIndex >= 0 && rowData[zipCodeIndex]) {
+        const value = String(rowData[zipCodeIndex]).trim();
+        if (value) {
+          if (!zipCodeMap.has(value)) {
+            zipCodeMap.set(value, []);
+          }
+          zipCodeMap.get(value)!.push(rowIndex);
+        }
+      }
+
+      // 수취인주소 중복 체크
+      if (receiverAddressIndex >= 0 && rowData[receiverAddressIndex]) {
+        const value = String(rowData[receiverAddressIndex]).trim();
+        if (value) {
+          if (!receiverAddressMap.has(value)) {
+            receiverAddressMap.set(value, []);
+          }
+          receiverAddressMap.get(value)!.push(rowIndex);
+        }
+      }
+    });
+
+    // 중복된 행 인덱스 집합 생성
+    const duplicateRows = new Set<number>();
+    receiverNameMap.forEach((indices) => {
+      if (indices.length > 1) {
+        indices.forEach((idx) => duplicateRows.add(idx));
+      }
+    });
+    receiverPhoneMap.forEach((indices) => {
+      if (indices.length > 1) {
+        indices.forEach((idx) => duplicateRows.add(idx));
+      }
+    });
+    zipCodeMap.forEach((indices) => {
+      if (indices.length > 1) {
+        indices.forEach((idx) => duplicateRows.add(idx));
+      }
+    });
+    receiverAddressMap.forEach((indices) => {
+      if (indices.length > 1) {
+        indices.forEach((idx) => duplicateRows.add(idx));
+      }
+    });
+
     // 정렬된 데이터를 엑셀에 추가
-    excelData.forEach((rowDatas) => {
+    excelData.forEach((rowDatas, rowIndex) => {
       const appendRow = sheet.addRow(rowDatas);
 
       // 전화번호, 우편번호, 코드 관련 필드는 텍스트 형식으로 설정 (앞자리 0 유지)
@@ -487,6 +587,49 @@ export async function POST(request: NextRequest) {
 
         if (isTextColumn) {
           cell.numFmt = "@"; // 텍스트 형식
+        }
+
+        // 중복값 배경색 처리 (연한 빨강: FFE6E6)
+        const isReceiverNameCol =
+          colNum - 1 === receiverNameIndex && receiverNameIndex >= 0;
+        const isReceiverPhoneCol =
+          colNum - 1 === receiverPhoneIndex && receiverPhoneIndex >= 0;
+        const isZipCodeCol = colNum - 1 === zipCodeIndex && zipCodeIndex >= 0;
+        const isReceiverAddressCol =
+          colNum - 1 === receiverAddressIndex && receiverAddressIndex >= 0;
+
+        if (
+          duplicateRows.has(rowIndex) &&
+          (isReceiverNameCol ||
+            isReceiverPhoneCol ||
+            isZipCodeCol ||
+            isReceiverAddressCol)
+        ) {
+          // 해당 필드가 중복인지 확인
+          let isDuplicate = false;
+          const cellValue = String(cell.value || "").trim();
+
+          if (isReceiverNameCol && cellValue) {
+            const indices = receiverNameMap.get(cellValue);
+            isDuplicate = indices && indices.length > 1 ? true : false;
+          } else if (isReceiverPhoneCol && cellValue) {
+            const indices = receiverPhoneMap.get(cellValue);
+            isDuplicate = indices && indices.length > 1 ? true : false;
+          } else if (isZipCodeCol && cellValue) {
+            const indices = zipCodeMap.get(cellValue);
+            isDuplicate = indices && indices.length > 1 ? true : false;
+          } else if (isReceiverAddressCol && cellValue) {
+            const indices = receiverAddressMap.get(cellValue);
+            isDuplicate = indices && indices.length > 1 ? true : false;
+          }
+
+          if (isDuplicate) {
+            cell.fill = {
+              type: "pattern",
+              pattern: "solid",
+              fgColor: {argb: "FFE6E6"}, // 연한 빨강 배경
+            };
+          }
         }
       });
     });
