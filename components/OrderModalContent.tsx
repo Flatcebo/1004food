@@ -3,7 +3,12 @@ import FileUploadArea from "@/components/FileUploadArea";
 import UploadedFilesList from "@/components/UploadedFilesList";
 import DirectInputModal from "@/components/DirectInputModal";
 import DataTable from "@/components/DataTable";
-import {IoTime, IoCheckmarkCircle, IoCloseCircle, IoCloudUpload} from "react-icons/io5";
+import {
+  IoTime,
+  IoCheckmarkCircle,
+  IoCloseCircle,
+  IoCloudUpload,
+} from "react-icons/io5";
 import {useUploadStore} from "@/stores/uploadStore";
 import {fieldNameMap} from "@/constants/fieldMappings";
 
@@ -240,7 +245,7 @@ export default function OrderModalContent({
                   isDragOver
                     ? "w-20 h-20 text-blue-600 animate-bounce"
                     : isHovered
-                    ? "w-[4.5rem] h-[4.5rem] text-blue-500"
+                    ? "w-18 h-18 text-blue-500"
                     : "w-16 h-16 text-gray-400"
                 }`}
               />
@@ -266,7 +271,8 @@ export default function OrderModalContent({
                     : "text-gray-400"
                 }`}
               >
-                주문번호, 운송장번호, 택배사 헤더가 포함된 엑셀 파일(.xlsx, .xls)
+                주문번호, 운송장번호, 택배사 헤더가 포함된 엑셀 파일(.xlsx,
+                .xls)
               </div>
               <div
                 className={`text-xs mt-2 transition-colors duration-200 ${

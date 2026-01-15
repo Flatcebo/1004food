@@ -490,7 +490,7 @@ export default function UsersPage() {
 
       {/* 사용자 생성 모달 */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black/30 bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl font-bold mb-6">새 사용자 추가</h2>
             <form onSubmit={handleCreate} className="space-y-4">
