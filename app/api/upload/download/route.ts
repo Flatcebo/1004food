@@ -270,8 +270,28 @@ export async function POST(request: NextRequest) {
           );
         }
 
+        // CJ외주 발주서인 경우: 매핑코드 필터가 아닌 경우에도 항상 CJ외주 조건 적용
+        if (isCJOutsource && dbField !== "매핑코드") {
+          // CJ외주 조건 추가 (매핑코드 필터가 아닌 경우)
+          const allowedCodes = [
+            "106464",
+            "108640",
+            "108788",
+            "108879",
+            "108221",
+          ];
+          conditions.push(sql`ur.row_data->>'내외주' = '내주'`);
+          conditions.push(sql`(
+            ur.row_data->>'매핑코드' = '106464'
+            OR ur.row_data->>'매핑코드' = '108640'
+            OR ur.row_data->>'매핑코드' = '108788'
+            OR ur.row_data->>'매핑코드' = '108879'
+            OR ur.row_data->>'매핑코드' = '108221'
+          )`);
+        }
+
         // 조건부 쿼리 구성
-        const buildQuery = (includeId: boolean = false) => {
+        const buildQuery = (includeId: boolean = true) => {
           // 첫 번째 조건으로 WHERE 시작
           let query = sql`
             SELECT ${includeId ? sql`ur.id,` : sql``} ur.row_data
@@ -290,7 +310,12 @@ export async function POST(request: NextRequest) {
           return query;
         };
 
-        const filteredData = await buildQuery();
+        const filteredData = await buildQuery(true);
+        // ID와 row_data를 함께 저장하여 주문상태 업데이트 시 사용
+        rowIdsWithData = filteredData.map((r: any) => ({
+          id: r.id,
+          row_data: r.row_data || {},
+        }));
         rows = filteredData.map((r: any) => {
           const rowData = r.row_data || {};
           // 우편번호를 우편으로 통일
@@ -303,62 +328,29 @@ export async function POST(request: NextRequest) {
           return rowData;
         });
 
-        // 발주서 다운로드이고 전체 다운로드 시 주문상태 업데이트
+        // 발주서 다운로드이고 필터링된 데이터 다운로드 시 주문상태 업데이트
         const templateName = (templateData.name || "").normalize("NFC").trim();
         const isPurchaseOrder = templateName.includes("발주");
-        if (isPurchaseOrder && (!rowIds || rowIds.length === 0)) {
-          // 주문상태 업데이트를 비동기로 처리하여 다운로드 속도 향상
-          setImmediate(async () => {
-            try {
-              // 조건을 직접 재구성하여 UPDATE 쿼리 작성
-              let updateQuery = sql`
+        if (isPurchaseOrder && (!rowIds || rowIds.length === 0) && rowIdsWithData.length > 0) {
+          try {
+            // 필터링된 데이터의 ID를 사용하여 주문상태 업데이트
+            const idsToUpdate = rowIdsWithData.map((r: any) => r.id);
+            
+            if (idsToUpdate.length > 0) {
+              // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
+              // 현재 상태가 "공급중"인 경우에만 업데이트 (뒷단계로 돌아가지 않도록)
+              // "사방넷 다운", "배송중" 상태는 유지됨 (조건에 포함되지 않으므로 업데이트되지 않음)
+              await sql`
                 UPDATE upload_rows
                 SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)
-                FROM uploads u
-                WHERE upload_rows.upload_id = u.id
-                  AND u.company_id = ${companyId}
-                  AND (upload_rows.row_data->>'주문상태' IS NULL OR upload_rows.row_data->>'주문상태' = '공급중')
+                WHERE id = ANY(${idsToUpdate})
+                  AND (row_data->>'주문상태' IS NULL OR row_data->>'주문상태' = '공급중')
               `;
-
-              // 기존 조건들을 직접 재구성하여 추가 (ur. -> upload_rows.로 변경)
-              if (type) {
-                updateQuery = sql`${updateQuery} AND upload_rows.row_data->>'내외주' = ${type}`;
-              }
-              if (postType) {
-                updateQuery = sql`${updateQuery} AND upload_rows.row_data->>'택배사' = ${postType}`;
-              }
-              if (vendor) {
-                if (Array.isArray(vendor) && vendor.length > 0) {
-                  updateQuery = sql`${updateQuery} AND upload_rows.row_data->>'업체명' = ANY(${vendor})`;
-                } else if (typeof vendor === "string") {
-                  updateQuery = sql`${updateQuery} AND upload_rows.row_data->>'업체명' = ${vendor}`;
-                }
-              }
-              if (company) {
-                if (Array.isArray(company) && company.length > 0) {
-                  updateQuery = sql`${updateQuery} AND upload_rows.row_data->>'업체명' = ANY(${company})`;
-                } else if (typeof company === "string") {
-                  updateQuery = sql`${updateQuery} AND upload_rows.row_data->>'업체명' = ${company}`;
-                }
-              }
-              if (orderStatus) {
-                updateQuery = sql`${updateQuery} AND upload_rows.row_data->>'주문상태' = ${orderStatus}`;
-              }
-              if (dbField && searchPattern) {
-                updateQuery = sql`${updateQuery} AND upload_rows.row_data->>${dbField} ILIKE ${searchPattern}`;
-              }
-              if (uploadTimeFrom) {
-                updateQuery = sql`${updateQuery} AND u.created_at >= ${uploadTimeFrom}::date`;
-              }
-              if (uploadTimeTo) {
-                updateQuery = sql`${updateQuery} AND u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')`;
-              }
-
-              await updateQuery;
-            } catch (updateError) {
-              console.error("주문상태 업데이트 실패:", updateError);
             }
-          });
+          } catch (updateError) {
+            console.error("주문상태 업데이트 실패:", updateError);
+            // 주문상태 업데이트 실패해도 다운로드는 성공으로 처리
+          }
         }
       } else {
         // 필터가 없으면 company_id로 필터링된 모든 데이터 조회
