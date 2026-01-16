@@ -103,9 +103,30 @@ export async function POST(request: NextRequest) {
       `;
 
       if (lastLoginColumnExists[0]?.exists) {
-        // JavaScript에서 한국 시간 계산 (Asia/Seoul)
-        // 'sv-SE' 로케일을 사용하면 'YYYY-MM-DD HH:mm:ss' 형식으로 반환됨
-        const koreaTimeString = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Seoul' });
+        // JavaScript에서 한국 시간(Asia/Seoul)을 정확히 계산
+        // Intl.DateTimeFormat을 사용하여 한국 시간대의 현재 시간을 가져옴
+        const now = new Date();
+        const koreaTimeFormatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: 'Asia/Seoul',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false
+        });
+        
+        // 한국 시간으로 포맷팅
+        const parts = koreaTimeFormatter.formatToParts(now);
+        const year = parts.find(p => p.type === 'year')?.value;
+        const month = parts.find(p => p.type === 'month')?.value;
+        const day = parts.find(p => p.type === 'day')?.value;
+        const hour = parts.find(p => p.type === 'hour')?.value;
+        const minute = parts.find(p => p.type === 'minute')?.value;
+        const second = parts.find(p => p.type === 'second')?.value;
+        
+        const koreaTimeString = `${year}-${month}-${day} ${hour}:${minute}:${second}`;
         
         await sql`
           UPDATE users 
