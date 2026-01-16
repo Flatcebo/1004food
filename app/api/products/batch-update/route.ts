@@ -2,6 +2,14 @@ import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
 import {getCompanyIdFromRequest} from "@/lib/company";
 
+// 한국 시간(KST, UTC+9)을 반환하는 함수
+function getKoreaTime(): Date {
+  const now = new Date();
+  const utcTime = now.getTime() + now.getTimezoneOffset() * 60000;
+  const koreaTime = new Date(utcTime + 9 * 3600000);
+  return koreaTime;
+}
+
 export async function PUT(request: NextRequest) {
   try {
     // company_id 추출
@@ -140,6 +148,9 @@ export async function PUT(request: NextRequest) {
       });
     }
 
+    // 한국 시간 생성
+    const koreaTime = getKoreaTime();
+
     // 각 필드를 개별적으로 업데이트 (안전하고 확실한 방법)
     const updatePromises: Promise<any>[] = [];
     const updatedIdsSet = new Set<number>();
@@ -147,7 +158,7 @@ export async function PUT(request: NextRequest) {
     if (updateFields.type !== undefined) {
       const result = await sql`
         UPDATE products 
-        SET type = ${updateFields.type}, updated_at = (NOW() + INTERVAL '9 hours')
+        SET type = ${updateFields.type}, updated_at = ${koreaTime.toISOString()}::timestamp
         WHERE id = ANY(${ids}::int[]) AND company_id = ${companyId}
         RETURNING id
       `;
@@ -156,7 +167,7 @@ export async function PUT(request: NextRequest) {
     if (updateFields.post_type !== undefined) {
       const result = await sql`
         UPDATE products 
-        SET post_type = ${updateFields.post_type}, updated_at = (NOW() + INTERVAL '9 hours')
+        SET post_type = ${updateFields.post_type}, updated_at = ${koreaTime.toISOString()}::timestamp
         WHERE id = ANY(${ids}::int[]) AND company_id = ${companyId}
         RETURNING id
       `;
@@ -165,7 +176,7 @@ export async function PUT(request: NextRequest) {
     if (updateFields.pkg !== undefined) {
       const result = await sql`
         UPDATE products 
-        SET pkg = ${updateFields.pkg}, updated_at = (NOW() + INTERVAL '9 hours')
+        SET pkg = ${updateFields.pkg}, updated_at = ${koreaTime.toISOString()}::timestamp
         WHERE id = ANY(${ids}::int[]) AND company_id = ${companyId}
         RETURNING id
       `;
@@ -174,7 +185,7 @@ export async function PUT(request: NextRequest) {
     if (updateFields.price !== undefined) {
       const result = await sql`
         UPDATE products 
-        SET price = ${updateFields.price}, updated_at = (NOW() + INTERVAL '9 hours')
+        SET price = ${updateFields.price}, updated_at = ${koreaTime.toISOString()}::timestamp
         WHERE id = ANY(${ids}::int[]) AND company_id = ${companyId}
         RETURNING id
       `;
@@ -183,7 +194,7 @@ export async function PUT(request: NextRequest) {
     if (updateFields.sale_price !== undefined) {
       const result = await sql`
         UPDATE products 
-        SET sale_price = ${updateFields.sale_price}, updated_at = (NOW() + INTERVAL '9 hours')
+        SET sale_price = ${updateFields.sale_price}, updated_at = ${koreaTime.toISOString()}::timestamp
         WHERE id = ANY(${ids}::int[]) AND company_id = ${companyId}
         RETURNING id
       `;
@@ -192,7 +203,7 @@ export async function PUT(request: NextRequest) {
     if (updateFields.post_fee !== undefined) {
       const result = await sql`
         UPDATE products 
-        SET post_fee = ${updateFields.post_fee}, updated_at = (NOW() + INTERVAL '9 hours')
+        SET post_fee = ${updateFields.post_fee}, updated_at = ${koreaTime.toISOString()}::timestamp
         WHERE id = ANY(${ids}::int[]) AND company_id = ${companyId}
         RETURNING id
       `;
@@ -201,7 +212,7 @@ export async function PUT(request: NextRequest) {
     if (updateFields.purchase !== undefined) {
       const result = await sql`
         UPDATE products 
-        SET purchase = ${updateFields.purchase}, updated_at = (NOW() + INTERVAL '9 hours')
+        SET purchase = ${updateFields.purchase}, updated_at = ${koreaTime.toISOString()}::timestamp
         WHERE id = ANY(${ids}::int[]) AND company_id = ${companyId}
         RETURNING id
       `;
@@ -210,7 +221,7 @@ export async function PUT(request: NextRequest) {
     if (updateFields.bill_type !== undefined) {
       const result = await sql`
         UPDATE products 
-        SET bill_type = ${updateFields.bill_type}, updated_at = (NOW() + INTERVAL '9 hours')
+        SET bill_type = ${updateFields.bill_type}, updated_at = ${koreaTime.toISOString()}::timestamp
         WHERE id = ANY(${ids}::int[]) AND company_id = ${companyId}
         RETURNING id
       `;
@@ -219,7 +230,7 @@ export async function PUT(request: NextRequest) {
     if (updateFields.category !== undefined) {
       const result = await sql`
         UPDATE products 
-        SET category = ${updateFields.category}, updated_at = (NOW() + INTERVAL '9 hours')
+        SET category = ${updateFields.category}, updated_at = ${koreaTime.toISOString()}::timestamp
         WHERE id = ANY(${ids}::int[]) AND company_id = ${companyId}
         RETURNING id
       `;
@@ -228,7 +239,7 @@ export async function PUT(request: NextRequest) {
     if (updateFields.product_type !== undefined) {
       const result = await sql`
         UPDATE products 
-        SET product_type = ${updateFields.product_type}, updated_at = (NOW() + INTERVAL '9 hours')
+        SET product_type = ${updateFields.product_type}, updated_at = ${koreaTime.toISOString()}::timestamp
         WHERE id = ANY(${ids}::int[]) AND company_id = ${companyId}
         RETURNING id
       `;
@@ -237,7 +248,7 @@ export async function PUT(request: NextRequest) {
     if (updateFields.sabang_name !== undefined) {
       const result = await sql`
         UPDATE products 
-        SET sabang_name = ${updateFields.sabang_name}, updated_at = (NOW() + INTERVAL '9 hours')
+        SET sabang_name = ${updateFields.sabang_name}, updated_at = ${koreaTime.toISOString()}::timestamp
         WHERE id = ANY(${ids}::int[]) AND company_id = ${companyId}
         RETURNING id
       `;
@@ -246,7 +257,7 @@ export async function PUT(request: NextRequest) {
     if (updateFields.etc !== undefined) {
       const result = await sql`
         UPDATE products 
-        SET etc = ${updateFields.etc}, updated_at = (NOW() + INTERVAL '9 hours')
+        SET etc = ${updateFields.etc}, updated_at = ${koreaTime.toISOString()}::timestamp
         WHERE id = ANY(${ids}::int[]) AND company_id = ${companyId}
         RETURNING id
       `;

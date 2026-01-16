@@ -4,12 +4,6 @@ import * as Excel from "exceljs";
 import {saveAs} from "file-saver";
 import {useRef, useState} from "react";
 
-// Company ID 정의 (납품업체를 등록할 회사 ID를 입력하세요)
-// null로 설정하면 로그인한 사용자의 company_id를 자동으로 사용합니다
-const COMPANY_ID: number | null = 1; // 예: 1, 2, 3 등 숫자로 입력하거나 null로 두세요
-
-// Vendors 데이터 정의 (여기에 납품업체 데이터를 추가하세요)
-
 function ProductUploadPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const batchFileInputRef = useRef<HTMLInputElement>(null);
@@ -35,8 +29,26 @@ function ProductUploadPage() {
       const formData = new FormData();
       formData.append("file", file);
 
+      // company-id 헤더 포함
+      const headers: HeadersInit = {};
+      if (typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem("auth-storage");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            const user = parsed.state?.user;
+            if (user?.companyId) {
+              headers["company-id"] = user.companyId.toString();
+            }
+          }
+        } catch (e) {
+          console.error("인증 정보 로드 실패:", e);
+        }
+      }
+
       const response = await fetch("/api/products/seed-excel", {
         method: "POST",
+        headers,
         body: formData,
       });
 
@@ -80,8 +92,26 @@ function ProductUploadPage() {
       const formData = new FormData();
       formData.append("file", file);
 
+      // company-id 헤더 포함
+      const headers: HeadersInit = {};
+      if (typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem("auth-storage");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            const user = parsed.state?.user;
+            if (user?.companyId) {
+              headers["company-id"] = user.companyId.toString();
+            }
+          }
+        } catch (e) {
+          console.error("인증 정보 로드 실패:", e);
+        }
+      }
+
       const response = await fetch("/api/products/batch-create-excel", {
         method: "POST",
+        headers,
         body: formData,
       });
 
@@ -367,6 +397,8 @@ function ProductUploadPage() {
               <br />
               <strong>필수 헤더:</strong> 상품코드, 공급단가
               <br />
+              <strong>선택 헤더:</strong> 원가, 세금구분 (있으면 업데이트)
+              <br />
               <strong>특징:</strong>
               <br />
               • 상품코드에서 맨 뒤의 "-0001"은 자동으로 제거됩니다
@@ -376,6 +408,10 @@ function ProductUploadPage() {
               <br />
               • DB의 products 테이블 code 컬럼과 매칭하여 sale_price를
               업데이트합니다
+              <br />
+              • 원가 헤더가 있으면 price 컬럼도 업데이트됩니다
+              <br />
+              • 세금구분 헤더가 있으면 bill_type 컬럼도 업데이트됩니다
               <br />
               <strong>💡 배치 처리:</strong> 대량 업데이트를 위해 배치 방식으로
               효율적으로 처리됩니다.

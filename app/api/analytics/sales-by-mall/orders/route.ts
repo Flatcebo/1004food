@@ -115,50 +115,60 @@ export async function GET(request: NextRequest) {
     let orders: any[];
     
     if (settlementIdInt) {
-      // 정산에 연결된 주문 ID들을 조회
+      // 정산에 연결된 주문 데이터를 조회 (저장된 order_data와 product_data 사용)
       const settlementOrders = await sql`
-        SELECT order_id
+        SELECT 
+          order_id,
+          order_data,
+          product_data,
+          created_at as saved_at
         FROM mall_sales_settlement_orders
         WHERE settlement_id = ${settlementIdInt}
         ORDER BY order_id
       `;
       
-      const orderIds = settlementOrders.map(so => so.order_id);
-      
-      if (orderIds.length === 0) {
+      if (settlementOrders.length === 0) {
         console.log(`[주문 목록 조회] 정산에 연결된 주문이 없습니다. (settlement_id=${settlementIdInt})`);
         orders = [];
       } else {
-        console.log(`[주문 목록 조회] 정산에 연결된 주문 ID 개수: ${orderIds.length}`);
-        console.log(`[주문 목록 조회] 주문 ID 샘플 (최대 10개):`, orderIds.slice(0, 10));
+        console.log(`[주문 목록 조회] 정산에 저장된 주문 개수: ${settlementOrders.length}`);
+        console.log(`[주문 목록 조회] 주문 ID 샘플 (최대 10개):`, settlementOrders.slice(0, 10).map(so => so.order_id));
         
-        // 정산에 연결된 주문들만 조회
-        orders = await sql`
+        // 저장된 order_data와 product_data를 사용하여 주문 데이터 구성
+        // order_id로 upload_rows에서 기본 정보만 가져오고, 실제 주문 데이터와 상품 정보는 저장된 데이터 사용
+        const orderIds = settlementOrders.map(so => so.order_id);
+        
+        const uploadRowsData = await sql`
           SELECT DISTINCT ON (ur.id)
             ur.id,
-            ur.row_data,
             ur.shop_name,
             ur.mall_id,
-            ur.created_at as row_created_at,
-            p.price as product_price,
-            p.sale_price as product_sale_price
+            ur.created_at as row_created_at
           FROM upload_rows ur
-          LEFT JOIN LATERAL (
-            SELECT price, sale_price
-            FROM products
-            WHERE company_id = ${companyId}
-              AND (
-                code = ur.row_data->>'매핑코드'
-                OR id::text = ur.row_data->>'productId'
-              )
-            LIMIT 1
-          ) p ON true
           WHERE ur.company_id = ${companyId}
             AND ur.id = ANY(${orderIds})
           ORDER BY ur.id
         `;
         
-        console.log(`[주문 목록 조회] 실제 조회된 주문 건수: ${orders.length}`);
+        // upload_rows 데이터를 맵으로 변환
+        const uploadRowsMap = new Map(uploadRowsData.map(ur => [ur.id, ur]));
+        
+        // 저장된 order_data, product_data와 upload_rows 데이터를 결합
+        orders = settlementOrders.map(so => {
+          const uploadRow = uploadRowsMap.get(so.order_id);
+          const productData = so.product_data || {};
+          return {
+            id: so.order_id,
+            row_data: so.order_data || {}, // 저장된 주문 데이터 사용
+            shop_name: uploadRow?.shop_name || null,
+            mall_id: uploadRow?.mall_id || null,
+            row_created_at: uploadRow?.row_created_at || so.saved_at,
+            product_price: productData.price || null, // 저장된 상품 정보 사용
+            product_sale_price: productData.sale_price || null, // 저장된 상품 정보 사용
+          };
+        });
+        
+        console.log(`[주문 목록 조회] 저장된 주문 데이터와 상품 정보로 구성된 주문 건수: ${orders.length}`);
       }
     } else {
       // 기존 방식: 기간 필터링으로 주문 조회

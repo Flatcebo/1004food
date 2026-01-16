@@ -2,6 +2,14 @@ import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
 import {getCompanyIdFromRequest} from "@/lib/company";
 
+// 한국 시간(KST, UTC+9)을 반환하는 함수
+function getKoreaTime(): Date {
+  const now = new Date();
+  const utcTime = now.getTime() + now.getTimezoneOffset() * 60000;
+  const koreaTime = new Date(utcTime + 9 * 3600000);
+  return koreaTime;
+}
+
 export async function POST(request: NextRequest) {
   try {
     // company_id 추출
@@ -184,7 +192,8 @@ export async function POST(request: NextRequest) {
           await sql`
             INSERT INTO products (
               company_id, type, post_type, name, code, pkg, price, sale_price, post_fee,
-              purchase, bill_type, category, product_type, sabang_name, etc
+              purchase, bill_type, category, product_type, sabang_name, etc,
+              created_at, updated_at
             ) VALUES (
               ${companyId},
               ${type || null},
@@ -202,7 +211,9 @@ export async function POST(request: NextRequest) {
               ${category || null},
               ${productType || null},
               ${sabangName || null},
-              ${etc || null}
+              ${etc || null},
+              ${koreaTime.toISOString()}::timestamp,
+              ${koreaTime.toISOString()}::timestamp
             )
           `;
         }

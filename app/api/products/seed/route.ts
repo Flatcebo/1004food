@@ -3,6 +3,14 @@ import sql from "@/lib/db";
 import fs from "fs";
 import path from "path";
 
+// 한국 시간(KST, UTC+9)을 반환하는 함수
+function getKoreaTime(): Date {
+  const now = new Date();
+  const utcTime = now.getTime() + now.getTimezoneOffset() * 60000;
+  const koreaTime = new Date(utcTime + 9 * 3600000);
+  return koreaTime;
+}
+
 // codes.json 파일 읽기
 const codesDataPath = path.join(process.cwd(), "public", "data", "mapping", "codes.json");
 const codesData = JSON.parse(fs.readFileSync(codesDataPath, "utf-8"));
@@ -12,6 +20,9 @@ export async function POST() {
     // 기존 데이터 삭제 (선택사항 - 필요시 주석 처리)
     await sql`TRUNCATE TABLE products RESTART IDENTITY CASCADE`;
 
+    // 한국 시간 생성
+    const koreaTime = getKoreaTime();
+
     // codes.json 데이터를 DB에 삽입
     const insertPromises = codesData.map((item: any) => {
       // 택배사가 null이면 빈 문자열로 변환 (NULL은 UNIQUE 제약조건에서 서로 다른 값으로 취급되므로)
@@ -20,7 +31,8 @@ export async function POST() {
       return sql`
         INSERT INTO products (
           type, post_type, name, code, pkg, price, sale_price, post_fee,
-          purchase, bill_type, category, product_type, sabang_name, etc
+          purchase, bill_type, category, product_type, sabang_name, etc,
+          created_at, updated_at
         ) VALUES (
           ${item.type || null},
           ${normalizedPostType},
@@ -35,7 +47,9 @@ export async function POST() {
           ${item.category || null},
           ${item.productType || null},
           ${item.sabangName || null},
-          ${item.etc || null}
+          ${item.etc || null},
+          ${koreaTime.toISOString()}::timestamp,
+          ${koreaTime.toISOString()}::timestamp
         )
         ON CONFLICT (name, code, post_type) DO UPDATE SET
           type = EXCLUDED.type,
@@ -50,7 +64,7 @@ export async function POST() {
           product_type = EXCLUDED.product_type,
           sabang_name = EXCLUDED.sabang_name,
           etc = EXCLUDED.etc,
-          updated_at = (NOW() + INTERVAL '9 hours')
+          updated_at = ${koreaTime.toISOString()}::timestamp
       `;
     });
 

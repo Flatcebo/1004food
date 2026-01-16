@@ -133,6 +133,7 @@ export async function POST(request: NextRequest) {
         // mall_id FK를 직접 사용하여 조회
         // upload_rows만 사용하며, 기간은 upload_rows.created_at 기준으로 필터링
         // DISTINCT로 중복 제거 (products JOIN으로 인한 중복 방지)
+        // 상품 정보도 함께 조회하여 저장 (상품 정보 변경 시에도 정산이 달라지지 않도록)
         const orders = await sql`
           SELECT DISTINCT ON (ur.id)
             ur.id,
@@ -140,11 +141,19 @@ export async function POST(request: NextRequest) {
             ur.shop_name,
             ur.mall_id,
             ur.created_at as row_created_at,
+            p.id as product_id,
+            p.code as product_code,
+            p.name as product_name,
             p.price as product_price,
-            p.sale_price as product_sale_price
+            p.sale_price as product_sale_price,
+            p.sabang_name as product_sabang_name,
+            p.bill_type as product_bill_type,
+            p.post_type as product_post_type,
+            p.category as product_category,
+            p.product_type as product_product_type
           FROM upload_rows ur
           LEFT JOIN LATERAL (
-            SELECT price, sale_price
+            SELECT id, code, name, price, sale_price, sabang_name, bill_type, post_type, category, product_type
             FROM products
             WHERE company_id = ${companyId}
               AND (
@@ -437,13 +446,10 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // 정산에 사용된 주문 ID들을 중간 테이블에 저장 (기존 데이터와 동일하더라도 갱신)
+        // 정산에 사용된 주문 데이터 전체를 중간 테이블에 저장 (기존 데이터와 동일하더라도 갱신)
         if (settlementId && orders.length > 0) {
-          // 주문 ID 배열을 준비
-          const orderIds = orders.map(order => order.id);
-          
-          console.log(`[${mallName}] 정산에 연결할 주문 ID 개수: ${orderIds.length}, settlement_id: ${settlementId}`);
-          console.log(`[${mallName}] 주문 ID 샘플 (최대 10개):`, orderIds.slice(0, 10));
+          console.log(`[${mallName}] 정산에 연결할 주문 개수: ${orders.length}, settlement_id: ${settlementId}`);
+          console.log(`[${mallName}] 주문 ID 샘플 (최대 10개):`, orders.slice(0, 10).map(o => o.id));
           
           // 기존 주문 연결 데이터 삭제 (갱신을 위해)
           await sql`
@@ -452,48 +458,77 @@ export async function POST(request: NextRequest) {
           `;
           
           // 배치로 삽입 (배치 크기로 나눠서 처리하여 타임아웃 방지)
-          if (orderIds.length > 0) {
-            try {
-              const BATCH_SIZE = 500; // 배치 크기
+          try {
+            const BATCH_SIZE = 100; // 배치 크기 (연결 풀 고려하여 줄임)
+            const PARALLEL_SIZE = 50; // 병렬 실행 수 제한 (데이터베이스 연결 풀 보호)
+            
+            // 주문을 배치 크기로 나눠서 처리
+            for (let i = 0; i < orders.length; i += BATCH_SIZE) {
+              const batch = orders.slice(i, i + BATCH_SIZE);
               
-              // 주문 ID를 배치 크기로 나눠서 처리
-              for (let i = 0; i < orderIds.length; i += BATCH_SIZE) {
-                const batch = orderIds.slice(i, i + BATCH_SIZE);
+              // 배치 삽입을 위한 Promise 배열 생성
+              const insertPromises = batch.map(order => {
+                // 상품 정보 객체 생성 (상품이 있는 경우만)
+                const productData = order.product_id ? {
+                  id: order.product_id,
+                  code: order.product_code,
+                  name: order.product_name,
+                  price: order.product_price,
+                  sale_price: order.product_sale_price,
+                  sabang_name: order.product_sabang_name,
+                  bill_type: order.product_bill_type,
+                  post_type: order.product_post_type,
+                  category: order.product_category,
+                  product_type: order.product_product_type,
+                } : null;
                 
-                // 단일 INSERT 문으로 여러 행을 한 번에 삽입
-                if (batch.length > 0) {
-                  await sql`
-                    INSERT INTO mall_sales_settlement_orders (settlement_id, order_id)
-                    SELECT ${settlementId}, unnest(${batch}::int[])
-                    ON CONFLICT (settlement_id, order_id) DO NOTHING
-                  `;
-                }
-                
-                // 진행 상황 로그 (큰 배치의 경우)
-                if (orderIds.length > BATCH_SIZE && (i + BATCH_SIZE) % (BATCH_SIZE * 5) === 0) {
-                  console.log(`[${mallName}] 주문 ID 연결 진행 중: ${Math.min(i + BATCH_SIZE, orderIds.length)}/${orderIds.length}`);
-                }
+                return sql`
+                  INSERT INTO mall_sales_settlement_orders (settlement_id, order_id, order_data, product_data, updated_at)
+                  VALUES (
+                    ${settlementId}, 
+                    ${order.id}, 
+                    ${JSON.stringify(order.row_data || {})}::jsonb, 
+                    ${productData ? JSON.stringify(productData) : null}::jsonb,
+                    CURRENT_TIMESTAMP
+                  )
+                  ON CONFLICT (settlement_id, order_id) 
+                  DO UPDATE SET 
+                    order_data = EXCLUDED.order_data,
+                    product_data = EXCLUDED.product_data,
+                    updated_at = CURRENT_TIMESTAMP
+                `;
+              });
+              
+              // 병렬 실행 수를 제한하여 데이터베이스 연결 풀 보호
+              for (let j = 0; j < insertPromises.length; j += PARALLEL_SIZE) {
+                const parallelBatch = insertPromises.slice(j, j + PARALLEL_SIZE);
+                await Promise.all(parallelBatch);
               }
               
-              // 저장 확인
-              const savedCount = await sql`
-                SELECT COUNT(*) as count
-                FROM mall_sales_settlement_orders
-                WHERE settlement_id = ${settlementId}
-              `;
-              
-              console.log(`[${mallName}] ${orderIds.length}개의 주문 ID를 정산 데이터에 연결 완료 (실제 저장된 개수: ${savedCount[0]?.count || 0})`);
-            } catch (error: any) {
-              console.error(`[${mallName}] 주문 ID 연결 중 오류 발생:`, error);
-              throw error;
+              // 진행 상황 로그 (큰 배치의 경우)
+              if (orders.length > BATCH_SIZE && (i + BATCH_SIZE) % (BATCH_SIZE * 5) === 0) {
+                console.log(`[${mallName}] 주문 데이터 저장 진행 중: ${Math.min(i + BATCH_SIZE, orders.length)}/${orders.length}`);
+              }
             }
+            
+            // 저장 확인
+            const savedCount = await sql`
+              SELECT COUNT(*) as count
+              FROM mall_sales_settlement_orders
+              WHERE settlement_id = ${settlementId}
+            `;
+            
+            console.log(`[${mallName}] ${orders.length}개의 주문 데이터를 정산 데이터에 저장 완료 (실제 저장된 개수: ${savedCount[0]?.count || 0})`);
+          } catch (error: any) {
+            console.error(`[${mallName}] 주문 데이터 저장 중 오류 발생:`, error);
+            throw error;
           }
         } else {
           if (!settlementId) {
-            console.warn(`[${mallName}] settlementId가 없어서 주문 ID를 연결하지 않습니다.`);
+            console.warn(`[${mallName}] settlementId가 없어서 주문 데이터를 저장하지 않습니다.`);
           }
           if (orders.length === 0) {
-            console.log(`[${mallName}] 주문이 없어서 주문 ID를 연결하지 않습니다.`);
+            console.log(`[${mallName}] 주문이 없어서 주문 데이터를 저장하지 않습니다.`);
           }
         }
 

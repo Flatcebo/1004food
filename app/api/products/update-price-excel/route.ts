@@ -3,6 +3,14 @@ import sql from "@/lib/db";
 import {getCompanyIdFromRequest} from "@/lib/company";
 import * as XLSX from "xlsx";
 
+// 한국 시간(KST, UTC+9)을 반환하는 함수
+function getKoreaTime(): Date {
+  const now = new Date();
+  const utcTime = now.getTime() + now.getTimezoneOffset() * 60000;
+  const koreaTime = new Date(utcTime + 9 * 3600000);
+  return koreaTime;
+}
+
 // 헤더를 찾아서 인덱스 반환
 function findHeaderIndex(headers: string[], possibleNames: string[]): number | null {
   for (let i = 0; i < headers.length; i++) {
@@ -156,10 +164,12 @@ export async function POST(request: NextRequest) {
     const headers = raw[0] as string[];
     console.log("엑셀 헤더 목록:", headers);
 
-    // 상품코드, 공급단가, 수량 헤더 찾기
+    // 상품코드, 공급단가, 수량, 원가, 세금구분 헤더 찾기
     const productCodeIndex = findHeaderIndex(headers, ["상품코드", "품번코드", "product_code", "code"]);
     const salePriceIndex = findHeaderIndex(headers, ["공급단가", "sale_price", "판매가"]);
     const quantityIndex = findHeaderIndex(headers, ["수량", "quantity", "qty"]);
+    const costIndex = findHeaderIndex(headers, ["원가", "cost", "price"]);
+    const billTypeIndex = findHeaderIndex(headers, ["세금구분", "bill_type", "billType", "계산서", "세금계산서"]);
 
     if (productCodeIndex === null) {
       return NextResponse.json(
@@ -190,10 +200,25 @@ export async function POST(request: NextRequest) {
     } else {
       console.log("수량 헤더를 찾을 수 없습니다. 수량 필터링을 건너뜁니다.");
     }
+    if (costIndex !== null) {
+      console.log(`원가 헤더: "${headers[costIndex]}" (인덱스: ${costIndex})`);
+    } else {
+      console.log("원가 헤더를 찾을 수 없습니다. 원가 업데이트를 건너뜁니다.");
+    }
+    if (billTypeIndex !== null) {
+      console.log(`세금구분 헤더: "${headers[billTypeIndex]}" (인덱스: ${billTypeIndex})`);
+    } else {
+      console.log("세금구분 헤더를 찾을 수 없습니다. 세금구분 업데이트를 건너뜁니다.");
+    }
 
     // 데이터 파싱 및 중복 제거
     // 1단계: 모든 코드에서 -0001 제거 후 중복 제거 (첫 번째 값 사용)
-    const priceMap = new Map<string, number>(); // code -> sale_price 매핑
+    interface ProductUpdateData {
+      sale_price: number;
+      cost?: number;
+      bill_type?: string;
+    }
+    const priceMap = new Map<string, ProductUpdateData>(); // code -> 업데이트 데이터 매핑
     const duplicateCodes = new Set<string>(); // 중복된 코드 추적
 
     for (let i = 1; i < raw.length; i++) {
@@ -203,6 +228,8 @@ export async function POST(request: NextRequest) {
       const productCode = row[productCodeIndex];
       const salePrice = row[salePriceIndex];
       const quantity = quantityIndex !== null ? row[quantityIndex] : null;
+      const cost = costIndex !== null ? row[costIndex] : null;
+      const billType = billTypeIndex !== null ? row[billTypeIndex] : null;
 
       if (!productCode || productCode === "") continue;
 
@@ -238,6 +265,27 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      // 원가 파싱 (선택적)
+      let costValue: number | null = null;
+      if (costIndex !== null && cost !== undefined && cost !== null && cost !== "") {
+        const trimmedValue = String(cost).trim();
+        if (trimmedValue !== "" && trimmedValue !== "-" && trimmedValue !== "N/A" && trimmedValue.toLowerCase() !== "null") {
+          const numValue = Number(trimmedValue);
+          if (!isNaN(numValue) && numValue >= 0) {
+            costValue = numValue;
+          }
+        }
+      }
+
+      // 세금구분 파싱 (선택적)
+      let billTypeValue: string | null = null;
+      if (billTypeIndex !== null && billType !== undefined && billType !== null && billType !== "") {
+        const trimmedValue = String(billType).trim();
+        if (trimmedValue !== "" && trimmedValue !== "-" && trimmedValue !== "N/A" && trimmedValue.toLowerCase() !== "null") {
+          billTypeValue = trimmedValue;
+        }
+      }
+
       // 중복 체크 - 이미 있으면 첫 번째 값 유지 (중복 제거, 1개는 남김)
       if (priceMap.has(normalizedCode)) {
         duplicateCodes.add(normalizedCode);
@@ -246,7 +294,16 @@ export async function POST(request: NextRequest) {
       }
 
       // 매핑코드와 공급가가 모두 값이 있는 경우만 추가
-      priceMap.set(normalizedCode, priceValue);
+      const updateData: ProductUpdateData = {
+        sale_price: priceValue,
+      };
+      if (costValue !== null) {
+        updateData.cost = costValue;
+      }
+      if (billTypeValue !== null) {
+        updateData.bill_type = billTypeValue;
+      }
+      priceMap.set(normalizedCode, updateData);
     }
 
     // 중복 정보
@@ -264,6 +321,9 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`총 ${priceMap.size}개의 상품코드에 대한 가격 업데이트 준비 완료`);
+
+    // 한국 시간 생성
+    const koreaTime = getKoreaTime();
 
     // 배치 크기 설정 (1000건씩)
     const BATCH_SIZE = 1000;
@@ -337,15 +397,54 @@ export async function POST(request: NextRequest) {
           
           // 각 코드에 대해 개별 UPDATE를 실행하되, 병렬로 처리하여 성능 최적화
           const updatePromises = matchedBatch.map(async (code) => {
-            const price = priceMap.get(code)!;
-            const result = await sql`
-              UPDATE products 
-              SET sale_price = ${price},
-                  updated_at = NOW()
-              WHERE code = ${code} AND company_id = ${companyId}
-              RETURNING id
-            `;
-            return result.length; // 실제 업데이트된 행 수 반환
+            const updateData = priceMap.get(code)!;
+            
+            // 원가와 세금구분이 있는 경우와 없는 경우를 분리하여 처리
+            if (updateData.cost !== undefined && updateData.bill_type !== undefined) {
+              // 원가와 세금구분 모두 있는 경우
+              const result = await sql`
+                UPDATE products 
+                SET sale_price = ${updateData.sale_price},
+                    price = ${updateData.cost},
+                    bill_type = ${updateData.bill_type},
+                    updated_at = ${koreaTime.toISOString()}::timestamp
+                WHERE code = ${code} AND company_id = ${companyId}
+                RETURNING id
+              `;
+              return result.length;
+            } else if (updateData.cost !== undefined) {
+              // 원가만 있는 경우
+              const result = await sql`
+                UPDATE products 
+                SET sale_price = ${updateData.sale_price},
+                    price = ${updateData.cost},
+                    updated_at = ${koreaTime.toISOString()}::timestamp
+                WHERE code = ${code} AND company_id = ${companyId}
+                RETURNING id
+              `;
+              return result.length;
+            } else if (updateData.bill_type !== undefined) {
+              // 세금구분만 있는 경우
+              const result = await sql`
+                UPDATE products 
+                SET sale_price = ${updateData.sale_price},
+                    bill_type = ${updateData.bill_type},
+                    updated_at = ${koreaTime.toISOString()}::timestamp
+                WHERE code = ${code} AND company_id = ${companyId}
+                RETURNING id
+              `;
+              return result.length;
+            } else {
+              // 원가와 세금구분 모두 없는 경우 (기존 로직)
+              const result = await sql`
+                UPDATE products 
+                SET sale_price = ${updateData.sale_price},
+                    updated_at = ${koreaTime.toISOString()}::timestamp
+                WHERE code = ${code} AND company_id = ${companyId}
+                RETURNING id
+              `;
+              return result.length;
+            }
           });
 
           // 병렬로 실행하되, 한 번에 너무 많이 실행하지 않도록 제한 (200개씩)

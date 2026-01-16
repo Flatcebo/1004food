@@ -500,6 +500,9 @@ const SavedDataTable = memo(function SavedDataTable({
       }
       saveAs(blob, fileName);
 
+      // 다운로드 완료 후 체크박스 모두 해제
+      setSelectedRows(new Set());
+
       // 다운로드 완료 후 테이블 데이터 새로고침
       if (onDataUpdate) {
         onDataUpdate();

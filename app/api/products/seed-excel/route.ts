@@ -228,7 +228,8 @@ export async function POST(request: NextRequest) {
           return sql`
             INSERT INTO products (
               type, post_type, name, code, pkg, price, sale_price, post_fee,
-              purchase, bill_type, category, product_type, sabang_name, etc
+              purchase, bill_type, category, product_type, sabang_name, etc,
+              created_at, updated_at
             ) VALUES (
               ${product.type || null},
               ${normalizedPostType},
@@ -243,7 +244,9 @@ export async function POST(request: NextRequest) {
               ${product.category || null},
               ${product.productType || null},
               ${product.sabangName || null},
-              ${product.etc || null}
+              ${product.etc || null},
+              ${koreaTime.toISOString()}::timestamp,
+              ${koreaTime.toISOString()}::timestamp
             )
             ON CONFLICT (name, code, post_type) DO UPDATE SET
               type = EXCLUDED.type,

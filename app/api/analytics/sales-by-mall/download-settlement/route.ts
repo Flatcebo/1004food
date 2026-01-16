@@ -75,46 +75,52 @@ export async function POST(request: NextRequest) {
       const periodStartDate = settlement.periodStartDate;
       const periodEndDate = settlement.periodEndDate;
 
-      // 정산에 연결된 주문 ID들 조회
+      // 정산에 연결된 주문 데이터 조회 (저장된 order_data와 product_data 사용)
       const settlementOrders = await sql`
-        SELECT order_id
+        SELECT 
+          order_id,
+          order_data,
+          product_data
         FROM mall_sales_settlement_orders
         WHERE settlement_id = ${settlementId}
         ORDER BY order_id
       `;
 
-      const orderIds = settlementOrders.map((so: any) => so.order_id);
-
-      if (orderIds.length === 0) {
+      if (settlementOrders.length === 0) {
         console.log(`[정산서 다운로드] ${mallName}: 주문이 없습니다.`);
         continue;
       }
 
-      // 주문 데이터 조회 (상품 정보 포함)
-      const orders = await sql`
+      // 저장된 order_data와 product_data를 사용하여 주문 데이터 구성
+      const orderIds = settlementOrders.map((so: any) => so.order_id);
+      
+      // upload_rows에서 기본 정보만 가져오기
+      const uploadRowsData = await sql`
         SELECT DISTINCT ON (ur.id)
           ur.id,
-          ur.row_data,
-          ur.mall_id,
-          p.code as "productCode",
-          p.sale_price as "productSalePrice",
-          p.sabang_name as "productSabangName",
-          p.bill_type as "productBillType"
+          ur.mall_id
         FROM upload_rows ur
-        LEFT JOIN LATERAL (
-          SELECT code, sale_price, sabang_name, bill_type
-          FROM products
-          WHERE company_id = ${companyId}
-            AND (
-              code = ur.row_data->>'매핑코드'
-              OR id::text = ur.row_data->>'productId'
-            )
-          LIMIT 1
-        ) p ON true
         WHERE ur.company_id = ${companyId}
           AND ur.id = ANY(${orderIds})
         ORDER BY ur.id
       `;
+      
+      const uploadRowsMap = new Map(uploadRowsData.map((ur: any) => [ur.id, ur]));
+      
+      // 저장된 order_data, product_data와 결합
+      const orders = settlementOrders.map((so: any) => {
+        const productData = so.product_data || {};
+        const productCode = productData.code || so.order_data?.["매핑코드"] || so.order_data?.["productId"] || null;
+        return {
+          id: so.order_id,
+          row_data: so.order_data || {}, // 저장된 주문 데이터 사용
+          mall_id: uploadRowsMap.get(so.order_id)?.mall_id || mallId,
+          productCode: productCode,
+          productSalePrice: productData.sale_price || null, // 저장된 상품 정보 사용
+          productSabangName: productData.sabang_name || null, // 저장된 상품 정보 사용
+          productBillType: productData.bill_type || null, // 저장된 상품 정보 사용
+        };
+      });
 
       // 행사가 조회
       const promotions = await sql`
@@ -235,7 +241,7 @@ export async function POST(request: NextRequest) {
       const buffer = await workbook.xlsx.writeBuffer();
 
       // ZIP에 파일 추가
-      const fileName = `${dateStr}_${mallName}_정산서.xlsx`;
+      const fileName = `${dateStr}_정산서_${mallName}.xlsx`;
       zip.file(fileName, buffer);
     }
 
