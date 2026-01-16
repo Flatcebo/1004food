@@ -134,7 +134,7 @@ export function useUploadData() {
     setAppliedUploadTimeFrom(todayDate);
     setAppliedUploadTimeTo(todayDate);
     setAppliedOrderStatus("공급중");
-    setAppliedItemsPerPage(20);
+    setAppliedItemsPerPage(1000);
     
     initializedRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
