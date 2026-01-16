@@ -393,15 +393,31 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
   uploadedFiles: [],
   setUploadedFiles: (files) => set({uploadedFiles: files}),
   addUploadedFile: (file) => {
-    // sessionStorage에 자동 저장 (upload/view 페이지를 열지 않아도 저장 가능하도록)
-    try {
-      sessionStorage.setItem(`uploadedFile_${file.id}`, JSON.stringify(file));
-    } catch (error) {
-      console.error("sessionStorage 저장 실패:", error);
-    }
-    set((state) => ({
-      uploadedFiles: [...state.uploadedFiles, file],
-    }));
+    set((state) => {
+      // 파일 ID 중복 체크
+      const existingFileIndex = state.uploadedFiles.findIndex(
+        (f) => f.id === file.id
+      );
+
+      if (existingFileIndex !== -1) {
+        // 이미 존재하는 파일이면 업데이트 (서버에서 불러온 최신 데이터로 교체)
+        const updatedFiles = [...state.uploadedFiles];
+        updatedFiles[existingFileIndex] = file;
+        return {uploadedFiles: updatedFiles};
+      }
+
+      // 새 파일이면 추가
+      // sessionStorage에 자동 저장 (upload/view 페이지를 열지 않아도 저장 가능하도록)
+      try {
+        sessionStorage.setItem(`uploadedFile_${file.id}`, JSON.stringify(file));
+      } catch (error) {
+        console.error("sessionStorage 저장 실패:", error);
+      }
+
+      return {
+        uploadedFiles: [...state.uploadedFiles, file],
+      };
+    });
   },
   removeUploadedFile: (id) =>
     set((state) => ({

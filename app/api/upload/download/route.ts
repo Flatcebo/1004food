@@ -317,6 +317,7 @@ export async function POST(request: NextRequest) {
                 FROM uploads u
                 WHERE upload_rows.upload_id = u.id
                   AND u.company_id = ${companyId}
+                  AND (upload_rows.row_data->>'주문상태' IS NULL OR upload_rows.row_data->>'주문상태' = '공급중')
               `;
 
               // 기존 조건들을 직접 재구성하여 추가 (ur. -> upload_rows.로 변경)
@@ -1030,17 +1031,34 @@ export async function POST(request: NextRequest) {
     const templateName = (templateData.name || "").normalize("NFC").trim();
     const isPurchaseOrder = templateName.includes("발주");
 
-    if (isPurchaseOrder && rowIds && rowIds.length > 0) {
+    if (isPurchaseOrder) {
       try {
         // CJ외주 발주서인 경우: 필터링된 ID만 업데이트
-        const idsToUpdate =
-          isCJOutsource && rowIdsWithData.length > 0
-            ? rowIdsWithData.map((r: any) => r.id)
-            : rowIds;
+        // 일반 발주서인 경우: rowIds가 있으면 선택된 행, 없으면 필터링된 데이터의 실제 다운로드된 행들 업데이트
+        let idsToUpdate: number[] = [];
+        
+        if (isCJOutsource) {
+          // CJ외주 발주서인 경우: 필터링된 ID만 업데이트
+          if (rowIds && rowIds.length > 0 && rowIdsWithData.length > 0) {
+            // 선택된 행이 있는 경우
+            idsToUpdate = rowIdsWithData.map((r: any) => r.id);
+          } else if (rowIdsWithData.length > 0) {
+            // 필터링된 데이터만 있는 경우
+            idsToUpdate = rowIdsWithData.map((r: any) => r.id);
+          }
+        } else {
+          // 일반 발주서인 경우
+          if (rowIds && rowIds.length > 0) {
+            idsToUpdate = rowIds;
+          } else if (rowIdsWithData.length > 0) {
+            idsToUpdate = rowIdsWithData.map((r: any) => r.id);
+          }
+        }
 
         if (idsToUpdate.length > 0) {
           // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
           // 현재 상태가 "공급중"인 경우에만 업데이트 (뒷단계로 돌아가지 않도록)
+          // "사방넷 다운", "배송중" 상태는 유지됨 (조건에 포함되지 않으므로 업데이트되지 않음)
           await sql`
             UPDATE upload_rows
             SET row_data = jsonb_set(row_data, '{주문상태}', '"발주서 다운"', true)

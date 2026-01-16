@@ -93,6 +93,18 @@ const menuConfigs: AccordionMenuConfig[] = [
     ],
     autoOpenPaths: ["/upload/templates", "/header-aliases"],
   },
+  {
+    id: "files",
+    icon: IoDocumentText,
+    title: "파일 관리",
+    items: [
+      {
+        path: "/files",
+        name: "파일 업로드/다운로드",
+      },
+    ],
+    autoOpenPaths: ["/files"],
+  },
 
   {
     id: "admin",
