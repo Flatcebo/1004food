@@ -131,8 +131,8 @@ export default function UserLogPage() {
         </div>
       )}
 
-      <div className="flex-1 bg-white rounded-lg shadow overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200">
+      <div className="flex-1 bg-white rounded-lg shadow overflow-hidden flex flex-col">
+        <div className="px-6 py-4 border-b border-gray-200 flex-shrink-0">
           <h2 className="text-lg font-semibold text-gray-800">
             업로드한 파일 리스트
           </h2>
@@ -142,9 +142,9 @@ export default function UserLogPage() {
             업로드한 파일이 없습니다.
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="flex-1 overflow-y-auto overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50 sticky top-0 z-10">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     파일명
