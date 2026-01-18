@@ -373,9 +373,63 @@ function OrderPageContent() {
       if (mappingIdx === -1 && typeIdx === -1 && postTypeIdx === -1)
         return file;
 
+      // 원본 헤더에서 "상품코드(사방넷)" 헤더 인덱스 찾기
+      let sabangnetCodeIdx = -1;
+      if (file.originalHeader && file.originalData) {
+        sabangnetCodeIdx = file.originalHeader.findIndex(
+          (h: any) =>
+            h &&
+            typeof h === "string" &&
+            h.replace(/\s+/g, "").toLowerCase() ===
+              "상품코드(사방넷)".replace(/\s+/g, "").toLowerCase()
+        );
+      }
+
       let fileChanged = false;
       const fileProductCodeMap = {...file.productCodeMap};
       const fileProductIdMap = {...(file.productIdMap || {})};
+
+      // 상품코드(사방넷)로 매핑코드 자동 매칭 (codes에서 조회)
+      if (
+        sabangnetCodeIdx !== -1 &&
+        file.originalData &&
+        file.originalData.length > 1 &&
+        codes.length > 0
+      ) {
+        // 원본 데이터에서 상품코드(사방넷) 값 추출 및 매핑
+        for (let i = 1; i < file.originalData.length; i++) {
+          const originalRow = file.originalData[i];
+          if (originalRow && originalRow[sabangnetCodeIdx]) {
+            const sabangnetCode = String(originalRow[sabangnetCodeIdx]).trim();
+            if (sabangnetCode) {
+              // "-0001" 제거
+              const cleanedCode = sabangnetCode.replace(/-0001$/, "");
+              if (cleanedCode) {
+                // codes에서 코드로 상품 찾기
+                const matchedProduct = codes.find(
+                  (p: any) => p.code && String(p.code).trim() === cleanedCode
+                );
+                if (matchedProduct && file.tableData[i]) {
+                  const row = file.tableData[i];
+                  const productName = row[nameIdx];
+                  if (productName && typeof productName === "string") {
+                    const name = productName.trim();
+                    if (name && !fileProductCodeMap[name]) {
+                      fileProductCodeMap[name] = matchedProduct.code;
+                      if (matchedProduct.id) {
+                        fileProductIdMap[name] = matchedProduct.id;
+                      }
+                      console.log(
+                        `✅ 상품코드(사방넷) 자동 매핑: "${name}" → "${matchedProduct.code}" (원본 코드: ${sabangnetCode} → ${cleanedCode})`
+                      );
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
 
       const updatedTableData = file.tableData.map((row, idx) => {
         if (idx === 0) return row;

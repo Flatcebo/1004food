@@ -155,7 +155,9 @@ export async function POST(request: NextRequest) {
       downloadedRowIds = rowIds;
     } else if (filters && Object.keys(filters).length > 0) {
       // 필터 조건으로 조회
-      const {conditions} = buildFilterConditions(filters as UploadFilters);
+      const {conditions} = buildFilterConditions(filters as UploadFilters, {
+        companyId,
+      });
       const filteredData = await buildFilterQuery(conditions, true);
       // ID와 row_data를 함께 저장하여 내주 필터링 후에도 ID 추적 가능하도록 함
       dataRowsWithIds = filteredData.map((r: any) => ({

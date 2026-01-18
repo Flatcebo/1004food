@@ -1,6 +1,6 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
-import {getCompanyIdFromRequest} from "@/lib/company";
+import {getCompanyIdFromRequest, getUserIdFromRequest} from "@/lib/company";
 
 export async function GET(request: NextRequest) {
   try {
@@ -86,7 +86,16 @@ export async function GET(request: NextRequest) {
     }
     if (vendors && vendors.length > 0) {
       // 다중 vendors 필터링 (OR 조건)
-      conditions.push(sql`ur.row_data->>'업체명' = ANY(${vendors})`);
+      // 매핑코드를 통해 products 테이블의 purchase(매입처명)와 비교
+      conditions.push(sql`
+        EXISTS (
+          SELECT 1 FROM products p
+          WHERE p.code = ur.row_data->>'매핑코드'
+          AND p.company_id = ${companyId}
+          AND p.purchase = ANY(${vendors})
+        )
+        OR ur.row_data->>'업체명' = ANY(${vendors})
+      `);
     }
     if (companies && companies.length > 0) {
       // 다중 companies 필터링 (OR 조건)
@@ -153,13 +162,41 @@ export async function GET(request: NextRequest) {
         ? parseInt(countResult[0].total as string, 10)
         : 0;
 
+    // user_id 추출 및 grade 확인
+    const userId = await getUserIdFromRequest(request);
+    let userGrade: string | null = null;
+
+    if (userId && companyId) {
+      try {
+        const userResult = await sql`
+          SELECT grade
+          FROM users
+          WHERE id = ${userId} AND company_id = ${companyId}
+        `;
+        
+        if (userResult.length > 0) {
+          userGrade = userResult[0].grade;
+        }
+      } catch (error) {
+        console.error("사용자 정보 조회 실패:", error);
+      }
+    }
+
+    // mall 필터링 조건 구성
+    let mallFilterCondition = sql``;
+    if (userGrade === "납품업체") {
+      mallFilterCondition = sql`AND market_category = '협력사'`;
+    } else if (userGrade === "온라인") {
+      mallFilterCondition = sql`AND (market_category IS NULL OR market_category != '협력사')`;
+    }
+
     // 필터 목록 조회 (company_id 필터링)
     const [typeList, postTypeList, vendorList, companyList] = await Promise.all(
       [
         sql`SELECT DISTINCT ur.row_data->>'내외주' as type FROM upload_rows ur INNER JOIN uploads u ON ur.upload_id = u.id WHERE u.company_id = ${companyId} AND ur.row_data->>'내외주' IS NOT NULL ORDER BY type`,
         sql`SELECT DISTINCT ur.row_data->>'택배사' as post_type FROM upload_rows ur INNER JOIN uploads u ON ur.upload_id = u.id WHERE u.company_id = ${companyId} AND ur.row_data->>'택배사' IS NOT NULL ORDER BY post_type`,
         sql`SELECT DISTINCT name as vendor FROM purchase WHERE company_id = ${companyId} AND name IS NOT NULL ORDER BY name`,
-        sql`SELECT DISTINCT name as company FROM mall WHERE name IS NOT NULL ORDER BY name`,
+        sql`SELECT DISTINCT name as company FROM mall WHERE name IS NOT NULL ${mallFilterCondition} ORDER BY name`,
       ]
     );
 

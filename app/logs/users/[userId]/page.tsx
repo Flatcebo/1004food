@@ -132,7 +132,7 @@ export default function UserLogPage() {
       )}
 
       <div className="flex-1 bg-white rounded-lg shadow overflow-hidden flex flex-col">
-        <div className="px-6 py-4 border-b border-gray-200 flex-shrink-0">
+        <div className="px-6 py-4 border-b border-gray-200 shrink-0">
           <h2 className="text-lg font-semibold text-gray-800">
             업로드한 파일 리스트
           </h2>

@@ -1983,14 +1983,21 @@ function FileViewContent() {
               <thead>
                 <tr>
                   {isEditMode && (
-                    <th className="border bg-gray-100 px-2 py-1 text-xs text-center">
+                    <th 
+                      className="border bg-gray-100 px-2 py-1 text-xs text-center cursor-pointer"
+                      onClick={handleSelectAll}
+                    >
                       <input
                         type="checkbox"
                         checked={
                           tableData.length > 1 &&
                           selectedRows.size === tableData.length - 1
                         }
-                        onChange={handleSelectAll}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          handleSelectAll();
+                        }}
+                        onClick={(e) => e.stopPropagation()}
                         className="cursor-pointer"
                       />
                     </th>
@@ -2220,11 +2227,18 @@ function FileViewContent() {
                         className={isRowSelected ? "bg-blue-100" : ""}
                       >
                         {isEditMode && (
-                          <td className="border px-2 py-1 border-gray-300 text-xs text-center">
+                          <td 
+                            className="border px-2 py-1 border-gray-300 text-xs text-center cursor-pointer"
+                            onClick={() => handleRowSelect(actualRowIndex)}
+                          >
                             <input
                               type="checkbox"
                               checked={selectedRows.has(actualRowIndex)}
-                              onChange={() => handleRowSelect(actualRowIndex)}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                handleRowSelect(actualRowIndex);
+                              }}
+                              onClick={(e) => e.stopPropagation()}
                               className="cursor-pointer"
                             />
                           </td>

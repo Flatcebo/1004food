@@ -1,13 +1,38 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
-import {getCompanyIdFromRequest} from "@/lib/company";
+import {getCompanyIdFromRequest, getUserIdFromRequest} from "@/lib/company";
 
 /**
  * GET /api/mall-promotions
  * 행사가 목록 조회
+ * - grade가 "납품업체"인 경우: market_category가 "협력사"인 것만 표시
+ * - grade가 "온라인"인 경우: market_category가 "협력사"가 아닌 것만 표시
  */
 export async function GET(request: NextRequest) {
   try {
+    // company_id 추출
+    const companyId = await getCompanyIdFromRequest(request);
+
+    // user_id 추출 및 grade 확인
+    const userId = await getUserIdFromRequest(request);
+    let userGrade: string | null = null;
+
+    if (userId && companyId) {
+      try {
+        const userResult = await sql`
+          SELECT grade
+          FROM users
+          WHERE id = ${userId} AND company_id = ${companyId}
+        `;
+        
+        if (userResult.length > 0) {
+          userGrade = userResult[0].grade;
+        }
+      } catch (error) {
+        console.error("사용자 정보 조회 실패:", error);
+      }
+    }
+
     const {searchParams} = new URL(request.url);
     const mallId = searchParams.get("mallId");
 
@@ -25,6 +50,19 @@ export async function GET(request: NextRequest) {
       INNER JOIN mall m ON mp.mall_id = m.id
       WHERE 1=1
     `;
+
+    // grade 기반 필터링
+    if (userGrade === "납품업체") {
+      query = sql`
+        ${query}
+        AND m.market_category = '협력사'
+      `;
+    } else if (userGrade === "온라인") {
+      query = sql`
+        ${query}
+        AND (m.market_category IS NULL OR m.market_category != '협력사')
+      `;
+    }
 
     if (mallId) {
       query = sql`${query} AND mp.mall_id = ${parseInt(mallId)}`;

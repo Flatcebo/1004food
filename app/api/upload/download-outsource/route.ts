@@ -10,6 +10,11 @@ import {
   UploadFilters,
 } from "@/utils/uploadFilters";
 import {generateExcelFileName, generateDatePrefix} from "@/utils/filename";
+import {
+  mapDataByColumnKey,
+  getTemplateHeaderNames,
+  mapRowToTemplateFormat,
+} from "@/utils/purchaseTemplateMapping";
 
 // 전화번호에 하이픈을 추가하여 형식 맞춤
 function formatPhoneNumber(phoneNumber: string): string {
@@ -234,7 +239,9 @@ export async function POST(request: NextRequest) {
       downloadedRowIds = rowIds;
     } else if (filters && Object.keys(filters).length > 0) {
       // 필터 조건으로 조회
-      const {conditions} = buildFilterConditions(filters as UploadFilters);
+      const {conditions} = buildFilterConditions(filters as UploadFilters, {
+        companyId,
+      });
       const filteredData = await buildFilterQuery(conditions, true);
       // ID와 row_data를 함께 저장하여 외주 필터링 후에도 ID 추적 가능하도록 함
       dataRowsWithIds = filteredData.map((r: any) => ({
@@ -510,17 +517,59 @@ export async function POST(request: NextRequest) {
         vendorGroups[vendor].push(row);
       });
 
+      // 헤더 Alias 조회 (모든 매입처에서 공통으로 사용)
+      let headerAliases: Array<{column_key: string; aliases: string[]}> = [];
+      try {
+        const aliasResult = await sql`
+          SELECT column_key, aliases
+          FROM header_aliases
+          ORDER BY id
+        `;
+        headerAliases = aliasResult.map((item: any) => ({
+          column_key: item.column_key,
+          aliases: Array.isArray(item.aliases) ? item.aliases : [],
+        }));
+      } catch (error) {
+        console.error("헤더 Alias 조회 실패:", error);
+      }
+
       // ZIP 파일 생성
       const zip = new JSZip();
       const dateStr = generateDatePrefix();
 
       // 각 매입처별로 엑셀 파일 생성
       for (const [vendor, vendorRows] of Object.entries(vendorGroups)) {
+        // 매입처의 템플릿 조회
+        let purchaseTemplateHeaders: any[] | null = null;
+        try {
+          const purchaseResult = await sql`
+            SELECT template_headers
+            FROM purchase
+            WHERE name = ${vendor} AND company_id = ${companyId}
+            LIMIT 1
+          `;
+          if (
+            purchaseResult.length > 0 &&
+            purchaseResult[0].template_headers &&
+            Array.isArray(purchaseResult[0].template_headers) &&
+            purchaseResult[0].template_headers.length > 0
+          ) {
+            purchaseTemplateHeaders = purchaseResult[0].template_headers;
+          }
+        } catch (error) {
+          console.error(`매입처 "${vendor}" 템플릿 조회 실패:`, error);
+        }
+
         const wb = new Excel.Workbook();
         const sheet = wb.addWorksheet(templateData.worksheetName);
 
+        // 헤더 결정: purchase 템플릿이 있으면 사용, 없으면 기존 헤더 사용
+        const finalHeaders = purchaseTemplateHeaders
+          ? getTemplateHeaderNames(purchaseTemplateHeaders)
+          : headers;
+
         // 헤더 추가
-        const headerRow = sheet.addRow(headers);
+        const headerRow = sheet.addRow(finalHeaders);
         headerRow.height = 30.75;
 
         // 헤더 스타일
@@ -573,7 +622,7 @@ export async function POST(request: NextRequest) {
         });
 
         // 열 너비 설정
-        headers.forEach((headerName: string, index: number) => {
+        finalHeaders.forEach((headerName: string, index: number) => {
           const colNum = index + 1;
           const width =
             typeof columnWidths === "object" && columnWidths[headerName]
@@ -583,91 +632,162 @@ export async function POST(request: NextRequest) {
         });
 
         // 데이터를 2차원 배열로 변환
-        let excelData = vendorRows.map((row: any) => {
-          // 전화번호1 값을 미리 계산
-          let phone1Value = "";
-          headers.forEach((header: any) => {
-            const headerStr =
-              typeof header === "string" ? header : String(header || "");
-            if (headerStr.includes("전화번호1") || headerStr === "전화번호1") {
+        let excelData: any[][];
+        
+        if (purchaseTemplateHeaders) {
+          // purchase 템플릿 사용
+          excelData = vendorRows.map((row: any) => {
+            // purchase 템플릿으로 매핑 (헤더 Alias 사용)
+            const mappedRow = mapRowToTemplateFormat(
+              row,
+              purchaseTemplateHeaders,
+              headerAliases
+            );
+            
+            // 추가 처리 (전화번호, 수취인명 등)
+            return mappedRow.map((value: any, idx: number) => {
+              const header = purchaseTemplateHeaders[idx];
+              let stringValue = value != null ? String(value) : "";
+
+              // 수취인명인 경우 앞에 ★ 붙이기
+              if (
+                header.column_key === "receiverName" ||
+                header.display_name.includes("수취인") ||
+                header.display_name.includes("받는사람")
+              ) {
+                stringValue = "★" + stringValue;
+              }
+
+              // 주문번호인 경우 내부코드 사용
+              if (
+                header.column_key === "orderNumber" ||
+                header.display_name.includes("주문번호") ||
+                header.display_name.includes("주문 번호")
+              ) {
+                // 내부코드가 있으면 우선 사용, 없으면 기존 값 사용
+                stringValue = row["내부코드"] || row["주문번호"] || stringValue || "";
+              }
+
+              // 전화번호 처리
+              if (
+                header.column_key === "receiverPhone" ||
+                header.display_name.includes("전화") ||
+                header.display_name.includes("연락")
+              ) {
+                const numOnly = stringValue.replace(/\D/g, "");
+                if (
+                  (numOnly.length === 10 || numOnly.length === 11) &&
+                  !numOnly.startsWith("0")
+                ) {
+                  stringValue = "0" + numOnly;
+                } else if (numOnly.length > 0) {
+                  stringValue = numOnly;
+                }
+                stringValue = formatPhoneNumber(stringValue);
+              }
+
+              // 우편번호 처리
+              if (header.display_name.includes("우편")) {
+                const numOnly = stringValue.replace(/\D/g, "");
+                if (numOnly.length >= 4 && numOnly.length <= 5) {
+                  stringValue = numOnly.padStart(5, "0");
+                }
+              }
+
+              return stringValue;
+            });
+          });
+        } else {
+          // 기존 방식 사용
+          excelData = vendorRows.map((row: any) => {
+            // 전화번호1 값을 미리 계산
+            let phone1Value = "";
+            headers.forEach((header: any) => {
+              const headerStr =
+                typeof header === "string" ? header : String(header || "");
+              if (headerStr.includes("전화번호1") || headerStr === "전화번호1") {
+                let value = mapDataToTemplate(row, headerStr, {
+                  templateName: templateData.name,
+                  formatPhone: true, // 외주 발주서에서는 전화번호에 하이픈 추가
+                });
+                phone1Value = value != null ? String(value) : "";
+              }
+            });
+
+            return headers.map((header: any, headerIdx: number) => {
+              // header를 문자열로 변환
+              const headerStr =
+                typeof header === "string" ? header : String(header || "");
+
+              // 빈 헤더인 경우 주문 수량 반환
+              if (!headerStr || headerStr.trim() === "") {
+                const quantity =
+                  row["수량"] || row["주문수량"] || row["quantity"] || 1;
+                return String(quantity);
+              }
+
               let value = mapDataToTemplate(row, headerStr, {
                 templateName: templateData.name,
                 formatPhone: true, // 외주 발주서에서는 전화번호에 하이픈 추가
               });
-              phone1Value = value != null ? String(value) : "";
-            }
-          });
 
-          return headers.map((header: any, headerIdx: number) => {
-            // header를 문자열로 변환
-            const headerStr =
-              typeof header === "string" ? header : String(header || "");
+              let stringValue = value != null ? String(value) : "";
 
-            // 빈 헤더인 경우 주문 수량 반환
-            if (!headerStr || headerStr.trim() === "") {
-              const quantity =
-                row["수량"] || row["주문수량"] || row["quantity"] || 1;
-              return String(quantity);
-            }
+              // 수취인명인 경우 앞에 ★ 붙이기
+              if (
+                headerStr === "수취인명" ||
+                headerStr === "수취인" ||
+                headerStr === "받는사람"
+              ) {
+                stringValue = "★" + stringValue;
+              }
 
-            let value = mapDataToTemplate(row, headerStr, {
-              templateName: templateData.name,
-              formatPhone: true, // 외주 발주서에서는 전화번호에 하이픈 추가
+              // 주문번호인 경우 내부코드 사용
+              if (headerStr === "주문번호" || headerStr.includes("주문번호")) {
+                stringValue = row["내부코드"] || stringValue;
+              }
+
+              if (headerStr.includes("전화") || headerStr.includes("연락")) {
+                const numOnly = stringValue.replace(/\D/g, "");
+                if (
+                  (numOnly.length === 10 || numOnly.length === 11) &&
+                  !numOnly.startsWith("0")
+                ) {
+                  stringValue = "0" + numOnly;
+                } else if (numOnly.length > 0) {
+                  stringValue = numOnly;
+                }
+
+                // 전화번호2가 비어있으면 전화번호1 값 사용
+                if (
+                  (headerStr.includes("전화번호2") ||
+                    headerStr === "전화번호2") &&
+                  !stringValue
+                ) {
+                  stringValue = phone1Value;
+                }
+
+                // 하이픈 추가하여 전화번호 형식 맞춤
+                stringValue = formatPhoneNumber(stringValue);
+              }
+
+              if (headerStr.includes("우편")) {
+                const numOnly = stringValue.replace(/\D/g, "");
+                if (numOnly.length >= 4 && numOnly.length <= 5) {
+                  stringValue = numOnly.padStart(5, "0");
+                }
+              }
+
+              return stringValue;
             });
-
-            let stringValue = value != null ? String(value) : "";
-
-            // 수취인명인 경우 앞에 ★ 붙이기
-            if (
-              headerStr === "수취인명" ||
-              headerStr === "수취인" ||
-              headerStr === "받는사람"
-            ) {
-              stringValue = "★" + stringValue;
-            }
-
-            // 주문번호인 경우 내부코드 사용
-            if (headerStr === "주문번호" || headerStr.includes("주문번호")) {
-              stringValue = row["내부코드"] || stringValue;
-            }
-
-            if (headerStr.includes("전화") || headerStr.includes("연락")) {
-              const numOnly = stringValue.replace(/\D/g, "");
-              if (
-                (numOnly.length === 10 || numOnly.length === 11) &&
-                !numOnly.startsWith("0")
-              ) {
-                stringValue = "0" + numOnly;
-              } else if (numOnly.length > 0) {
-                stringValue = numOnly;
-              }
-
-              // 전화번호2가 비어있으면 전화번호1 값 사용
-              if (
-                (headerStr.includes("전화번호2") ||
-                  headerStr === "전화번호2") &&
-                !stringValue
-              ) {
-                stringValue = phone1Value;
-              }
-
-              // 하이픈 추가하여 전화번호 형식 맞춤
-              stringValue = formatPhoneNumber(stringValue);
-            }
-
-            if (headerStr.includes("우편")) {
-              const numOnly = stringValue.replace(/\D/g, "");
-              if (numOnly.length >= 4 && numOnly.length <= 5) {
-                stringValue = numOnly.padStart(5, "0");
-              }
-            }
-
-            return stringValue;
           });
-        });
+        }
 
         // 정렬: 상품명 또는 사방넷명 오름차순 후 수취인명 오름차순
-        excelData = sortExcelData(excelData, columnOrder, {
+        const sortColumnOrder = purchaseTemplateHeaders
+          ? finalHeaders
+          : columnOrder;
+        excelData = sortExcelData(excelData, sortColumnOrder, {
           preferSabangName:
             preferSabangName !== undefined ? preferSabangName : true,
           originalData: vendorRows,
@@ -678,7 +798,7 @@ export async function POST(request: NextRequest) {
           const appendRow = sheet.addRow(rowDatas);
 
           appendRow.eachCell((cell: any, colNum: any) => {
-            const headerName = headers[colNum - 1];
+            const headerName = finalHeaders[colNum - 1];
             // headerName을 문자열로 변환
             const headerStr =
               typeof headerName === "string"

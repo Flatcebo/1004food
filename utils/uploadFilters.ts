@@ -25,6 +25,7 @@ export function buildFilterConditions(
   filters: UploadFilters,
   options?: {
     includeUpdateConditions?: boolean;
+    companyId?: number;
   }
 ): {
   conditions: any[];
@@ -74,16 +75,46 @@ export function buildFilterConditions(
   }
 
   // 업체명(vendor) 필터 - 배열 또는 문자열 지원
+  // 매입처명은 매핑코드를 통해 products 테이블의 purchase 컬럼에서 가져옴
   if (vendor) {
+    const companyId = options?.companyId;
     if (Array.isArray(vendor) && vendor.length > 0) {
-      conditions.push(sql`ur.row_data->>'업체명' = ANY(${vendor})`);
+      if (companyId) {
+        // 매핑코드를 통해 products 테이블의 purchase(매입처명)와 비교
+        conditions.push(sql`
+          EXISTS (
+            SELECT 1 FROM products p
+            WHERE p.code = ur.row_data->>'매핑코드'
+            AND p.company_id = ${companyId}
+            AND p.purchase = ANY(${vendor})
+          )
+          OR ur.row_data->>'업체명' = ANY(${vendor})
+        `);
+      } else {
+        // companyId가 없으면 기존 방식 사용
+        conditions.push(sql`ur.row_data->>'업체명' = ANY(${vendor})`);
+      }
       if (options?.includeUpdateConditions) {
         updateConditions.push(
           sql`upload_rows.row_data->>'업체명' = ANY(${vendor})`
         );
       }
     } else if (typeof vendor === "string") {
-      conditions.push(sql`ur.row_data->>'업체명' = ${vendor}`);
+      if (companyId) {
+        // 매핑코드를 통해 products 테이블의 purchase(매입처명)와 비교
+        conditions.push(sql`
+          EXISTS (
+            SELECT 1 FROM products p
+            WHERE p.code = ur.row_data->>'매핑코드'
+            AND p.company_id = ${companyId}
+            AND p.purchase = ${vendor}
+          )
+          OR ur.row_data->>'업체명' = ${vendor}
+        `);
+      } else {
+        // companyId가 없으면 기존 방식 사용
+        conditions.push(sql`ur.row_data->>'업체명' = ${vendor}`);
+      }
       if (options?.includeUpdateConditions) {
         updateConditions.push(sql`upload_rows.row_data->>'업체명' = ${vendor}`);
       }

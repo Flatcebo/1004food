@@ -90,8 +90,16 @@ const menuConfigs: AccordionMenuConfig[] = [
         path: "/header-aliases",
         name: "헤더 Alias 관리",
       },
+      {
+        path: "/purchase-templates",
+        name: "업체별 템플릿 관리",
+      },
     ],
-    autoOpenPaths: ["/upload/templates", "/header-aliases"],
+    autoOpenPaths: [
+      "/upload/templates",
+      "/header-aliases",
+      "/purchase-templates",
+    ],
   },
 
   {
@@ -112,11 +120,15 @@ const menuConfigs: AccordionMenuConfig[] = [
         name: "납품업체 관리",
       },
       {
+        path: "/malls",
+        name: "쇼핑몰 관리",
+      },
+      {
         path: "/logs",
         name: "로그",
       },
     ],
-    autoOpenPaths: ["/products/upload", "/users", "/vendors", "/logs"],
+    autoOpenPaths: ["/products/upload", "/users", "/vendors", "/malls", "/logs"],
     requiresAdmin: true,
   },
 ];

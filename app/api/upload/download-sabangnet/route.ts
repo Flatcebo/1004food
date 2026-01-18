@@ -92,7 +92,9 @@ export async function POST(request: NextRequest) {
       downloadedRowIds = rowIds;
     } else if (filters && Object.keys(filters).length > 0) {
       // 필터 조건으로 조회
-      const {conditions} = buildFilterConditions(filters as UploadFilters);
+      const {conditions} = buildFilterConditions(filters as UploadFilters, {
+        companyId,
+      });
       const filteredData = await buildFilterQuery(conditions, true);
       // ID와 row_data를 함께 저장하여 주문상태 업데이트 시 사용
       dataRowsWithIds = filteredData.map((r: any) => ({

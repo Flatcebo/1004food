@@ -177,11 +177,8 @@ export async function POST(request: NextRequest) {
       const product: any = {};
 
       // 각 필드 매핑
-      console.log(`행 ${i} 데이터 파싱 시작:`, row);
-      console.log(`현재 columnMapping:`, columnMapping);
       for (const [dbColumn, index] of Object.entries(columnMapping)) {
         const value = row[index];
-        console.log(`  ${dbColumn} (인덱스 ${index}): "${value}" (타입: ${typeof value})`);
         
         // 숫자 타입 필드 처리 (price, sale_price, post_fee는 0도 유효한 값)
         if (["sale_price", "price", "post_fee"].includes(dbColumn)) {
@@ -207,22 +204,14 @@ export async function POST(request: NextRequest) {
                 const parsed = parseFloat(cleanedValue);
                 if (!isNaN(parsed) && isFinite(parsed)) {
                   numValue = parsed;
-                } else {
-                  console.log(`    -> ${dbColumn} 숫자 변환 실패: "${trimmedValue}" (원본: ${value}, 타입: ${typeof value})`);
                 }
-              } else {
-                console.log(`    -> ${dbColumn} 값이 비어있거나 유효하지 않음: "${trimmedValue}" (원본: ${value})`);
               }
             }
             
             // 숫자 값이 성공적으로 변환된 경우에만 저장
             if (numValue !== null) {
               product[dbColumn] = numValue;
-              console.log(`    -> ${dbColumn} 저장됨: ${numValue} (원본: ${value}, 타입: ${typeof value})`);
             }
-          } else {
-            console.log(`    -> ${dbColumn} 값이 undefined 또는 null (인덱스 ${index}, row 길이: ${row.length})`);
-            // price는 필수는 아니지만, 값이 없으면 null로 명시적으로 설정하지 않음 (undefined 상태 유지)
           }
         } else {
           // 문자열 필드는 빈 값 제외
@@ -231,7 +220,6 @@ export async function POST(request: NextRequest) {
           }
         }
       }
-      console.log(`행 ${i} 파싱 결과:`, product);
 
       // 상품구분에 따라 type 설정
       if (product.product_type) {
@@ -320,8 +308,8 @@ export async function POST(request: NextRequest) {
       console.log("제약조건 확인 실패 (계속 진행):", error.message);
     }
 
-    // 배치 크기 설정 (100건씩)
-    const BATCH_SIZE = 100;
+    // 배치 크기 설정 (300건씩으로 증가하여 성능 향상)
+    const BATCH_SIZE = 300;
     let successCount = 0;
     let errorCount = 0;
     const errors: string[] = [];
@@ -331,9 +319,9 @@ export async function POST(request: NextRequest) {
       const batch = products.slice(i, i + BATCH_SIZE);
       const batchNum = Math.floor(i / BATCH_SIZE) + 1;
 
-      // 타임아웃 체크
+      // 타임아웃 체크 (Vercel 제한 대비)
       const elapsedTime = (Date.now() - startTime) / 1000;
-      if (elapsedTime > 8) {
+      if (elapsedTime > 25) {
         console.warn(
           `타임아웃 위험: ${elapsedTime.toFixed(1)}초 경과, ${successCount}/${
             products.length
@@ -354,192 +342,86 @@ export async function POST(request: NextRequest) {
       try {
         const batchStartTime = Date.now();
 
-        // 배치 내의 쿼리들을 병렬로 실행
-        // 중복 체크: name, code, sabang_name, post_type이 모두 일치하면 업데이트
-        // 각 Promise에 개별 에러 처리를 추가하여 하나가 실패해도 다른 것들은 계속 진행되도록 함
-        const insertPromises = batch.map(async (product, idx) => {
-          try {
-            console.log(`배치 상품 ${idx + 1}:`, product);
-            const normalizedPostType = product.post_type || "";
-            
-            // 먼저 중복 체크: name, code, sabang_name, post_type이 모두 일치하는 상품이 있는지 확인
-            const existingProduct = await sql`
-              SELECT id FROM products 
-              WHERE company_id = ${companyId}
-                AND name = ${product.name}
-                AND code = ${product.code}
-                AND sabang_name = ${product.sabang_name}
-                AND post_type = ${normalizedPostType}
-              LIMIT 1
-            `;
-            
-            if (existingProduct.length > 0) {
-              // 중복이 있으면 업데이트 (값이 있을 때만 업데이트)
-              // sale_price와 price는 0도 유효한 값이므로 undefined 체크만 하면 됨
-              const updateFields: any[] = [];
+        // 배치 단위로 한 번에 INSERT (ON CONFLICT로 중복 처리)
+        // 개별 중복 체크 없이 바로 INSERT 시도하여 성능 최적화
+
+        // 배치 단위로 INSERT (ON CONFLICT로 중복 자동 처리)
+        // 모든 상품을 한 번에 INSERT 시도 (중복은 ON CONFLICT로 처리)
+        try {
+          // 각 상품을 개별적으로 INSERT (ON CONFLICT로 중복 처리)
+          // 병렬 처리로 성능 향상
+          const insertPromises = batch.map(async (product) => {
+            try {
+              const normalizedPostType = product.post_type || "";
               
-              if (product.type !== undefined) {
-                updateFields.push(sql`type = ${product.type || null}`);
-              }
-              if (product.category !== undefined) {
-                updateFields.push(sql`category = ${product.category || null}`);
-              }
-              if (product.bill_type !== undefined) {
-                updateFields.push(sql`bill_type = ${product.bill_type || null}`);
-              }
-              if (product.purchase !== undefined) {
-                updateFields.push(sql`purchase = ${product.purchase || null}`);
-              }
-              if (product.product_type !== undefined) {
-                updateFields.push(sql`product_type = ${product.product_type || null}`);
-              }
-              // sale_price는 0도 유효한 값이므로 undefined가 아닐 때만 업데이트
-              if (product.sale_price !== undefined) {
-                updateFields.push(sql`sale_price = ${product.sale_price}`);
-              }
-              // price는 0도 유효한 값이므로 undefined가 아닐 때만 업데이트
-              if (product.price !== undefined) {
-                updateFields.push(sql`price = ${product.price}`);
-              }
-              if (product.post_fee !== undefined) {
-                updateFields.push(sql`post_fee = ${product.post_fee}`);
-              }
-              if (product.sabang_name !== undefined) {
-                updateFields.push(sql`sabang_name = ${product.sabang_name}`);
-              }
-              
-              // updated_at은 항상 업데이트
-              updateFields.push(sql`updated_at = ${koreaTime.toISOString()}::timestamp`);
-              
-              if (updateFields.length > 0) {
-                // sql 템플릿 리터럴을 동적으로 조합
-                let updateQuery = sql`UPDATE products SET ${updateFields[0]}`;
-                for (let i = 1; i < updateFields.length; i++) {
-                  updateQuery = sql`${updateQuery}, ${updateFields[i]}`;
-                }
-                updateQuery = sql`${updateQuery} WHERE id = ${existingProduct[0].id}`;
-                
-                await updateQuery;
-              }
-              
-              console.log(`✓ 상품 업데이트 성공: ${product.name} (${product.code}), sale_price: ${product.sale_price}, price: ${product.price}`);
+              await sql`
+                INSERT INTO products (
+                  company_id, type, name, sabang_name, code, category, bill_type, purchase,
+                  product_type, sale_price, price, post_fee, post_type, created_at, updated_at
+                ) VALUES (
+                  ${companyId},
+                  ${product.type || null},
+                  ${product.name},
+                  ${product.sabang_name || product.name},
+                  ${product.code},
+                  ${product.category || null},
+                  ${product.bill_type || null},
+                  ${product.purchase || null},
+                  ${product.product_type || null},
+                  ${product.sale_price !== undefined ? product.sale_price : null},
+                  ${product.price !== undefined && product.price !== null ? product.price : null},
+                  ${product.post_fee !== undefined ? product.post_fee : null},
+                  ${normalizedPostType},
+                  ${koreaTime.toISOString()}::timestamp,
+                  ${koreaTime.toISOString()}::timestamp
+                )
+                ON CONFLICT (company_id, name, code, post_type) DO UPDATE SET
+                  type = EXCLUDED.type,
+                  category = EXCLUDED.category,
+                  bill_type = EXCLUDED.bill_type,
+                  purchase = EXCLUDED.purchase,
+                  product_type = EXCLUDED.product_type,
+                  sale_price = COALESCE(EXCLUDED.sale_price, products.sale_price),
+                  price = COALESCE(EXCLUDED.price, products.price),
+                  post_fee = COALESCE(EXCLUDED.post_fee, products.post_fee),
+                  sabang_name = EXCLUDED.sabang_name,
+                  updated_at = ${koreaTime.toISOString()}::timestamp
+              `;
               return {success: true, product};
-            } else {
-              // 중복이 없으면 INSERT (ON CONFLICT로 안전하게 처리)
-              try {
-                const insertResult = await sql`
-                  INSERT INTO products (
-                    company_id, type, name, sabang_name, code, category, bill_type, purchase,
-                    product_type, sale_price, price, post_fee, post_type, created_at, updated_at
-                  ) VALUES (
-                    ${companyId},
-                    ${product.type || null},
-                    ${product.name},
-                    ${product.sabang_name},
-                    ${product.code},
-                    ${product.category || null},
-                    ${product.bill_type || null},
-                    ${product.purchase || null},
-                    ${product.product_type || null},
-                    ${product.sale_price !== undefined ? product.sale_price : null},
-                    ${product.price !== undefined && product.price !== null ? product.price : null},
-                    ${product.post_fee !== undefined ? product.post_fee : null},
-                    ${normalizedPostType},
-                    ${koreaTime.toISOString()}::timestamp,
-                    ${koreaTime.toISOString()}::timestamp
-                  )
-                  ON CONFLICT (company_id, name, code, post_type) DO UPDATE SET
-                    type = EXCLUDED.type,
-                    category = EXCLUDED.category,
-                    bill_type = EXCLUDED.bill_type,
-                    purchase = EXCLUDED.purchase,
-                    product_type = EXCLUDED.product_type,
-                    sale_price = COALESCE(EXCLUDED.sale_price, products.sale_price),
-                    price = COALESCE(EXCLUDED.price, products.price),
-                    post_fee = COALESCE(EXCLUDED.post_fee, products.post_fee),
-                    sabang_name = EXCLUDED.sabang_name,
-                    updated_at = ${koreaTime.toISOString()}::timestamp
-                `;
-                console.log(`✓ 상품 저장 성공: ${product.name} (${product.code})`);
-                return {success: true, product};
-              } catch (insertError: any) {
-                // 제약조건이 company_id를 포함하지 않는 경우, 다시 중복 체크 후 업데이트
-                if (insertError.code === '23505') {
-                  console.log(`제약조건 충돌 감지, 재시도: ${product.name} (${product.code})`);
-                  // 다른 company_id에 같은 상품이 있을 수 있으므로, 현재 company_id로 다시 확인
-                  const retryCheck = await sql`
-                    SELECT id FROM products 
-                    WHERE company_id = ${companyId}
-                      AND name = ${product.name}
-                      AND code = ${product.code}
-                      AND post_type = ${normalizedPostType}
-                    LIMIT 1
-                  `;
-                  
-                  if (retryCheck.length > 0) {
-                    // 업데이트
-                    await sql`
-                      UPDATE products 
-                      SET 
-                        type = ${product.type || null},
-                        category = ${product.category || null},
-                        bill_type = ${product.bill_type || null},
-                        purchase = ${product.purchase || null},
-                        product_type = ${product.product_type || null},
-                        sale_price = ${product.sale_price !== undefined ? product.sale_price : null},
-                        price = ${product.price !== undefined && product.price !== null ? product.price : null},
-                        post_fee = ${product.post_fee !== undefined ? product.post_fee : null},
-                        sabang_name = ${product.sabang_name},
-                        updated_at = ${koreaTime.toISOString()}::timestamp
-                      WHERE id = ${retryCheck[0].id}
-                    `;
-                    console.log(`✓ 상품 업데이트 성공 (재시도): ${product.name} (${product.code})`);
-                    return {success: true, product};
-                  } else {
-                    throw insertError; // 재시도 실패 시 원래 에러 throw
-                  }
-                } else {
-                  throw insertError; // 다른 에러는 그대로 throw
-                }
+            } catch (err: any) {
+              return {success: false, product, error: err.message};
+            }
+          });
+
+          // 모든 INSERT를 병렬로 실행
+          const results = await Promise.allSettled(insertPromises);
+          
+          // 성공/실패 개수 계산
+          results.forEach((result) => {
+            if (result.status === 'fulfilled') {
+              if (result.value.success) {
+                successCount++;
+              } else {
+                errorCount++;
+                const product = result.value.product;
+                errors.push(`상품 저장 실패: ${product.name} (${product.code}) - ${result.value.error}`);
               }
-            }
-          } catch (productError: any) {
-            console.error(`✗ 상품 저장 실패: ${product.name} (${product.code})`, productError);
-            return {success: false, product, error: productError.message};
-          }
-        });
-
-        // 모든 Promise를 실행하고 결과를 수집
-        const results = await Promise.allSettled(insertPromises);
-        
-        // 성공/실패 개수 계산
-        let batchSuccessCount = 0;
-        let batchErrorCount = 0;
-        
-        results.forEach((result, idx) => {
-          if (result.status === 'fulfilled') {
-            if (result.value.success) {
-              batchSuccessCount++;
             } else {
-              batchErrorCount++;
-              const product = result.value.product;
-              errors.push(`상품 저장 실패: ${product.name} (${product.code}) - ${result.value.error}`);
+              errorCount++;
+              errors.push(`상품 저장 실패: ${result.reason?.message || '알 수 없는 오류'}`);
             }
-          } else {
-            batchErrorCount++;
-            const product = batch[idx];
-            errors.push(`상품 저장 실패: ${product.name} (${product.code}) - ${result.reason?.message || '알 수 없는 오류'}`);
-          }
-        });
+          });
+        } catch (batchError: any) {
+          console.error(`배치 처리 실패:`, batchError);
+          errorCount += batch.length;
+          errors.push(`배치 처리 실패: ${batchError.message}`);
+        }
 
-        successCount += batchSuccessCount;
-        errorCount += batchErrorCount;
-        
         const batchTime = (Date.now() - batchStartTime) / 1000;
         console.log(
-          `배치 ${batchNum} 완료: ${batchSuccessCount}건 성공, ${batchErrorCount}건 실패, 총 ${successCount}/${
+          `배치 ${batchNum} 완료: ${batch.length}건 처리, 총 ${successCount}/${
             products.length
-          }건 처리됨 (${batchTime.toFixed(2)}초)`
+          }건 성공 (${batchTime.toFixed(2)}초)`
         );
       } catch (batchError: any) {
         errorCount += batch.length;

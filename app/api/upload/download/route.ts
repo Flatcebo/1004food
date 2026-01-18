@@ -222,11 +222,28 @@ export async function POST(request: NextRequest) {
           conditions.push(sql`ur.row_data->>'택배사' = ${postType}`);
         }
         // vendor가 배열인 경우 처리
+        // 매입처명은 매핑코드를 통해 products 테이블의 purchase 컬럼에서 가져옴
         if (vendor) {
           if (Array.isArray(vendor) && vendor.length > 0) {
-            conditions.push(sql`ur.row_data->>'업체명' = ANY(${vendor})`);
+            conditions.push(sql`
+              EXISTS (
+                SELECT 1 FROM products p
+                WHERE p.code = ur.row_data->>'매핑코드'
+                AND p.company_id = ${companyId}
+                AND p.purchase = ANY(${vendor})
+              )
+              OR ur.row_data->>'업체명' = ANY(${vendor})
+            `);
           } else if (typeof vendor === "string") {
-            conditions.push(sql`ur.row_data->>'업체명' = ${vendor}`);
+            conditions.push(sql`
+              EXISTS (
+                SELECT 1 FROM products p
+                WHERE p.code = ur.row_data->>'매핑코드'
+                AND p.company_id = ${companyId}
+                AND p.purchase = ${vendor}
+              )
+              OR ur.row_data->>'업체명' = ${vendor}
+            `);
           }
         }
         // company가 배열인 경우 처리

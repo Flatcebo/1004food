@@ -1,10 +1,12 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
-import {getCompanyIdFromRequest} from "@/lib/company";
+import {getCompanyIdFromRequest, getUserIdFromRequest} from "@/lib/company";
 
 /**
  * GET /api/analytics/sales-by-mall
  * 저장된 정산 데이터 조회
+ * - grade가 "납품업체"인 경우: market_category가 "협력사"인 것만 표시
+ * - grade가 "온라인"인 경우: market_category가 "협력사"가 아닌 것만 표시
  */
 export async function GET(request: NextRequest) {
   try {
@@ -15,6 +17,26 @@ export async function GET(request: NextRequest) {
         {success: false, error: "company_id가 필요합니다."},
         {status: 400}
       );
+    }
+
+    // user_id 추출 및 grade 확인
+    const userId = await getUserIdFromRequest(request);
+    let userGrade: string | null = null;
+
+    if (userId && companyId) {
+      try {
+        const userResult = await sql`
+          SELECT grade
+          FROM users
+          WHERE id = ${userId} AND company_id = ${companyId}
+        `;
+        
+        if (userResult.length > 0) {
+          userGrade = userResult[0].grade;
+        }
+      } catch (error) {
+        console.error("사용자 정보 조회 실패:", error);
+      }
     }
 
     const {searchParams} = new URL(request.url);
@@ -59,6 +81,19 @@ export async function GET(request: NextRequest) {
         -- 주문 건이 0이 아닌 데이터만 조회
         AND (mss.order_quantity > 0 OR mss.cancel_quantity > 0)
     `;
+
+    // grade 기반 필터링
+    if (userGrade === "납품업체") {
+      query = sql`
+        ${query}
+        AND m.market_category = '협력사'
+      `;
+    } else if (userGrade === "온라인") {
+      query = sql`
+        ${query}
+        AND (m.market_category IS NULL OR m.market_category != '협력사')
+      `;
+    }
 
     if (mallId) {
       query = sql`${query} AND mss.mall_id = ${parseInt(mallId, 10)}`;

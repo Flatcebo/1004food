@@ -209,6 +209,7 @@ export interface UploadedFile {
   createdAt?: string; // 업로드 일시 (임시 저장 시 생성)
   vendorName?: string; // 업체명 (파일에서 수집)
   originalHeader?: string[]; // 원본 파일의 헤더 순서 (정규화 전)
+  originalData?: any[][]; // 원본 파일의 데이터 (정규화 전, 헤더 포함)
 }
 
 export interface UploadStoreState {
@@ -1102,13 +1103,30 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
               })
             );
 
+          // 원본 헤더에서 "상품코드(사방넷)" 헤더 인덱스 찾기 (수량 변환 로직 전에 확인)
+          let sabangnetCodeIdxForQtyCheck = -1;
+          if (rawHeader && Array.isArray(rawHeader)) {
+            try {
+              sabangnetCodeIdxForQtyCheck = rawHeader.findIndex(
+                (h: any) =>
+                  h &&
+                  typeof h === "string" &&
+                  normalizeHeader(String(h)) === normalizeHeader("상품코드(사방넷)")
+              );
+            } catch (error) {
+              console.warn("상품코드(사방넷) 헤더 찾기 실패:", error);
+            }
+          }
+
           // 수량이 2 이상인 경우 상품명에 "|n세트" 추가
+          // 단, 상품코드(사방넷) 헤더가 있는 파일은 상품명 변환하지 않음 (자동 매핑을 위해)
           const productNameIdx = internalColumns.findIndex(
             (c) => c.key === "productName"
           );
           const qtyIdx = internalColumns.findIndex((c) => c.key === "qty");
 
-          if (productNameIdx !== -1 && qtyIdx !== -1) {
+          if (productNameIdx !== -1 && qtyIdx !== -1 && sabangnetCodeIdxForQtyCheck === -1) {
+            // 상품코드(사방넷) 헤더가 없는 경우에만 수량 변환 실행
             canonicalRows.forEach((row) => {
               const qtyValue = row[qtyIdx];
               const productNameValue = row[productNameIdx];
@@ -1137,6 +1155,8 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
                 }
               }
             });
+          } else if (sabangnetCodeIdxForQtyCheck !== -1) {
+            console.log("✅ 상품코드(사방넷) 헤더가 있어 수량 변환 기능을 건너뜁니다.");
           }
 
           // 원본 헤더 보존 (정규화 전 원본 엑셀 파일의 헤더)
@@ -1155,8 +1175,64 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             originalHeader: originalHeader,
           });
 
+          // 원본 헤더에서 "상품코드(사방넷)" 헤더 인덱스 찾기
+          let sabangnetCodeIdx = -1;
+          if (rawHeader && Array.isArray(rawHeader)) {
+            try {
+              sabangnetCodeIdx = rawHeader.findIndex(
+                (h: any) =>
+                  h &&
+                  typeof h === "string" &&
+                  normalizeHeader(String(h)) === normalizeHeader("상품코드(사방넷)")
+              );
+            } catch (error) {
+              console.warn("상품코드(사방넷) 헤더 찾기 실패:", error);
+            }
+          }
+
+          // 원본 헤더에서 "쇼핑몰명" 헤더 인덱스 찾기
+          let shopNameIdx = -1;
+          if (rawHeader && Array.isArray(rawHeader)) {
+            try {
+              shopNameIdx = rawHeader.findIndex(
+                (h: any) =>
+                  h &&
+                  typeof h === "string" &&
+                  (normalizeHeader(String(h)) === normalizeHeader("쇼핑몰명") ||
+                    normalizeHeader(String(h)) === normalizeHeader("쇼핑몰명(1)"))
+              );
+            } catch (error) {
+              console.warn("쇼핑몰명 헤더 찾기 실패:", error);
+            }
+          }
+
           // 데이터는 정규화된 헤더로 저장 (기존 방식 유지)
           let jsonData = [canonicalHeader, ...canonicalRows];
+
+          // 쇼핑몰명이 있으면 업체명 컬럼에 자동 입력
+          if (shopNameIdx !== -1 && jsonData.length > 1) {
+            const headerRow = jsonData[0] as any[];
+            const vendorIdx = headerRow.findIndex(
+              (h: any) => h && typeof h === "string" && h === "업체명"
+            );
+
+            if (vendorIdx !== -1) {
+              // 원본 데이터에서 쇼핑몰명 값 가져오기
+              for (let i = 1; i < jsonData.length; i++) {
+                const originalRowIdx = headerRowIndex + i; // 원본 데이터의 행 인덱스
+                if (originalRowIdx < raw.length) {
+                  const originalRow = raw[originalRowIdx];
+                  if (originalRow && originalRow[shopNameIdx]) {
+                    const shopName = String(originalRow[shopNameIdx]).trim();
+                    if (shopName) {
+                      jsonData[i][vendorIdx] = shopName;
+                    }
+                  }
+                }
+              }
+              console.log(`✅ 쇼핑몰명을 업체명 컬럼에 자동 입력 완료`);
+            }
+          }
 
           // 수취인명/이름(내부 컬럼 기준) 동명이인 번호 붙이기
           if (jsonData.length > 1) {
@@ -1290,9 +1366,19 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             (h: any) => h && typeof h === "string" && h.includes("상품명")
           );
 
-          // 업체명은 드롭다운에서 선택해야만 적용되도록 변경
-          // 엑셀 파일에서 자동으로 읽어서 설정하지 않음
-          const vendorNameStr = undefined;
+          // 쇼핑몰명이 있으면 업체명에 자동 입력
+          let vendorNameStr: string | undefined = undefined;
+          if (shopNameIdx !== -1 && jsonData.length > 1) {
+            // 첫 번째 데이터 행에서 쇼핑몰명 가져오기
+            const firstDataRow = raw[headerRowIndex + 1];
+            if (firstDataRow && firstDataRow[shopNameIdx]) {
+              const shopName = String(firstDataRow[shopNameIdx]).trim();
+              if (shopName) {
+                vendorNameStr = shopName;
+                console.log(`✅ 쇼핑몰명에서 업체명 자동 입력: "${shopName}"`);
+              }
+            }
+          }
 
           // 파일 ID 카운터 증가 및 ID 생성
           const {fileCounter, setFileCounter, uploadedFiles} = get();
@@ -1315,6 +1401,17 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
 
           setFileCounter(fileCounter + 1);
 
+          // 원본 데이터 저장 (헤더 포함, 정규화 전)
+          // 메모리 절약을 위해 필요한 경우에만 저장 (상품코드(사방넷) 또는 쇼핑몰명이 있을 때만)
+          let originalData: any[][] | undefined = undefined;
+          if (sabangnetCodeIdx !== -1 || shopNameIdx !== -1) {
+            try {
+              originalData = raw.slice(headerRowIndex);
+            } catch (error) {
+              console.warn("원본 데이터 저장 실패:", error);
+            }
+          }
+
           const uploadedFile: UploadedFile = {
             id: newFileId,
             fileName: file.name,
@@ -1324,8 +1421,9 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             productCodeMap: {},
             userId: useAuthStore.getState().user?.id || "temp-user-001", // 임시: 로그인 기능 미구현 시 임시 사용자 ID 사용
             uploadTime: new Date().toISOString(),
-            vendorName: undefined, // 업체명은 드롭다운에서 선택해야만 적용됨 (엑셀 파일에서 자동으로 읽지 않음)
+            vendorName: vendorNameStr, // 쇼핑몰명에서 자동 입력된 업체명
             originalHeader: originalHeader, // 원본 파일의 헤더 순서 (정규화 전)
+            originalData: originalData, // 원본 파일의 데이터 (정규화 전, 헤더 포함)
           };
 
           resolve(uploadedFile);
