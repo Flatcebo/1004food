@@ -6,7 +6,7 @@ interface User {
   name: string;
   position: string; // 직급
   role: string; // 권한명
-  grade: "관리자" | "직원" | "납품업체"; // 등급
+  grade: "관리자" | "직원" | "납품업체" | "온라인"; // 등급
   assignedMallIds?: number[]; // 담당 쇼핑몰 ID 목록
 }
 

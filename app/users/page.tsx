@@ -11,7 +11,7 @@ interface User {
   companyId: number;
   username: string;
   name: string;
-  grade: "관리자" | "직원" | "납품업체";
+  grade: "관리자" | "직원" | "납품업체" | "온라인";
   position: string | null;
   role: string | null;
   isActive: boolean;
@@ -51,13 +51,13 @@ export default function UsersPage() {
     password: "",
     confirmPassword: "",
     name: "",
-    grade: "직원" as "관리자" | "직원" | "납품업체",
+    grade: "직원" as "관리자" | "직원" | "납품업체" | "온라인",
     position: "",
     role: "",
   });
   const [editFormData, setEditFormData] = useState({
     name: "",
-    grade: "직원" as "관리자" | "직원" | "납품업체",
+    grade: "직원" as "관리자" | "직원" | "납품업체" | "온라인",
     position: "",
     role: "",
     password: "",
@@ -590,7 +590,7 @@ export default function UsersPage() {
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      grade: e.target.value as "납품업체" | "관리자" | "직원",
+                      grade: e.target.value as "납품업체" | "관리자" | "직원" | "온라인",
                     })
                   }
                   className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -599,6 +599,7 @@ export default function UsersPage() {
                   <option value="직원">직원</option>
                   <option value="관리자">관리자</option>
                   <option value="납품업체">납품업체</option>
+                  <option value="온라인">온라인</option>
                 </select>
               </div>
 
@@ -698,7 +699,8 @@ export default function UsersPage() {
                     const newGrade = e.target.value as
                       | "납품업체"
                       | "관리자"
-                      | "직원";
+                      | "직원"
+                      | "온라인";
                     setEditFormData((prev) => ({
                       ...prev,
                       grade: newGrade,
@@ -713,6 +715,7 @@ export default function UsersPage() {
                   <option value="직원">직원</option>
                   <option value="관리자">관리자</option>
                   <option value="납품업체">납품업체</option>
+                  <option value="온라인">온라인</option>
                 </select>
               </div>
 

@@ -667,16 +667,119 @@ export async function POST(request: NextRequest) {
         console.error("upload_rows row_order 컬럼 확인/추가 실패:", error);
       }
 
+      // 각 행의 업체명으로 mall을 찾기 위한 캐시 (성능 최적화)
+      const mallCache: {[key: string]: number | null} = {};
+
+      // 헤더에서 업체명 컬럼 인덱스 찾기
+      const vendorHeaderIdx = headerRow.findIndex(
+        (h: any) => h && typeof h === "string" && (h === "업체명" || h === "업체" || h.includes("업체명"))
+      );
+      const vendorHeaderKey = vendorHeaderIdx !== -1 ? headerRow[vendorHeaderIdx] : null;
+
+      console.log(`🔍 업체명 컬럼 찾기: vendorHeaderIdx=${vendorHeaderIdx}, vendorHeaderKey="${vendorHeaderKey}", headerRow 샘플:`, headerRow.slice(0, 5));
+
       // 각 행을 upload_rows에 저장 (객체 형태로, row_order 포함)
-      const insertPromises = rowObjects.map((rowObj: any, index: number) => {
+      const insertPromises = rowObjects.map(async (rowObj: any, index: number) => {
         // 쇼핑몰명 추출 (여러 가능한 키에서 찾기)
         const shopName =
           rowObj["쇼핑몰명"] || rowObj["쇼핑몰명(1)"] || rowObj["쇼핑몰"] || "";
 
+        // 각 행의 업체명 추출 (헤더 키 사용 또는 여러 가능한 키 시도)
+        let rowVendorName = "";
+        
+        // 1순위: 헤더에서 찾은 키 사용
+        if (vendorHeaderKey && rowObj[vendorHeaderKey]) {
+          rowVendorName = String(rowObj[vendorHeaderKey]).trim();
+        } 
+        // 2순위: 원본 데이터 행에서 직접 추출 (vendorHeaderIdx 사용)
+        else if (vendorHeaderIdx !== -1 && updatedDataRows[index] && updatedDataRows[index][vendorHeaderIdx]) {
+          rowVendorName = String(updatedDataRows[index][vendorHeaderIdx]).trim();
+        }
+        // 3순위: 일반적인 키 이름 시도
+        else {
+          rowVendorName = String(
+            rowObj["업체명"] || 
+            rowObj["업체"] || 
+            vendorName || 
+            ""
+          ).trim();
+        }
+        
+        const trimmedRowVendorName = rowVendorName;
+        
+        // 디버깅: 첫 3개 행만 로그 출력
+        if (index < 3) {
+          console.log(`🔍 행 ${index + 1} 업체명 추출:`, {
+            vendorHeaderKey,
+            vendorHeaderIdx,
+            rowObjVendorName: rowObj[vendorHeaderKey || "업체명"],
+            dataRowVendorName: vendorHeaderIdx !== -1 ? updatedDataRows[index]?.[vendorHeaderIdx] : null,
+            finalVendorName: trimmedRowVendorName,
+          });
+        }
+
+        // 각 행의 업체명으로 mall 찾기
+        let rowMallId: number | null = null;
+        let rowVendorNameToSave: string | null = null;
+
+        if (trimmedRowVendorName) {
+          rowVendorNameToSave = trimmedRowVendorName;
+          
+          // 캐시에서 먼저 확인
+          if (mallCache.hasOwnProperty(trimmedRowVendorName)) {
+            rowMallId = mallCache[trimmedRowVendorName];
+          } else {
+            // 캐시에 없으면 DB에서 조회
+            try {
+              // 정확한 매칭 시도
+              let mallResult = await sql`
+                SELECT id, name FROM mall 
+                WHERE name = ${trimmedRowVendorName}
+                LIMIT 1
+              `;
+
+              if (mallResult.length > 0) {
+                rowMallId = mallResult[0].id;
+              } else {
+                // 대소문자 구분 없이 매칭 시도
+                mallResult = await sql`
+                  SELECT id, name FROM mall 
+                  WHERE LOWER(TRIM(name)) = LOWER(${trimmedRowVendorName})
+                  LIMIT 1
+                `;
+
+                if (mallResult.length > 0) {
+                  rowMallId = mallResult[0].id;
+                }
+              }
+
+              // 캐시에 저장
+              mallCache[trimmedRowVendorName] = rowMallId;
+
+              if (rowMallId) {
+                console.log(
+                  `✅ 행 ${index + 1}: 업체명 "${trimmedRowVendorName}"에 해당하는 mall 찾음: mall_id=${rowMallId}`
+                );
+              } else if (index < 5) {
+                // 처음 5개 행만 경고 로그 출력
+                console.warn(
+                  `⚠️ 행 ${index + 1}: 업체명 "${trimmedRowVendorName}"에 해당하는 mall을 찾을 수 없습니다.`
+                );
+              }
+            } catch (error) {
+              console.error(`행 ${index + 1}: mall 조회 실패:`, error);
+            }
+          }
+        } else {
+          // 행에 업체명이 없으면 파일 레벨 업체명과 mallId 사용
+          rowVendorNameToSave = vendorName || null;
+          rowMallId = mallId;
+        }
+
         // 첫 번째 row만 상세 로그 출력
         if (index === 0) {
           console.log(
-            `📝 upload_rows 저장 시작: upload_id=${uploadId}, mall_id=${mallId}, vendor_name="${vendorName}"`
+            `📝 upload_rows 저장 시작: upload_id=${uploadId}, 각 행별 mall_id 매칭 사용`
           );
         }
 
@@ -687,8 +790,8 @@ export async function POST(request: NextRequest) {
             ${JSON.stringify(rowObj)},
             ${shopName},
             ${companyId},
-            ${mallId},
-            ${vendorName},
+            ${rowMallId},
+            ${rowVendorNameToSave},
             ${index + 1},
             ${fileUserId},
             ${koreaTime.toISOString()}::timestamp

@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
       `);
     }
 
-    // 새로운 제약조건 추가 (납품업체 포함)
+    // 새로운 제약조건 추가 (납품업체, 온라인 포함)
     const constraintExists = await sql`
       SELECT EXISTS (
         SELECT 1 
@@ -94,11 +94,20 @@ export async function POST(request: NextRequest) {
       await sql`
         ALTER TABLE users 
         ADD CONSTRAINT users_grade_check 
-        CHECK (grade IN ('관리자', '직원', '납품업체'))
+        CHECK (grade IN ('관리자', '직원', '납품업체', '온라인'))
       `;
       console.log("users 테이블의 grade 제약조건 수정 완료");
     } else {
-      console.log("users_grade_check 제약조건이 이미 존재합니다.");
+      // 기존 제약조건이 있으면 삭제하고 다시 추가 (온라인 포함)
+      await sql.unsafe(`
+        ALTER TABLE users DROP CONSTRAINT IF EXISTS users_grade_check
+      `);
+      await sql`
+        ALTER TABLE users 
+        ADD CONSTRAINT users_grade_check 
+        CHECK (grade IN ('관리자', '직원', '납품업체', '온라인'))
+      `;
+      console.log("users 테이블의 grade 제약조건 업데이트 완료 (온라인 추가)");
     }
 
     await sql`COMMIT`;

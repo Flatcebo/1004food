@@ -11,7 +11,7 @@ interface User {
   companyId: number;
   username: string;
   name: string;
-  grade: "관리자" | "직원" | "납품업체";
+  grade: "관리자" | "직원" | "납품업체" | "온라인";
   position: string | null;
   role: string | null;
   isActive: boolean;

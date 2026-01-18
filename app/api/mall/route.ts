@@ -88,18 +88,6 @@ export async function GET(request: NextRequest) {
       WHERE 1=1
     `;
 
-    // grade 기반 필터링
-    if (userGrade === "납품업체") {
-      query = sql`
-        ${query}
-        AND market_category = '협력사'
-      `;
-    } else if (userGrade === "온라인") {
-      query = sql`
-        ${query}
-        AND (market_category IS NULL OR market_category != '협력사')
-      `;
-    }
 
     if (search) {
       query = sql`
@@ -179,18 +167,6 @@ export async function GET(request: NextRequest) {
       SELECT COUNT(*) as total FROM mall WHERE 1=1
     `;
 
-    // grade 기반 필터링 (count 쿼리에도 적용)
-    if (userGrade === "납품업체") {
-      countQuery = sql`
-        ${countQuery}
-        AND market_category = '협력사'
-      `;
-    } else if (userGrade === "온라인") {
-      countQuery = sql`
-        ${countQuery}
-        AND (market_category IS NULL OR market_category != '협력사')
-      `;
-    }
 
     if (search) {
       countQuery = sql`

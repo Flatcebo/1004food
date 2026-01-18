@@ -1,6 +1,6 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
-import {getCompanyIdFromRequest} from "@/lib/company";
+import {getCompanyIdFromRequest, getUserIdFromRequest} from "@/lib/company";
 import ExcelJS from "exceljs";
 import {mapDataToTemplate, sortExcelData} from "@/utils/excelDataMapping";
 import {copyCellStyle, applyHeaderStyle} from "@/utils/excelStyles";
@@ -22,6 +22,26 @@ export async function POST(request: NextRequest) {
         {success: false, error: "company_id가 필요합니다."},
         {status: 400}
       );
+    }
+
+    // user_id 추출 및 grade 확인
+    const userId = await getUserIdFromRequest(request);
+    let userGrade: string | null = null;
+
+    if (userId && companyId) {
+      try {
+        const userResult = await sql`
+          SELECT grade
+          FROM users
+          WHERE id = ${userId} AND company_id = ${companyId}
+        `;
+        
+        if (userResult.length > 0) {
+          userGrade = userResult[0].grade;
+        }
+      } catch (error) {
+        console.error("사용자 정보 조회 실패:", error);
+      }
     }
 
     const body = await request.json();
@@ -153,11 +173,25 @@ export async function POST(request: NextRequest) {
 
     if (rowIds && rowIds.length > 0) {
       // 선택된 행이 있으면 해당 ID들만 조회 (company_id 필터링 포함)
+      // grade별 필터링 조건 구성
+      let gradeFilterCondition = sql``;
+      if (userGrade === "납품업체" || userGrade === "온라인") {
+        gradeFilterCondition = sql`
+          AND EXISTS (
+            SELECT 1 FROM users usr
+            WHERE usr.id::text = u.user_id::text
+            AND usr.company_id = ${companyId}
+            AND usr.grade = ${userGrade}
+          )
+        `;
+      }
+      
       const rowData = await sql`
         SELECT ur.id, ur.row_data
         FROM upload_rows ur
         INNER JOIN uploads u ON ur.upload_id = u.id
         WHERE ur.id = ANY(${rowIds}) AND u.company_id = ${companyId}
+        ${gradeFilterCondition}
       `;
       rowIdsWithData = rowData.map((r: any) => ({
         id: r.id,
@@ -215,6 +249,20 @@ export async function POST(request: NextRequest) {
 
         // WHERE 조건 구성 (company_id 필수)
         const conditions: any[] = [sql`u.company_id = ${companyId}`];
+        
+        // grade별 필터링 조건 추가
+        if (userGrade === "납품업체" || userGrade === "온라인") {
+          conditions.push(sql`
+            EXISTS (
+              SELECT 1 FROM users usr
+              WHERE usr.id::text = u.user_id::text
+              AND usr.company_id = ${companyId}
+              AND usr.grade = ${userGrade}
+            )
+          `);
+        }
+        // 관리자, 직원은 grade 필터링 없이 모든 데이터 조회
+        
         if (type) {
           conditions.push(sql`ur.row_data->>'내외주' = ${type}`);
         }
@@ -382,6 +430,19 @@ export async function POST(request: NextRequest) {
             "108879",
             "108221",
           ];
+          // grade별 필터링 조건 구성
+          let gradeFilterCondition = sql``;
+          if (userGrade === "납품업체" || userGrade === "온라인") {
+            gradeFilterCondition = sql`
+              AND EXISTS (
+                SELECT 1 FROM users usr
+                WHERE usr.id = u.user_id
+                AND usr.company_id = ${companyId}
+                AND usr.grade = ${userGrade}
+              )
+            `;
+          }
+          
           allData = await sql`
             SELECT ur.id, ur.row_data
             FROM upload_rows ur
@@ -395,17 +456,32 @@ export async function POST(request: NextRequest) {
                 OR ur.row_data->>'매핑코드' = '108879'
                 OR ur.row_data->>'매핑코드' = '108221'
               )
+            ${gradeFilterCondition}
             ORDER BY u.created_at DESC, ur.id DESC
           `;
           console.log(
             `CJ외주 발주서 전체 다운로드: ${allData.length}건 조회됨`
           );
         } else {
+          // grade별 필터링 조건 구성
+          let gradeFilterCondition = sql``;
+          if (userGrade === "납품업체" || userGrade === "온라인") {
+            gradeFilterCondition = sql`
+              AND EXISTS (
+                SELECT 1 FROM users usr
+                WHERE usr.id = u.user_id
+                AND usr.company_id = ${companyId}
+                AND usr.grade = ${userGrade}
+              )
+            `;
+          }
+          
           allData = await sql`
             SELECT ur.id, ur.row_data
             FROM upload_rows ur
             INNER JOIN uploads u ON ur.upload_id = u.id
             WHERE u.company_id = ${companyId}
+            ${gradeFilterCondition}
             ORDER BY u.created_at DESC, ur.id DESC
           `;
         }

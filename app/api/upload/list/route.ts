@@ -16,30 +16,68 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const statsOnly = searchParams.get("stats") === "true";
 
+    // user_id 추출 및 grade 확인 (먼저 조회)
+    const userId = await getUserIdFromRequest(request);
+    let userGrade: string | null = null;
+
+    if (userId && companyId) {
+      try {
+        const userResult = await sql`
+          SELECT grade
+          FROM users
+          WHERE id = ${userId} AND company_id = ${companyId}
+        `;
+        
+        if (userResult.length > 0) {
+          userGrade = userResult[0].grade;
+        }
+      } catch (error) {
+        console.error("사용자 정보 조회 실패:", error);
+      }
+    }
+
+    // grade별 필터링 조건 구성
+    let gradeFilterCondition = sql``;
+    if (userGrade === "납품업체" || userGrade === "온라인") {
+      // 납품업체 또는 온라인 grade인 경우, 같은 grade를 가진 사용자들이 업로드한 데이터만 조회
+      gradeFilterCondition = sql`
+        AND EXISTS (
+          SELECT 1 FROM users usr
+          WHERE usr.id::text = u.user_id::text
+          AND usr.company_id = ${companyId}
+          AND usr.grade = ${userGrade}
+        )
+      `;
+    }
+    // 관리자, 직원은 gradeFilterCondition이 비어있어서 모든 데이터 조회
+
     // 통계만 요청한 경우
     if (statsOnly) {
       const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD 형식
 
-      // 총 주문 수 (company_id 필터링)
+      // 총 주문 수 (company_id 및 grade 필터링)
       const totalResult = await sql`
         SELECT COUNT(*) as total FROM upload_rows ur
         INNER JOIN uploads u ON ur.upload_id = u.id
         WHERE u.company_id = ${companyId}
+        ${gradeFilterCondition}
       `;
 
-      // 오늘 주문 수 (업로드 날짜 기준, company_id 필터링)
+      // 오늘 주문 수 (업로드 날짜 기준, company_id 및 grade 필터링)
       const todayResult = await sql`
         SELECT COUNT(*) as today FROM upload_rows ur
         INNER JOIN uploads u ON ur.upload_id = u.id
         WHERE DATE(u.created_at) = ${today} AND u.company_id = ${companyId}
+        ${gradeFilterCondition}
       `;
 
-      // 대기 주문 수 (주문상태가 '대기'인 경우, company_id 필터링)
+      // 대기 주문 수 (주문상태가 '대기'인 경우, company_id 및 grade 필터링)
       const pendingResult = await sql`
         SELECT COUNT(*) as pending FROM upload_rows ur
         INNER JOIN uploads u ON ur.upload_id = u.id
         WHERE ur.row_data->>'주문상태' IN ('대기', '접수', '준비중')
         AND u.company_id = ${companyId}
+        ${gradeFilterCondition}
       `;
 
       return NextResponse.json({
@@ -78,6 +116,20 @@ export async function GET(request: NextRequest) {
 
     // WHERE 조건 구성 (company_id 필수)
     const conditions: any[] = [sql`u.company_id = ${companyId}`];
+    
+    // grade별 필터링 조건 추가
+    if (userGrade === "납품업체" || userGrade === "온라인") {
+      conditions.push(sql`
+        EXISTS (
+          SELECT 1 FROM users usr
+          WHERE usr.id::text = u.user_id::text
+          AND usr.company_id = ${companyId}
+          AND usr.grade = ${userGrade}
+        )
+      `);
+    }
+    // 관리자, 직원은 grade 필터링 없이 모든 데이터 조회
+    
     if (type) {
       conditions.push(sql`ur.row_data->>'내외주' = ${type}`);
     }
@@ -162,39 +214,14 @@ export async function GET(request: NextRequest) {
         ? parseInt(countResult[0].total as string, 10)
         : 0;
 
-    // user_id 추출 및 grade 확인
-    const userId = await getUserIdFromRequest(request);
-    let userGrade: string | null = null;
-
-    if (userId && companyId) {
-      try {
-        const userResult = await sql`
-          SELECT grade
-          FROM users
-          WHERE id = ${userId} AND company_id = ${companyId}
-        `;
-        
-        if (userResult.length > 0) {
-          userGrade = userResult[0].grade;
-        }
-      } catch (error) {
-        console.error("사용자 정보 조회 실패:", error);
-      }
-    }
-
     // mall 필터링 조건 구성
     let mallFilterCondition = sql``;
-    if (userGrade === "납품업체") {
-      mallFilterCondition = sql`AND market_category = '협력사'`;
-    } else if (userGrade === "온라인") {
-      mallFilterCondition = sql`AND (market_category IS NULL OR market_category != '협력사')`;
-    }
 
-    // 필터 목록 조회 (company_id 필터링)
+    // 필터 목록 조회 (company_id 및 grade 필터링)
     const [typeList, postTypeList, vendorList, companyList] = await Promise.all(
       [
-        sql`SELECT DISTINCT ur.row_data->>'내외주' as type FROM upload_rows ur INNER JOIN uploads u ON ur.upload_id = u.id WHERE u.company_id = ${companyId} AND ur.row_data->>'내외주' IS NOT NULL ORDER BY type`,
-        sql`SELECT DISTINCT ur.row_data->>'택배사' as post_type FROM upload_rows ur INNER JOIN uploads u ON ur.upload_id = u.id WHERE u.company_id = ${companyId} AND ur.row_data->>'택배사' IS NOT NULL ORDER BY post_type`,
+        sql`SELECT DISTINCT ur.row_data->>'내외주' as type FROM upload_rows ur INNER JOIN uploads u ON ur.upload_id = u.id WHERE u.company_id = ${companyId} ${gradeFilterCondition} AND ur.row_data->>'내외주' IS NOT NULL ORDER BY type`,
+        sql`SELECT DISTINCT ur.row_data->>'택배사' as post_type FROM upload_rows ur INNER JOIN uploads u ON ur.upload_id = u.id WHERE u.company_id = ${companyId} ${gradeFilterCondition} AND ur.row_data->>'택배사' IS NOT NULL ORDER BY post_type`,
         sql`SELECT DISTINCT name as vendor FROM purchase WHERE company_id = ${companyId} AND name IS NOT NULL ORDER BY name`,
         sql`SELECT DISTINCT name as company FROM mall WHERE name IS NOT NULL ${mallFilterCondition} ORDER BY name`,
       ]

@@ -145,9 +145,9 @@ export async function PUT(
       hasUpdates = true;
     }
     if (grade !== undefined) {
-      if (!["관리자", "직원", "납품업체"].includes(grade)) {
+      if (!["관리자", "직원", "납품업체", "온라인"].includes(grade)) {
         return NextResponse.json(
-          {success: false, error: "grade는 '관리자', '직원', '납품업체' 중 하나여야 합니다."},
+          {success: false, error: "grade는 '관리자', '직원', '납품업체', '온라인' 중 하나여야 합니다."},
           {status: 400}
         );
       }
