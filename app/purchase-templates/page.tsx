@@ -16,6 +16,7 @@ interface TemplateHeader {
   column_key: string; // 내부 매핑용 고유 키 (변경 불가, DB 데이터 매핑에 사용)
   column_label: string; // 헤더 Alias의 기본 라벨
   display_name: string; // 사용자가 변경한 헤더명 (엑셀 다운로드 시 헤더로 사용)
+  default_value?: string; // 커스텀 헤더의 기본값 (각 행에 채워넣을 값)
 }
 
 export default function PurchaseTemplatesPage() {
@@ -35,6 +36,8 @@ export default function PurchaseTemplatesPage() {
   const [viewPurchase, setViewPurchase] = useState<Purchase | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [customHeaderName, setCustomHeaderName] = useState<string>("");
+  const [customHeaderDefaultValue, setCustomHeaderDefaultValue] =
+    useState<string>("");
 
   // purchase 목록 및 헤더 alias 로드
   useEffect(() => {
@@ -81,6 +84,7 @@ export default function PurchaseTemplatesPage() {
   const openCreateModal = (purchase: Purchase) => {
     setSelectedPurchase(purchase);
     setCustomHeaderName(""); // 커스텀 헤더명 입력 필드 초기화
+    setCustomHeaderDefaultValue(""); // 커스텀 헤더 기본값 입력 필드 초기화
 
     // 기본 헤더: 헤더 alias의 column_label을 기본값으로 사용
     const defaultHeaders: TemplateHeader[] = headerAliases.map((alias) => ({
@@ -210,6 +214,18 @@ export default function PurchaseTemplatesPage() {
     setSelectedHeaders(
       selectedHeaders.map((h) =>
         h.column_key === columnKey ? {...h, display_name: newName} : h
+      )
+    );
+  };
+
+  // 커스텀 헤더 기본값 변경
+  const updateCustomHeaderDefaultValue = (
+    columnKey: string,
+    defaultValue: string
+  ) => {
+    setSelectedHeaders(
+      selectedHeaders.map((h) =>
+        h.column_key === columnKey ? {...h, default_value: defaultValue} : h
       )
     );
   };
@@ -546,6 +562,25 @@ export default function PurchaseTemplatesPage() {
                                   : ""
                               }
                             />
+                            {isCustomHeader && (
+                              <>
+                                <span className="text-sm text-gray-400">|</span>
+                                <input
+                                  type="text"
+                                  value={header.default_value || ""}
+                                  onChange={(e) =>
+                                    updateCustomHeaderDefaultValue(
+                                      header.column_key,
+                                      e.target.value
+                                    )
+                                  }
+                                  placeholder="기본값 입력"
+                                  className="flex-1 px-3 py-1 border border-purple-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                                  onClick={(e) => e.stopPropagation()}
+                                  title="각 행에 채워넣을 기본값을 입력하세요"
+                                />
+                              </>
+                            )}
                           </div>
                           <button
                             onClick={() => {
@@ -578,29 +613,48 @@ export default function PurchaseTemplatesPage() {
                   <label className="text-xs font-medium text-gray-700 mb-2 block">
                     직접 헤더 추가
                   </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={customHeaderName}
-                      onChange={(e) => setCustomHeaderName(e.target.value)}
-                      onKeyPress={(e) => {
-                        if (e.key === "Enter") {
-                          addCustomHeader();
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={customHeaderName}
+                        onChange={(e) => setCustomHeaderName(e.target.value)}
+                        onKeyPress={(e) => {
+                          if (e.key === "Enter") {
+                            addCustomHeader();
+                          }
+                        }}
+                        placeholder="헤더명을 입력하세요"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                      />
+                      <button
+                        onClick={addCustomHeader}
+                        disabled={!customHeaderName.trim()}
+                        className="px-4 py-2 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        추가
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={customHeaderDefaultValue}
+                        onChange={(e) =>
+                          setCustomHeaderDefaultValue(e.target.value)
                         }
-                      }}
-                      placeholder="헤더명을 입력하세요"
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-                    />
-                    <button
-                      onClick={addCustomHeader}
-                      disabled={!customHeaderName.trim()}
-                      className="px-4 py-2 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      추가
-                    </button>
+                        onKeyPress={(e) => {
+                          if (e.key === "Enter") {
+                            addCustomHeader();
+                          }
+                        }}
+                        placeholder="각 행에 채워넣을 기본값을 입력하세요 (선택사항)"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                      />
+                    </div>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">
-                    Enter 키를 눌러도 추가됩니다.
+                    Enter 키를 눌러도 추가됩니다. 기본값을 입력하면 각 행에 해당
+                    값이 채워집니다.
                   </p>
                 </div>
 
@@ -770,21 +824,29 @@ export default function PurchaseTemplatesPage() {
                           {/* 빈 데이터 행 (엑셀처럼 보이게) */}
                           {[1, 2, 3, 4, 5].map((rowIndex) => (
                             <tr key={rowIndex} style={{height: "20px"}}>
-                              {headers.map((header) => (
-                                <td
-                                  key={header.column_key}
-                                  style={{
-                                    border: "1px solid #D3D3D3",
-                                    padding: "2px 4px",
-                                    backgroundColor: "#FFFFFF",
-                                    fontSize: "11px",
-                                    fontFamily: "Arial, sans-serif",
-                                    minWidth: "100px",
-                                  }}
-                                >
-                                  {/* 빈 셀 */}
-                                </td>
-                              ))}
+                              {headers.map((header) => {
+                                const isCustomHeader =
+                                  header.column_key.startsWith("__custom__");
+                                // 커스텀 헤더인 경우 기본값 표시 (없으면 빈 값)
+                                const cellValue = isCustomHeader
+                                  ? header.default_value || ""
+                                  : "";
+                                return (
+                                  <td
+                                    key={header.column_key}
+                                    style={{
+                                      border: "1px solid #D3D3D3",
+                                      padding: "2px 4px",
+                                      backgroundColor: "#FFFFFF",
+                                      fontSize: "11px",
+                                      fontFamily: "Arial, sans-serif",
+                                      minWidth: "100px",
+                                    }}
+                                  >
+                                    {cellValue}
+                                  </td>
+                                );
+                              })}
                             </tr>
                           ))}
                         </tbody>
