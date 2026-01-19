@@ -212,8 +212,8 @@ export async function POST(request: NextRequest) {
               ${productType || null},
               ${sabangName || null},
               ${etc || null},
-              ${koreaTime.toISOString()}::timestamp,
-              ${koreaTime.toISOString()}::timestamp
+              ${getKoreaTime().toISOString()}::timestamp,
+              ${getKoreaTime().toISOString()}::timestamp
             )
           `;
         }

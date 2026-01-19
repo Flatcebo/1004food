@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
             await sql.unsafe(`ALTER TABLE users DROP CONSTRAINT IF EXISTS "${constraintName}"`);
             console.log(`제약조건 삭제 시도 (IF EXISTS): ${constraintName}`);
           } catch (e3) {
-            console.log(`제약조건 삭제 실패: ${constraintName}`, e3.message);
+            console.log(`제약조건 삭제 실패: ${constraintName}`, e3 instanceof Error ? e3.message : String(e3));
           }
         }
       }
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
           await sql.unsafe(`ALTER TABLE users DROP CONSTRAINT users_grade_check CASCADE`);
           console.log("users_grade_check 제약조건 삭제 완료 (CASCADE)");
         } catch (e2) {
-          console.log("users_grade_check 제약조건 삭제 실패, 계속 진행:", e2.message);
+          console.log("users_grade_check 제약조건 삭제 실패, 계속 진행:", e2 instanceof Error ? e2.message : String(e2));
         }
       }
     }
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
       console.log("새로운 제약조건 추가 완료");
     } catch (e) {
       // 제약조건이 이미 존재하는 경우, 삭제 후 다시 추가
-      console.log("제약조건 추가 실패, 재시도:", e.message);
+      console.log("제약조건 추가 실패, 재시도:", e instanceof Error ? e.message : String(e));
       await sql.unsafe(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_grade_check CASCADE`);
       await sql.unsafe(`
         ALTER TABLE users 

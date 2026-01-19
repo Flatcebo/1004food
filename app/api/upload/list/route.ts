@@ -136,10 +136,24 @@ export async function GET(request: NextRequest) {
     if (postType) {
       conditions.push(sql`ur.row_data->>'택배사' = ${postType}`);
     }
+    
+    // 주문상태 조건을 매입처명 조건보다 먼저 추가 (순서 변경)
+    if (orderStatus && orderStatus.trim() !== "") {
+      console.log("✅ API에서 주문상태 필터링 조건 추가:", orderStatus);
+      conditions.push(sql`ur.row_data->>'주문상태' = ${orderStatus}`);
+      console.log("✅ 주문상태 조건 추가 완료, 현재 conditions.length:", conditions.length);
+    } else {
+      console.log("❌ API에서 주문상태 필터링 조건 추가 안됨:", {
+        orderStatus,
+        isEmpty: orderStatus?.trim() === "",
+      });
+    }
+    
     if (vendors && vendors.length > 0) {
       // 다중 vendors 필터링 (OR 조건)
       // 매핑코드를 통해 products 테이블의 purchase(매입처명)와 비교
-      conditions.push(sql`
+      // 괄호로 묶어서 우선순위 명확히 (다른 조건들과 AND로 연결될 때 문제 방지)
+      conditions.push(sql`(
         EXISTS (
           SELECT 1 FROM products p
           WHERE p.code = ur.row_data->>'매핑코드'
@@ -147,14 +161,11 @@ export async function GET(request: NextRequest) {
           AND p.purchase = ANY(${vendors})
         )
         OR ur.row_data->>'업체명' = ANY(${vendors})
-      `);
+      )`);
     }
     if (companies && companies.length > 0) {
       // 다중 companies 필터링 (OR 조건)
       conditions.push(sql`ur.row_data->>'업체명' = ANY(${companies})`);
-    }
-    if (orderStatus) {
-      conditions.push(sql`ur.row_data->>'주문상태' = ${orderStatus}`);
     }
     if (dbField && searchPattern) {
       conditions.push(sql`ur.row_data->>${dbField} ILIKE ${searchPattern}`);
@@ -168,14 +179,51 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // 주문상태 조건이 실제로 추가되었는지 확인
+    const orderStatusCondition = conditions.find((c: any, index: number) => {
+      try {
+        // sql 템플릿 리터럴의 구조 확인
+        const conditionStr = JSON.stringify(c);
+        return conditionStr.includes("주문상태");
+      } catch (e) {
+        return false;
+      }
+    });
+    
+    console.log("🔍 조건 배열 확인:", {
+      conditionsCount: conditions.length,
+      hasOrderStatusCondition: !!orderStatusCondition,
+      orderStatusCondition: orderStatusCondition ? "찾음" : "없음",
+    });
+
     // 조건부 쿼리 구성 (항상 company_id 조건 포함)
     const buildQuery = (selectClause: any, includeLimit = false) => {
       // 첫 번째 조건(company_id)으로 WHERE 시작
       let query = sql`${selectClause} WHERE ${conditions[0]}`;
 
-      // 나머지 조건들을 AND로 연결
+      // 나머지 조건들을 순차적으로 AND로 연결
+      // 다른 파일들(download/route.ts)과 동일한 방식 사용
       for (let i = 1; i < conditions.length; i++) {
-        query = sql`${query} AND ${conditions[i]}`;
+        const condition = conditions[i];
+        const isOrderStatus = JSON.stringify(condition).includes("주문상태");
+        
+        console.log(`🔍 조건 ${i} 추가:`, {
+          index: i,
+          conditionType: typeof condition,
+          hasOrderStatus: isOrderStatus,
+        });
+        
+        // 주문상태 조건인 경우 특별히 로그 출력
+        if (isOrderStatus) {
+          console.log("🚨 주문상태 조건 추가 중:", {
+            orderStatus,
+            conditionIndex: i,
+            totalConditions: conditions.length,
+          });
+        }
+        
+        // 조건을 AND로 연결 (다른 파일들과 동일한 방식)
+        query = sql`${query} AND ${condition}`;
       }
 
       if (includeLimit) {
@@ -207,7 +255,104 @@ export async function GET(request: NextRequest) {
     );
 
     // 두 쿼리를 병렬로 실행
+    console.log("🔍 실행 전 최종 확인:", {
+      conditionsLength: conditions.length,
+      orderStatus: orderStatus,
+      orderStatusInConditions: conditions.some((c: any) => {
+        try {
+          return JSON.stringify(c).includes("주문상태");
+        } catch {
+          return false;
+        }
+      }),
+    });
+    
+    // 테스트: 각 조건별로 몇 개의 행이 매칭되는지 확인
+    if (orderStatus && orderStatus.trim() !== "") {
+      try {
+        // 주문상태만 필터링
+        const testOrderStatusQuery = sql`
+          SELECT COUNT(*) as count
+          FROM upload_rows ur
+          INNER JOIN uploads u ON ur.upload_id = u.id
+          WHERE u.company_id = ${companyId}
+            AND ur.row_data->>'주문상태' = ${orderStatus}
+        `;
+        const testOrderStatusResult = await testOrderStatusQuery;
+        
+        // 매입처명만 필터링
+        let testVendorResult = null;
+        if (vendors && vendors.length > 0) {
+          const testVendorQuery = sql`
+            SELECT COUNT(*) as count
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE u.company_id = ${companyId}
+              AND (
+                EXISTS (
+                  SELECT 1 FROM products p
+                  WHERE p.code = ur.row_data->>'매핑코드'
+                  AND p.company_id = ${companyId}
+                  AND p.purchase = ANY(${vendors})
+                )
+                OR ur.row_data->>'업체명' = ANY(${vendors})
+              )
+          `;
+          testVendorResult = await testVendorQuery;
+        }
+        
+        // 매입처명 + 주문상태 함께 필터링
+        let testBothResult = null;
+        if (vendors && vendors.length > 0) {
+          const testBothQuery = sql`
+            SELECT COUNT(*) as count
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE u.company_id = ${companyId}
+              AND (
+                EXISTS (
+                  SELECT 1 FROM products p
+                  WHERE p.code = ur.row_data->>'매핑코드'
+                  AND p.company_id = ${companyId}
+                  AND p.purchase = ANY(${vendors})
+                )
+                OR ur.row_data->>'업체명' = ANY(${vendors})
+              )
+              AND ur.row_data->>'주문상태' = ${orderStatus}
+          `;
+          testBothResult = await testBothQuery;
+        }
+        
+        console.log("🔍 테스트 쿼리 결과:", {
+          orderStatus,
+          orderStatusOnly: testOrderStatusResult[0]?.count || 0,
+          vendorOnly: testVendorResult?.[0]?.count || 0,
+          bothConditions: testBothResult?.[0]?.count || 0,
+        });
+      } catch (testError) {
+        console.error("테스트 쿼리 실패:", testError);
+      }
+    }
+    
     const [countResult, rows] = await Promise.all([countQuery, dataQuery]);
+    
+    console.log("🔍 쿼리 실행 결과:", {
+      totalCount: Array.isArray(countResult) && countResult.length > 0 ? countResult[0].total : 0,
+      rowsCount: Array.isArray(rows) ? rows.length : 0,
+    });
+    
+    // 결과에서 실제 주문상태 값들 확인
+    if (Array.isArray(rows) && rows.length > 0) {
+      const orderStatuses = rows
+        .map((r: any) => r.row_data?.주문상태)
+        .filter(Boolean)
+        .slice(0, 10);
+      console.log("🔍 결과의 주문상태 샘플:", {
+        sampleCount: orderStatuses.length,
+        orderStatuses,
+        requestedOrderStatus: orderStatus,
+      });
+    }
 
     const totalCount =
       Array.isArray(countResult) && countResult.length > 0

@@ -34,6 +34,7 @@ export default function PurchaseTemplatesPage() {
   const [showViewModal, setShowViewModal] = useState(false);
   const [viewPurchase, setViewPurchase] = useState<Purchase | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [customHeaderName, setCustomHeaderName] = useState<string>("");
 
   // purchase 목록 및 헤더 alias 로드
   useEffect(() => {
@@ -70,9 +71,16 @@ export default function PurchaseTemplatesPage() {
     }
   };
 
+  // 템플릿 생성 모달 닫기
+  const closeCreateModal = () => {
+    setShowModal(false);
+    setCustomHeaderName(""); // 커스텀 헤더명 입력 필드 초기화
+  };
+
   // 템플릿 생성 모달 열기
   const openCreateModal = (purchase: Purchase) => {
     setSelectedPurchase(purchase);
+    setCustomHeaderName(""); // 커스텀 헤더명 입력 필드 초기화
 
     // 기본 헤더: 헤더 alias의 column_label을 기본값으로 사용
     const defaultHeaders: TemplateHeader[] = headerAliases.map((alias) => ({
@@ -92,7 +100,9 @@ export default function PurchaseTemplatesPage() {
   };
 
   // 헤더 선택/해제
-  const toggleHeader = (alias: HeaderAlias) => {
+  const toggleHeader = (
+    alias: HeaderAlias | {column_key: string; column_label: string}
+  ) => {
     const isSelected = selectedHeaders.some(
       (h) => h.column_key === alias.column_key
     );
@@ -113,6 +123,40 @@ export default function PurchaseTemplatesPage() {
         },
       ]);
     }
+  };
+
+  // 커스텀 헤더 추가
+  const addCustomHeader = () => {
+    const trimmedName = customHeaderName.trim();
+    if (!trimmedName) {
+      alert("헤더명을 입력해주세요.");
+      return;
+    }
+
+    // 이미 같은 이름의 헤더가 있는지 확인
+    const exists = selectedHeaders.some((h) => h.display_name === trimmedName);
+    if (exists) {
+      alert("이미 같은 이름의 헤더가 있습니다.");
+      return;
+    }
+
+    // 고유한 column_key 생성 (타임스탬프 기반)
+    const customColumnKey = `__custom__${Date.now()}_${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
+
+    // 커스텀 헤더 추가
+    setSelectedHeaders([
+      ...selectedHeaders,
+      {
+        column_key: customColumnKey,
+        column_label: trimmedName,
+        display_name: trimmedName,
+      },
+    ]);
+
+    // 입력 필드 초기화
+    setCustomHeaderName("");
   };
 
   // 드래그 시작
@@ -403,7 +447,7 @@ export default function PurchaseTemplatesPage() {
                 {selectedPurchase.name}
               </h3>
               <button
-                onClick={() => setShowModal(false)}
+                onClick={closeCreateModal}
                 className="text-gray-500 hover:text-gray-700 text-2xl"
               >
                 ×
@@ -429,6 +473,10 @@ export default function PurchaseTemplatesPage() {
                       const alias = headerAliases.find(
                         (a) => a.column_key === header.column_key
                       );
+                      const isAutoIncrement =
+                        header.column_key === "__auto_increment__";
+                      const isCustomHeader =
+                        header.column_key.startsWith("__custom__");
                       return (
                         <div
                           key={header.column_key}
@@ -467,6 +515,16 @@ export default function PurchaseTemplatesPage() {
                           <div className="flex-1 flex items-center gap-4">
                             <span className="text-sm font-medium w-32">
                               {alias?.column_label || header.column_label}
+                              {isAutoIncrement && (
+                                <span className="text-xs text-blue-600 ml-1">
+                                  (자동 번호)
+                                </span>
+                              )}
+                              {isCustomHeader && (
+                                <span className="text-xs text-purple-600 ml-1">
+                                  (커스텀)
+                                </span>
+                              )}
                             </span>
                             <span className="text-sm text-gray-400">→</span>
                             <input
@@ -481,6 +539,12 @@ export default function PurchaseTemplatesPage() {
                               placeholder="헤더명 입력"
                               className="flex-1 px-3 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                               onClick={(e) => e.stopPropagation()}
+                              disabled={isAutoIncrement}
+                              title={
+                                isAutoIncrement
+                                  ? "번호 헤더는 자동으로 1, 2, 3... 순서대로 번호가 매겨집니다."
+                                  : ""
+                              }
                             />
                           </div>
                           <button
@@ -508,7 +572,82 @@ export default function PurchaseTemplatesPage() {
                 <h4 className="text-sm font-semibold mb-2 text-gray-700">
                   헤더 선택
                 </h4>
+
+                {/* 커스텀 헤더 추가 */}
+                <div className="mb-4 p-3 border border-purple-200 rounded bg-purple-50">
+                  <label className="text-xs font-medium text-gray-700 mb-2 block">
+                    직접 헤더 추가
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={customHeaderName}
+                      onChange={(e) => setCustomHeaderName(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === "Enter") {
+                          addCustomHeader();
+                        }
+                      }}
+                      placeholder="헤더명을 입력하세요"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                    />
+                    <button
+                      onClick={addCustomHeader}
+                      disabled={!customHeaderName.trim()}
+                      className="px-4 py-2 bg-purple-600 text-white text-sm rounded hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      추가
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Enter 키를 눌러도 추가됩니다.
+                  </p>
+                </div>
+
                 <div className="space-y-2 max-h-[300px] overflow-y-auto border border-gray-200 rounded p-4">
+                  {/* Auto Increment 번호 헤더 */}
+                  {(() => {
+                    const numberHeader = {
+                      column_key: "__auto_increment__",
+                      column_label: "번호",
+                    };
+                    const isNumberSelected = selectedHeaders.some(
+                      (h) => h.column_key === numberHeader.column_key
+                    );
+                    return (
+                      <div
+                        key="__auto_increment__"
+                        className={`flex items-center gap-4 p-2 rounded ${
+                          isNumberSelected
+                            ? "bg-gray-100 opacity-60"
+                            : "hover:bg-gray-50"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isNumberSelected}
+                          onChange={() => toggleHeader(numberHeader)}
+                          className="w-4 h-4"
+                          disabled={isNumberSelected}
+                        />
+                        <div className="flex-1">
+                          <span className="text-sm font-medium">
+                            {numberHeader.column_label}
+                            <span className="text-xs text-blue-600 ml-2">
+                              (자동 번호)
+                            </span>
+                          </span>
+                          {isNumberSelected && (
+                            <span className="text-xs text-gray-500 ml-2">
+                              (이미 선택됨)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* 일반 헤더 목록 */}
                   {headerAliases.map((alias) => {
                     const isSelected = selectedHeaders.some(
                       (h) => h.column_key === alias.column_key
@@ -549,7 +688,7 @@ export default function PurchaseTemplatesPage() {
 
             <div className="flex justify-end gap-2 mt-6">
               <button
-                onClick={() => setShowModal(false)}
+                onClick={closeCreateModal}
                 className="px-4 py-2 bg-gray-500 text-white text-sm rounded hover:bg-gray-600 transition-colors"
               >
                 취소

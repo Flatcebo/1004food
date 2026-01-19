@@ -70,7 +70,23 @@ export function useUploadData() {
       if (appliedVendor && appliedVendor.length > 0) {
         appliedVendor.forEach((v) => params.append("vendor", v));
       }
-      if (appliedOrderStatus) params.append("orderStatus", appliedOrderStatus);
+      // 주문상태 필터: 빈 문자열이 아닌 경우에만 추가 (빈 문자열 = 전체)
+      console.log("🔍 주문상태 필터 체크:", {
+        appliedOrderStatus,
+        type: typeof appliedOrderStatus,
+        length: appliedOrderStatus?.length,
+        trimmed: appliedOrderStatus?.trim(),
+        isEmpty: appliedOrderStatus?.trim() === "",
+        condition: appliedOrderStatus && appliedOrderStatus.trim() !== "",
+      });
+      
+      if (appliedOrderStatus && appliedOrderStatus.trim() !== "") {
+        params.append("orderStatus", appliedOrderStatus);
+        console.log("✅ orderStatus 파라미터 추가됨:", appliedOrderStatus);
+      } else {
+        console.log("❌ orderStatus 파라미터 추가 안됨");
+      }
+      
       // 적용된 검색 필드와 값만 사용
       if (appliedSearchField && appliedSearchValue) {
         params.append("searchField", appliedSearchField);
@@ -85,6 +101,14 @@ export function useUploadData() {
       // 페이지네이션 파라미터 추가
       params.append("page", currentPage.toString());
       params.append("limit", appliedItemsPerPage.toString());
+
+      const finalOrderStatus = params.get("orderStatus");
+      console.log("📡 fetchSavedData API 호출:", {
+        appliedOrderStatus,
+        orderStatusParam: finalOrderStatus,
+        allParams: params.toString(),
+        hasOrderStatus: params.has("orderStatus"),
+      });
 
       const response = await fetch(`/api/upload/list?${params.toString()}`, {
         headers: getAuthHeaders(),
@@ -128,14 +152,14 @@ export function useUploadData() {
   useEffect(() => {
     // 이미 초기화되었거나 URL 파라미터가 설정된 경우 스킵
     if (initializedRef.current) return;
-    
+
     // 초기 로드 시 기본값으로 필터 적용 (URL 파라미터가 없는 경우에만)
     // URL 파라미터가 있으면 그 값이 우선되므로 여기서는 기본값만 설정
     setAppliedUploadTimeFrom(todayDate);
     setAppliedUploadTimeTo(todayDate);
     setAppliedOrderStatus("공급중");
     setAppliedItemsPerPage(1000);
-    
+
     initializedRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -193,21 +217,21 @@ export function useUploadData() {
               headers,
             });
             const mallsResult = await mallsResponse.json();
-            
+
             if (mallsResult.success && mallsResult.data) {
               const mallNames = mallsResult.data
                 .filter((m: any) => user.assignedMallIds.includes(m.id))
                 .map((m: any) => m.name);
-              
+
               console.log("mallNames:", mallNames);
               console.log("filters.companies:", filters.companies);
-              
+
               if (mallNames.length > 0) {
                 // 실제 업체명 필터 옵션과 일치하는 것만 필터링
                 const validCompanyNames = mallNames.filter((name: string) =>
                   filters.companies.includes(name)
                 );
-                
+
                 if (validCompanyNames.length > 0) {
                   console.log("업체명 필터 자동 설정:", validCompanyNames);
                   // 자동 필터링 실행 플래그 설정
@@ -217,10 +241,13 @@ export function useUploadData() {
                   // 필터 적용을 위해 appliedCompany도 설정
                   setAppliedCompany(validCompanyNames);
                 } else {
-                  console.log("업체명 필터 옵션과 일치하는 mall name이 없습니다:", {
-                    mallNames,
-                    availableCompanies: filters.companies,
-                  });
+                  console.log(
+                    "업체명 필터 옵션과 일치하는 mall name이 없습니다:",
+                    {
+                      mallNames,
+                      availableCompanies: filters.companies,
+                    }
+                  );
                 }
               }
             }
@@ -232,7 +259,7 @@ export function useUploadData() {
         console.error("유저 업체명 로드 실패:", error);
       }
     };
-    
+
     loadUserCompanies();
   }, [filters.companies, selectedCompany, appliedCompany]);
 
@@ -244,7 +271,6 @@ export function useUploadData() {
     appliedPostType,
     appliedCompany,
     appliedVendor,
-    appliedOrderStatus,
     appliedSearchField,
     appliedSearchValue,
     appliedUploadTimeFrom,
@@ -252,10 +278,18 @@ export function useUploadData() {
     appliedItemsPerPage,
   ]);
 
+  // appliedOrderStatus 변경 시 첫 페이지로 이동하고 데이터 조회
+  useEffect(() => {
+    console.log("🔄 appliedOrderStatus 변경:", appliedOrderStatus);
+    setCurrentPage(1);
+    // currentPage가 이미 1일 수 있으므로 직접 호출
+    fetchSavedData();
+  }, [appliedOrderStatus, fetchSavedData]);
+
   // currentPage 변경 시 데이터 조회
   useEffect(() => {
     fetchSavedData();
-  }, [fetchSavedData]);
+  }, [fetchSavedData, currentPage]);
 
   // 테이블 데이터 준비: 현재 페이지의 행 데이터를 평탄화 (메모이제이션)
   // 백엔드에서 이미 페이지네이션된 데이터를 받아오므로 그대로 사용
@@ -358,6 +392,13 @@ export function useUploadData() {
 
   // 검색 필터 적용 함수 (검색 버튼 클릭 시 호출)
   const applySearchFilter = useCallback(() => {
+    console.log("🔍 applySearchFilter 호출:", {
+      selectedOrderStatus,
+      selectedType,
+      selectedPostType,
+      selectedCompany,
+      selectedVendor,
+    });
     setAppliedType(selectedType);
     setAppliedPostType(selectedPostType);
     setAppliedCompany(selectedCompany);
