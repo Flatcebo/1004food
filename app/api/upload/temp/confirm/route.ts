@@ -18,6 +18,24 @@ export async function POST(request: NextRequest) {
     // user_id 추출
     const userId = await getUserIdFromRequest(request);
 
+    // user grade 확인 (온라인인지 확인)
+    let userGrade: string | null = null;
+    if (userId && companyId) {
+      try {
+        const userResult = await sql`
+          SELECT grade
+          FROM users
+          WHERE id = ${userId} AND company_id = ${companyId}
+        `;
+        
+        if (userResult.length > 0) {
+          userGrade = userResult[0].grade;
+        }
+      } catch (error) {
+        console.error("사용자 정보 조회 실패:", error);
+      }
+    }
+
     // user_id 컬럼 존재 여부 확인
     let hasUserIdColumn = false;
     try {
@@ -283,6 +301,15 @@ export async function POST(request: NextRequest) {
       const headerRow = tableData[0];
       const dataRows = tableData.slice(1);
 
+      // 원본 데이터 가져오기 (original_table_data가 있으면 사용, 없으면 table_data 사용)
+      // 원본 순서를 유지하기 위해 original_table_data 사용
+      const originalTableDataForOrder =
+        file.original_table_data &&
+        Array.isArray(file.original_table_data) &&
+        file.original_table_data.length > 0
+          ? file.original_table_data
+          : tableData; // 하위 호환성을 위해 table_data 사용
+
       // 디버깅: 각 파일의 헤더 확인
       console.log(
         `📋 파일 "${file.file_name}"의 원본 헤더 (DB 저장용):`,
@@ -298,6 +325,82 @@ export async function POST(request: NextRequest) {
         (h: any) => h && typeof h === "string" && h.includes("상품명")
       );
 
+      // 원본 데이터에서 상품명 인덱스 찾기 (순서 매칭용)
+      const originalHeaderRow = originalTableDataForOrder[0] || headerRow;
+      const originalNameIdx = originalHeaderRow.findIndex(
+        (h: any) => h && typeof h === "string" && h.includes("상품명")
+      );
+      const originalDataRows = originalTableDataForOrder.slice(1);
+
+      // user grade가 "온라인"인 경우 "주문번호(사방넷)" 헤더 찾기
+      const sabangnetOrderNumberIdx = userGrade === "온라인" 
+        ? headerRow.findIndex(
+            (h: any) => h && typeof h === "string" && (
+              h === "주문번호(사방넷)" || 
+              h.includes("주문번호(사방넷)") ||
+              h === "주문번호(사방넷)" ||
+              h.replace(/\s+/g, "") === "주문번호(사방넷)".replace(/\s+/g, "")
+            )
+          )
+        : -1;
+      
+      if (userGrade === "온라인" && sabangnetOrderNumberIdx !== -1) {
+        console.log(`✅ [온라인 사용자] "주문번호(사방넷)" 헤더 발견: 인덱스 ${sabangnetOrderNumberIdx}`);
+      }
+
+      // "공급단가" 헤더 찾기 (정규화된 헤더와 원본 헤더 모두에서 찾기)
+      let supplyPriceIdx = headerRow.findIndex(
+        (h: any) => {
+          if (!h || typeof h !== "string") return false;
+          const headerStr = String(h).trim();
+          return headerStr === "공급단가" || 
+                 headerStr.includes("공급단가") ||
+                 headerStr.replace(/\s+/g, "") === "공급단가".replace(/\s+/g, "");
+        }
+      );
+      
+      // 정규화된 헤더에서 못 찾으면 원본 헤더에서 찾기
+      if (supplyPriceIdx === -1 && file.original_header && Array.isArray(file.original_header)) {
+        const originalSupplyPriceIdx = file.original_header.findIndex(
+          (h: any) => {
+            if (!h || typeof h !== "string") return false;
+            const headerStr = String(h).trim();
+            return headerStr === "공급단가" || 
+                   headerStr.includes("공급단가") ||
+                   headerStr.replace(/\s+/g, "") === "공급단가".replace(/\s+/g, "");
+          }
+        );
+        
+        if (originalSupplyPriceIdx !== -1) {
+          // 원본 헤더에서 찾았으면, 정규화된 헤더에서 해당 인덱스의 헤더 이름 찾기
+          const originalHeaderName = file.original_header[originalSupplyPriceIdx];
+          supplyPriceIdx = headerRow.findIndex((h: any) => String(h).trim() === String(originalHeaderName).trim());
+          
+          // 여전히 못 찾으면 원본 인덱스 사용 (데이터 행에서 직접 접근)
+          if (supplyPriceIdx === -1) {
+            supplyPriceIdx = originalSupplyPriceIdx;
+            console.log(`✅ [공급단가] 원본 헤더에서 발견: 원본 인덱스 ${originalSupplyPriceIdx}, 헤더명: "${originalHeaderName}"`);
+          }
+        }
+      }
+      
+      // 디버깅: 헤더 목록 확인
+      console.log(`🔍 [공급단가 찾기] 정규화된 headerRow 샘플:`, headerRow.slice(0, 10));
+      if (file.original_header && Array.isArray(file.original_header)) {
+        console.log(`🔍 [공급단가 찾기] 원본 헤더 샘플:`, file.original_header.slice(0, 10));
+      }
+      console.log(`🔍 [공급단가 찾기] supplyPriceIdx: ${supplyPriceIdx}`);
+      
+      if (supplyPriceIdx !== -1) {
+        const foundHeaderName = headerRow[supplyPriceIdx] || (file.original_header && file.original_header[supplyPriceIdx]) || "알 수 없음";
+        console.log(`✅ "공급단가" 헤더 발견: 인덱스 ${supplyPriceIdx}, 헤더명: "${foundHeaderName}"`);
+      } else {
+        console.warn(`⚠️ "공급단가" 헤더를 찾을 수 없습니다. 정규화된 헤더:`, headerRow);
+        if (file.original_header && Array.isArray(file.original_header)) {
+          console.warn(`⚠️ 원본 헤더:`, file.original_header);
+        }
+      }
+
       // 배송메시지 자동 생성을 위해 원본 메시지 저장
       const originalMessagesRef: {[rowIdx: number]: string} = {};
 
@@ -309,12 +412,16 @@ export async function POST(request: NextRequest) {
       const updatedDataRows = updatedTableData.slice(1);
 
       // 배열을 객체로 변환 (헤더를 키로 사용)
+      // 중요: rowIndex는 정렬된 순서가 아니라 원본 순서를 사용해야 함
       const rowObjects = updatedDataRows.map((row: any[], rowIndex: number) => {
         const rowObj: any = {};
         headerRow.forEach((header: string, index: number) => {
           rowObj[header] =
             row[index] !== undefined && row[index] !== null ? row[index] : "";
         });
+
+        // "공급단가"는 uploadStore.ts에서 파일 읽을 때 이미 정규화된 헤더와 데이터에 추가되었으므로
+        // rowObj에 이미 포함되어 있어야 함 (추가 로직 불필요)
 
         // 주문상태가 없으면 기본값 "공급중" 설정
         if (!rowObj["주문상태"] || rowObj["주문상태"] === "") {
@@ -374,8 +481,96 @@ export async function POST(request: NextRequest) {
         globalCodeIndex++;
 
         // 업로드 시 부여된 row 순서 번호 추가 (1부터 시작)
-        rowObj["순서번호"] = rowIndex + 1;
-        rowObj["rowOrder"] = rowIndex + 1;
+        // 중요: 정렬된 순서가 아니라 원본 순서를 사용해야 함
+        // original_table_data가 있으면 원본 순서를 사용하고, 없으면 현재 순서 사용
+        let originalRowIndex = rowIndex; // 기본값은 현재 인덱스
+        
+        // original_table_data가 있고, 현재 tableData와 다르면 원본 순서 찾기
+        if (originalDataRows.length > 0 && originalDataRows.length === updatedDataRows.length) {
+          // 현재 행의 데이터로 원본 데이터에서 매칭
+          // 상품명과 수취인명을 조합하여 더 정확한 매칭 시도
+          if (nameIdx !== -1 && originalNameIdx !== -1) {
+            const currentProductName = String(row[nameIdx] || "").trim();
+            
+            // 수취인명 인덱스 찾기
+            const receiverIdx = headerRow.findIndex(
+              (h: any) => h && typeof h === "string" && (h.includes("수취인명") || h.includes("이름"))
+            );
+            const originalReceiverIdx = originalHeaderRow.findIndex(
+              (h: any) => h && typeof h === "string" && (h.includes("수취인명") || h.includes("이름"))
+            );
+            
+            const currentReceiverName = receiverIdx !== -1 ? String(row[receiverIdx] || "").trim() : "";
+            
+            // 원본 데이터에서 매칭되는 행 찾기
+            // 같은 상품명+수취인명 조합을 가진 행을 순서대로 매칭
+            const matchedIndices = new Set<number>(); // 이미 매칭된 원본 인덱스
+            
+            for (let origIdx = 0; origIdx < originalDataRows.length; origIdx++) {
+              if (matchedIndices.has(origIdx)) continue;
+              
+              const originalProductName = String(
+                originalDataRows[origIdx]?.[originalNameIdx] || ""
+              ).trim();
+              
+              if (originalProductName === currentProductName) {
+                // 수취인명도 비교 (있는 경우)
+                if (receiverIdx !== -1 && originalReceiverIdx !== -1) {
+                  const originalReceiverName = String(
+                    originalDataRows[origIdx]?.[originalReceiverIdx] || ""
+                  ).trim();
+                  if (originalReceiverName !== currentReceiverName) {
+                    continue;
+                  }
+                }
+                
+                // 현재 행 이전에 같은 조합이 몇 개나 있었는지 확인
+                let sameCombinationCount = 0;
+                for (let prevIdx = 0; prevIdx < rowIndex; prevIdx++) {
+                  const prevProductName = String(
+                    updatedDataRows[prevIdx]?.[nameIdx] || ""
+                  ).trim();
+                  const prevReceiverName = receiverIdx !== -1 
+                    ? String(updatedDataRows[prevIdx]?.[receiverIdx] || "").trim() 
+                    : "";
+                  
+                  if (prevProductName === currentProductName && 
+                      prevReceiverName === currentReceiverName) {
+                    sameCombinationCount++;
+                  }
+                }
+                
+                // 원본 데이터에서 같은 조합을 순서대로 찾아서 sameCombinationCount번째 것 사용
+                let foundCount = 0;
+                for (let origIdx2 = 0; origIdx2 < originalDataRows.length; origIdx2++) {
+                  if (matchedIndices.has(origIdx2)) continue;
+                  
+                  const origProdName = String(
+                    originalDataRows[origIdx2]?.[originalNameIdx] || ""
+                  ).trim();
+                  const origRecName = originalReceiverIdx !== -1
+                    ? String(originalDataRows[origIdx2]?.[originalReceiverIdx] || "").trim()
+                    : "";
+                  
+                  if (origProdName === currentProductName && 
+                      origRecName === currentReceiverName) {
+                    if (foundCount === sameCombinationCount) {
+                      originalRowIndex = origIdx2;
+                      matchedIndices.add(origIdx2);
+                      break;
+                    }
+                    foundCount++;
+                  }
+                }
+                break;
+              }
+            }
+          }
+        }
+        
+        // 업로드 당시 원본 순서 사용 (1부터 시작)
+        rowObj["순서번호"] = originalRowIndex + 1;
+        rowObj["rowOrder"] = originalRowIndex + 1;
 
         return rowObj;
       });
@@ -667,6 +862,46 @@ export async function POST(request: NextRequest) {
         console.error("upload_rows row_order 컬럼 확인/추가 실패:", error);
       }
 
+      // upload_rows 테이블에 sabang_code 컬럼이 있는지 확인하고 없으면 추가
+      try {
+        const sabangCodeColumnExists = await sql`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'upload_rows' 
+          AND column_name = 'sabang_code'
+        `;
+
+        if (sabangCodeColumnExists.length === 0) {
+          await sql`
+            ALTER TABLE upload_rows 
+            ADD COLUMN sabang_code VARCHAR(255)
+          `;
+          console.log("✅ upload_rows 테이블에 sabang_code 컬럼 추가 완료");
+        }
+      } catch (error) {
+        console.error("upload_rows sabang_code 컬럼 확인/추가 실패:", error);
+      }
+
+      // upload_rows 테이블에 supply_price 컬럼이 있는지 확인하고 없으면 추가
+      try {
+        const supplyPriceColumnExists = await sql`
+          SELECT column_name 
+          FROM information_schema.columns 
+          WHERE table_name = 'upload_rows' 
+          AND column_name = 'supply_price'
+        `;
+
+        if (supplyPriceColumnExists.length === 0) {
+          await sql`
+            ALTER TABLE upload_rows 
+            ADD COLUMN supply_price INTEGER
+          `;
+          console.log("✅ upload_rows 테이블에 supply_price 컬럼 추가 완료");
+        }
+      } catch (error) {
+        console.error("upload_rows supply_price 컬럼 확인/추가 실패:", error);
+      }
+
       // 각 행의 업체명으로 mall을 찾기 위한 캐시 (성능 최적화)
       const mallCache: {[key: string]: number | null} = {};
 
@@ -783,8 +1018,57 @@ export async function POST(request: NextRequest) {
           );
         }
 
+        // 업로드 당시 원본 순서 사용 (rowObj에 이미 저장된 순서번호 사용)
+        // 절대 index + 1을 사용하지 않고, 업로드 시 부여된 원본 순서를 사용
+        const originalRowOrder = rowObj["rowOrder"] || rowObj["순서번호"] || (index + 1);
+        
+        // user grade가 "온라인"이고 "주문번호(사방넷)" 헤더가 있으면 sabang_code에 저장
+        let sabangCode: string | null = null;
+        if (userGrade === "온라인" && sabangnetOrderNumberIdx !== -1) {
+          const sabangnetOrderNumber = rowObj["주문번호(사방넷)"] || 
+            (updatedDataRows[index] && updatedDataRows[index][sabangnetOrderNumberIdx] ? 
+              String(updatedDataRows[index][sabangnetOrderNumberIdx]).trim() : null);
+          
+          if (sabangnetOrderNumber && sabangnetOrderNumber !== "") {
+            sabangCode = String(sabangnetOrderNumber).trim();
+            // row_data에도 sabang_code 추가
+            rowObj["sabang_code"] = sabangCode;
+          }
+        }
+
+        // "공급단가" 헤더가 있으면 supply_price 컬럼에 저장
+        // uploadStore.ts에서 파일 읽을 때 이미 정규화된 헤더와 데이터에 추가되었으므로
+        // rowObj["공급단가"]에서 직접 값을 가져올 수 있음
+        let supplyPrice: number | null = null;
+        const supplyPriceValue = rowObj["공급단가"];
+        
+        // 값 파싱 및 저장
+        if (supplyPriceValue !== null && supplyPriceValue !== undefined && supplyPriceValue !== "") {
+          // 문자열인 경우 쉼표 제거 후 파싱
+          const cleanedValue = typeof supplyPriceValue === "string" 
+            ? String(supplyPriceValue).replace(/,/g, "").trim()
+            : String(supplyPriceValue);
+          
+          const parsedValue = parseFloat(cleanedValue);
+          
+          if (!isNaN(parsedValue) && parsedValue > 0) {
+            supplyPrice = Math.round(parsedValue);
+            if (index < 3) {
+              console.log(`✅ [공급단가] 저장 성공: 원본값="${supplyPriceValue}", 파싱값=${parsedValue}, 저장값=${supplyPrice}`);
+            }
+          } else if (index < 3) {
+            console.warn(`⚠️ [공급단가] 파싱 실패: 원본값="${supplyPriceValue}", cleanedValue="${cleanedValue}", parsedValue=${parsedValue}`);
+          }
+        } else if (supplyPriceIdx !== -1 && index < 3) {
+          console.warn(`⚠️ [공급단가] 값이 비어있음:`, {
+            정규화인덱스: supplyPriceIdx,
+            rowObj공급단가: rowObj["공급단가"],
+            rowObj키목록: Object.keys(rowObj).slice(0, 20)
+          });
+        }
+        
         return sql`
-          INSERT INTO upload_rows (upload_id, row_data, shop_name, company_id, mall_id, vendor_name, row_order, user_id, created_at)
+          INSERT INTO upload_rows (upload_id, row_data, shop_name, company_id, mall_id, vendor_name, row_order, user_id, sabang_code, supply_price, created_at)
           VALUES (
             ${uploadId},
             ${JSON.stringify(rowObj)},
@@ -792,11 +1076,13 @@ export async function POST(request: NextRequest) {
             ${companyId},
             ${rowMallId},
             ${rowVendorNameToSave},
-            ${index + 1},
+            ${originalRowOrder},
             ${fileUserId},
+            ${sabangCode},
+            ${supplyPrice},
             ${koreaTime.toISOString()}::timestamp
           )
-          RETURNING id, mall_id, vendor_name, row_order, user_id
+          RETURNING id, mall_id, vendor_name, row_order, user_id, sabang_code, supply_price
         `;
       });
 

@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
           FROM users
           WHERE id = ${userId} AND company_id = ${companyId}
         `;
-        
+
         if (userResult.length > 0) {
           userGrade = userResult[0].grade;
         }
@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
           )
         `;
       }
-      
+
       const rowData = await sql`
         SELECT ur.id, ur.row_data
         FROM upload_rows ur
@@ -249,7 +249,7 @@ export async function POST(request: NextRequest) {
 
         // WHERE 조건 구성 (company_id 필수)
         const conditions: any[] = [sql`u.company_id = ${companyId}`];
-        
+
         // grade별 필터링 조건 추가
         if (userGrade === "납품업체" || userGrade === "온라인") {
           conditions.push(sql`
@@ -262,7 +262,7 @@ export async function POST(request: NextRequest) {
           `);
         }
         // 관리자, 직원은 grade 필터링 없이 모든 데이터 조회
-        
+
         if (type) {
           conditions.push(sql`ur.row_data->>'내외주' = ${type}`);
         }
@@ -396,11 +396,15 @@ export async function POST(request: NextRequest) {
         // 발주서 다운로드이고 필터링된 데이터 다운로드 시 주문상태 업데이트
         const templateName = (templateData.name || "").normalize("NFC").trim();
         const isPurchaseOrder = templateName.includes("발주");
-        if (isPurchaseOrder && (!rowIds || rowIds.length === 0) && rowIdsWithData.length > 0) {
+        if (
+          isPurchaseOrder &&
+          (!rowIds || rowIds.length === 0) &&
+          rowIdsWithData.length > 0
+        ) {
           try {
             // 필터링된 데이터의 ID를 사용하여 주문상태 업데이트
             const idsToUpdate = rowIdsWithData.map((r: any) => r.id);
-            
+
             if (idsToUpdate.length > 0) {
               // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트
               // 현재 상태가 "공급중"인 경우에만 업데이트 (뒷단계로 돌아가지 않도록)
@@ -442,7 +446,7 @@ export async function POST(request: NextRequest) {
               )
             `;
           }
-          
+
           allData = await sql`
             SELECT ur.id, ur.row_data
             FROM upload_rows ur
@@ -475,7 +479,7 @@ export async function POST(request: NextRequest) {
               )
             `;
           }
-          
+
           allData = await sql`
             SELECT ur.id, ur.row_data
             FROM upload_rows ur
@@ -739,11 +743,27 @@ export async function POST(request: NextRequest) {
         }
 
         // preferSabangName 옵션에 따라 사방넷명 또는 상품명 사용
-        return mapDataToTemplate(row, headerStr, {
+        let value = mapDataToTemplate(row, headerStr, {
           templateName: templateData.name,
           preferSabangName:
             preferSabangName !== undefined ? preferSabangName : true,
         });
+        
+        // 수취인명인 경우 앞에 ★ 붙이기
+        if (
+          headerStr === "수취인명" ||
+          headerStr === "수취인" ||
+          headerStr === "받는사람" ||
+          headerStr.includes("수취인명") ||
+          headerStr.includes("받는사람")
+        ) {
+          const stringValue = value != null ? String(value) : "";
+          if (stringValue && !stringValue.startsWith("★")) {
+            value = "★" + stringValue;
+          }
+        }
+        
+        return value;
       });
     });
 
@@ -1121,7 +1141,7 @@ export async function POST(request: NextRequest) {
         // CJ외주 발주서인 경우: 필터링된 ID만 업데이트
         // 일반 발주서인 경우: rowIds가 있으면 선택된 행, 없으면 필터링된 데이터의 실제 다운로드된 행들 업데이트
         let idsToUpdate: number[] = [];
-        
+
         if (isCJOutsource) {
           // CJ외주 발주서인 경우: 필터링된 ID만 업데이트
           if (rowIds && rowIds.length > 0 && rowIdsWithData.length > 0) {

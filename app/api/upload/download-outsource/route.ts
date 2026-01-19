@@ -237,36 +237,418 @@ export async function POST(request: NextRequest) {
       }));
       dataRows = dataRowsWithIds.map((r: any) => r.row_data);
       downloadedRowIds = rowIds;
-    } else if (filters && Object.keys(filters).length > 0) {
+    } else if (
+      (filters && Object.keys(filters).length > 0) ||
+      (filters && (filters.uploadTimeFrom || filters.uploadTimeTo))
+    ) {
       // 필터 조건으로 조회
-      const {conditions} = buildFilterConditions(filters as UploadFilters, {
-        companyId,
+      // 외주 발주서인 경우 type 필터가 없으면 "외주" 조건 추가
+      const templateNameForFilter = (templateData.name || "")
+        .normalize("NFC")
+        .trim();
+      const isOutsourceTemplateForFilter =
+        templateNameForFilter.includes("외주");
+      const isCJOutsourceTemplateForFilter =
+        templateNameForFilter.includes("CJ");
+
+      // 필터 객체 로깅
+      console.log("🔍 받은 필터 객체:", JSON.stringify(filters, null, 2));
+
+      const filtersWithType = {...filters};
+      // 외주 발주서인 경우 type 필터가 없으면 "외주" 조건 추가
+      if (isOutsourceTemplateForFilter && !filtersWithType.type) {
+        filtersWithType.type = "외주";
+      }
+
+      // 기간 필터를 별도로 추출 (buildFilterConditions에서 제외)
+      const uploadTimeFrom =
+        filtersWithType.uploadTimeFrom &&
+        typeof filtersWithType.uploadTimeFrom === "string" &&
+        filtersWithType.uploadTimeFrom.trim() !== ""
+          ? filtersWithType.uploadTimeFrom
+          : undefined;
+      const uploadTimeTo =
+        filtersWithType.uploadTimeTo &&
+        typeof filtersWithType.uploadTimeTo === "string" &&
+        filtersWithType.uploadTimeTo.trim() !== ""
+          ? filtersWithType.uploadTimeTo
+          : undefined;
+
+      // 기간 필터를 제외한 필터로 조건 생성
+      const filtersWithoutDate = {...filtersWithType};
+      delete filtersWithoutDate.uploadTimeFrom;
+      delete filtersWithoutDate.uploadTimeTo;
+
+      console.log("🔍 기간 필터 값:", {
+        uploadTimeFrom,
+        uploadTimeTo,
       });
-      const filteredData = await buildFilterQuery(conditions, true);
+
+      const {conditions} = buildFilterConditions(
+        filtersWithoutDate as UploadFilters,
+        {
+          companyId,
+        }
+      );
+
+      // 조건 로깅
+      console.log("🔍 생성된 조건 개수:", conditions.length);
+
+      // CJ외주 발주서인 경우: 지정된 매핑코드만 필터링
+      if (isCJOutsourceTemplateForFilter) {
+        const allowedCodes = ["106464", "108640", "108788", "108879", "108221"];
+        conditions.push(sql`ur.row_data->>'내외주' = '외주'`);
+        conditions.push(sql`(
+          ur.row_data->>'매핑코드' = '106464'
+          OR ur.row_data->>'매핑코드' = '108640'
+          OR ur.row_data->>'매핑코드' = '108788'
+          OR ur.row_data->>'매핑코드' = '108879'
+          OR ur.row_data->>'매핑코드' = '108221'
+        )`);
+      }
+
+      // 쿼리 구성 (기간 필터를 직접 SQL에 명시)
+      let filteredData;
+      if (conditions.length === 0) {
+        // 조건이 없고 기간 필터만 있는 경우
+        if (uploadTimeFrom && uploadTimeTo) {
+          filteredData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE u.created_at >= ${uploadTimeFrom}::date
+              AND u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        } else if (uploadTimeFrom) {
+          filteredData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE u.created_at >= ${uploadTimeFrom}::date
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        } else if (uploadTimeTo) {
+          filteredData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        } else {
+          filteredData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        }
+      } else if (conditions.length === 1) {
+        if (uploadTimeFrom && uploadTimeTo) {
+          filteredData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE ${conditions[0]}
+              AND u.created_at >= ${uploadTimeFrom}::date
+              AND u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        } else if (uploadTimeFrom) {
+          filteredData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE ${conditions[0]}
+              AND u.created_at >= ${uploadTimeFrom}::date
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        } else if (uploadTimeTo) {
+          filteredData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE ${conditions[0]}
+              AND u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        } else {
+          filteredData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE ${conditions[0]}
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        }
+      } else if (conditions.length === 2) {
+        if (uploadTimeFrom && uploadTimeTo) {
+          filteredData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE ${conditions[0]} AND ${conditions[1]}
+              AND u.created_at >= ${uploadTimeFrom}::date
+              AND u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        } else if (uploadTimeFrom) {
+          filteredData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE ${conditions[0]} AND ${conditions[1]}
+              AND u.created_at >= ${uploadTimeFrom}::date
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        } else if (uploadTimeTo) {
+          filteredData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE ${conditions[0]} AND ${conditions[1]}
+              AND u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        } else {
+          filteredData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE ${conditions[0]} AND ${conditions[1]}
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        }
+      } else if (conditions.length === 3) {
+        if (uploadTimeFrom && uploadTimeTo) {
+          filteredData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE ${conditions[0]} AND ${conditions[1]} AND ${conditions[2]}
+              AND u.created_at >= ${uploadTimeFrom}::date
+              AND u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        } else if (uploadTimeFrom) {
+          filteredData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE ${conditions[0]} AND ${conditions[1]} AND ${conditions[2]}
+              AND u.created_at >= ${uploadTimeFrom}::date
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        } else if (uploadTimeTo) {
+          filteredData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE ${conditions[0]} AND ${conditions[1]} AND ${conditions[2]}
+              AND u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        } else {
+          filteredData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE ${conditions[0]} AND ${conditions[1]} AND ${conditions[2]}
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        }
+      } else if (conditions.length === 4) {
+        if (uploadTimeFrom && uploadTimeTo) {
+          filteredData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE ${conditions[0]} AND ${conditions[1]} AND ${conditions[2]} AND ${conditions[3]}
+              AND u.created_at >= ${uploadTimeFrom}::date
+              AND u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        } else if (uploadTimeFrom) {
+          filteredData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE ${conditions[0]} AND ${conditions[1]} AND ${conditions[2]} AND ${conditions[3]}
+              AND u.created_at >= ${uploadTimeFrom}::date
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        } else if (uploadTimeTo) {
+          filteredData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE ${conditions[0]} AND ${conditions[1]} AND ${conditions[2]} AND ${conditions[3]}
+              AND u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        } else {
+          filteredData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE ${conditions[0]} AND ${conditions[1]} AND ${conditions[2]} AND ${conditions[3]}
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        }
+      } else if (conditions.length === 5) {
+        if (uploadTimeFrom && uploadTimeTo) {
+          filteredData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE ${conditions[0]} AND ${conditions[1]} AND ${conditions[2]} AND ${conditions[3]} AND ${conditions[4]}
+              AND u.created_at >= ${uploadTimeFrom}::date
+              AND u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        } else if (uploadTimeFrom) {
+          filteredData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE ${conditions[0]} AND ${conditions[1]} AND ${conditions[2]} AND ${conditions[3]} AND ${conditions[4]}
+              AND u.created_at >= ${uploadTimeFrom}::date
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        } else if (uploadTimeTo) {
+          filteredData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE ${conditions[0]} AND ${conditions[1]} AND ${conditions[2]} AND ${conditions[3]} AND ${conditions[4]}
+              AND u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        } else {
+          filteredData = await sql`
+            SELECT ur.id, ur.row_data
+            FROM upload_rows ur
+            INNER JOIN uploads u ON ur.upload_id = u.id
+            WHERE ${conditions[0]} AND ${conditions[1]} AND ${conditions[2]} AND ${conditions[3]} AND ${conditions[4]}
+            ORDER BY u.created_at DESC, ur.id DESC
+          `;
+        }
+      } else {
+        // 6개 이상인 경우 동적 구성 (기간 필터를 마지막에 추가)
+        let query = sql`
+          SELECT ur.id, ur.row_data
+          FROM upload_rows ur
+          INNER JOIN uploads u ON ur.upload_id = u.id
+          WHERE ${conditions[0]}
+        `;
+        for (let i = 1; i < conditions.length; i++) {
+          query = sql`${query} AND ${conditions[i]}`;
+        }
+        if (uploadTimeFrom) {
+          query = sql`${query} AND u.created_at >= ${uploadTimeFrom}::date`;
+        }
+        if (uploadTimeTo) {
+          query = sql`${query} AND u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')`;
+        }
+        query = sql`${query} ORDER BY u.created_at DESC, ur.id DESC`;
+        filteredData = await query;
+      }
+
       // ID와 row_data를 함께 저장하여 외주 필터링 후에도 ID 추적 가능하도록 함
       dataRowsWithIds = filteredData.map((r: any) => ({
         id: r.id,
         row_data: r.row_data || {},
       }));
       dataRows = dataRowsWithIds.map((r: any) => r.row_data);
+      downloadedRowIds = dataRowsWithIds.map((r: any) => r.id);
+
+      console.log("📊 필터링된 데이터 개수:", dataRows.length);
+      console.log("📊 필터링된 데이터 ID 개수:", downloadedRowIds.length);
+
+      // 실제 조회된 데이터의 업로드 날짜 확인
+      if (dataRowsWithIds.length > 0) {
+        const allIds = dataRowsWithIds.map((r: any) => r.id);
+        const allUploadDates = await sql`
+          SELECT u.created_at::date as upload_date, COUNT(*) as count
+          FROM upload_rows ur
+          INNER JOIN uploads u ON ur.upload_id = u.id
+          WHERE ur.id = ANY(${allIds})
+          GROUP BY u.created_at::date
+          ORDER BY u.created_at::date DESC
+        `;
+        console.log(
+          "📅 실제 조회된 데이터의 업로드 날짜 분포:",
+          allUploadDates
+        );
+
+        // 기간 필터와 비교
+        if (filtersWithType.uploadTimeFrom && filtersWithType.uploadTimeTo) {
+          const expectedDate = filtersWithType.uploadTimeFrom;
+          const hasWrongDates = allUploadDates.some((d: any) => {
+            const dateStr = d.upload_date.toISOString().split("T")[0];
+            return dateStr !== expectedDate;
+          });
+          if (hasWrongDates) {
+            console.error(
+              "❌ 기간 필터 오류: 예상 날짜와 다른 데이터가 포함됨",
+              {
+                expectedDate,
+                actualDates: allUploadDates.map(
+                  (d: any) => d.upload_date.toISOString().split("T")[0]
+                ),
+              }
+            );
+          } else {
+            console.log("✅ 기간 필터 정상 작동");
+          }
+        }
+      }
     } else {
       // 템플릿명 확인 (외주 발주서인지 체크)
       const templateName = (templateData.name || "").normalize("NFC").trim();
       const isOutsourceTemplate = templateName.includes("외주");
       const isCJOutsourceTemplate = templateName.includes("CJ");
 
+      // 일자 필터링 조건 (필터가 없어도 일자 필터가 있으면 적용)
+      const uploadTimeFrom =
+        filters?.uploadTimeFrom &&
+        typeof filters.uploadTimeFrom === "string" &&
+        filters.uploadTimeFrom.trim() !== ""
+          ? filters.uploadTimeFrom
+          : undefined;
+      const uploadTimeTo =
+        filters?.uploadTimeTo &&
+        typeof filters.uploadTimeTo === "string" &&
+        filters.uploadTimeTo.trim() !== ""
+          ? filters.uploadTimeTo
+          : undefined;
+      const hasDateFilter = uploadTimeFrom || uploadTimeTo;
+
       // 외주 발주서인 경우: 필터가 없어도 "외주"만 조회
       if (isOutsourceTemplate) {
         // CJ외주 발주서인 경우: 매핑코드 106464, 108640, 108788, 108879, 108221 포함
         if (isCJOutsourceTemplate) {
-          const allData = await sql`
+          let query = sql`
             SELECT ur.id, ur.row_data
             FROM upload_rows ur
             INNER JOIN uploads u ON ur.upload_id = u.id
-            WHERE ur.row_data->>'내외주' = '외주'
+            WHERE u.company_id = ${companyId}
+              AND ur.row_data->>'내외주' = '외주'
               AND ur.row_data->>'매핑코드' IN ('106464', '108640', '108788', '108879', '108221')
-            ORDER BY u.created_at DESC, ur.id DESC
           `;
+
+          // 일자 필터링 추가 (빈 문자열 체크)
+          if (uploadTimeFrom && uploadTimeFrom.trim() !== "") {
+            query = sql`${query} AND u.created_at >= ${uploadTimeFrom}::date`;
+          }
+          if (uploadTimeTo && uploadTimeTo.trim() !== "") {
+            query = sql`${query} AND u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')`;
+          }
+
+          query = sql`${query} ORDER BY u.created_at DESC, ur.id DESC`;
+
+          const allData = await query;
           dataRowsWithIds = allData.map((r: any) => ({
             id: r.id,
             row_data: r.row_data || {},
@@ -274,15 +656,27 @@ export async function POST(request: NextRequest) {
           dataRows = dataRowsWithIds.map((r: any) => r.row_data);
         } else {
           // 일반 외주 발주서: CJ 제외
-          const allData = await sql`
+          let query = sql`
             SELECT ur.id, ur.row_data
             FROM upload_rows ur
             INNER JOIN uploads u ON ur.upload_id = u.id
-            WHERE ur.row_data->>'내외주' = '외주'
+            WHERE u.company_id = ${companyId}
+              AND ur.row_data->>'내외주' = '외주'
               AND (ur.row_data->>'매핑코드' IS NULL OR ur.row_data->>'매핑코드' != '106464')
               AND (ur.row_data->>'업체명' IS NULL OR ur.row_data->>'업체명' NOT LIKE '%CJ%')
-            ORDER BY u.created_at DESC, ur.id DESC
           `;
+
+          // 일자 필터링 추가 (빈 문자열 체크)
+          if (uploadTimeFrom && uploadTimeFrom.trim() !== "") {
+            query = sql`${query} AND u.created_at >= ${uploadTimeFrom}::date`;
+          }
+          if (uploadTimeTo && uploadTimeTo.trim() !== "") {
+            query = sql`${query} AND u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')`;
+          }
+
+          query = sql`${query} ORDER BY u.created_at DESC, ur.id DESC`;
+
+          const allData = await query;
           dataRowsWithIds = allData.map((r: any) => ({
             id: r.id,
             row_data: r.row_data || {},
@@ -290,13 +684,25 @@ export async function POST(request: NextRequest) {
           dataRows = dataRowsWithIds.map((r: any) => r.row_data);
         }
       } else {
-        // 외주 발주서가 아닌 경우: 모든 데이터 조회
-        const allData = await sql`
+        // 외주 발주서가 아닌 경우: 모든 데이터 조회 (일자 필터링 적용)
+        let query = sql`
           SELECT ur.id, ur.row_data
           FROM upload_rows ur
           INNER JOIN uploads u ON ur.upload_id = u.id
-          ORDER BY u.created_at DESC, ur.id DESC
+          WHERE u.company_id = ${companyId}
         `;
+
+        // 일자 필터링 추가 (빈 문자열 체크)
+        if (uploadTimeFrom && uploadTimeFrom.trim() !== "") {
+          query = sql`${query} AND u.created_at >= ${uploadTimeFrom}::date`;
+        }
+        if (uploadTimeTo && uploadTimeTo.trim() !== "") {
+          query = sql`${query} AND u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')`;
+        }
+
+        query = sql`${query} ORDER BY u.created_at DESC, ur.id DESC`;
+
+        const allData = await query;
         dataRowsWithIds = allData.map((r: any) => ({
           id: r.id,
           row_data: r.row_data || {},
@@ -313,13 +719,41 @@ export async function POST(request: NextRequest) {
     // 외주 발주서인 경우: 매입처별로 그룹화하여 ZIP 생성
     if (isOutsource && !isCJOutsource) {
       // ID와 함께 필터링하여 실제 다운로드된 행의 ID 추적
+      // 필터가 있을 때는 이미 필터링된 데이터이므로 추가 필터링 불필요
+      // 필터가 없을 때만 "외주" 조건으로 필터링
       if (dataRowsWithIds.length > 0) {
-        const filteredRowsWithIds = dataRowsWithIds.filter(
-          (item: any) =>
-            item.row_data.내외주 === "외주" &&
-            item.row_data.매핑코드 !== "106464" &&
-            !item.row_data.업체명?.includes("CJ")
-        );
+        // 필터가 있었는지 확인 (filters가 있고 키가 있거나, uploadTimeFrom/uploadTimeTo가 있으면 필터가 있었음)
+        const hadFilters =
+          (filters && Object.keys(filters).length > 0) ||
+          (filters && (filters.uploadTimeFrom || filters.uploadTimeTo));
+
+        console.log("🔍 필터 확인:", {
+          hadFilters,
+          filtersKeys: filters ? Object.keys(filters) : [],
+          dataRowsCount: dataRowsWithIds.length,
+        });
+
+        let filteredRowsWithIds;
+        if (hadFilters) {
+          // 필터가 있을 때는 이미 필터링된 데이터 사용 (추가 필터링 불필요)
+          filteredRowsWithIds = dataRowsWithIds;
+          console.log(
+            "✅ 필터가 있어서 이미 필터링된 데이터 사용:",
+            filteredRowsWithIds.length
+          );
+        } else {
+          // 필터가 없을 때만 "외주" 조건으로 필터링
+          filteredRowsWithIds = dataRowsWithIds.filter(
+            (item: any) =>
+              item.row_data.내외주 === "외주" &&
+              item.row_data.매핑코드 !== "106464" &&
+              !item.row_data.업체명?.includes("CJ")
+          );
+          console.log(
+            "🔍 필터가 없어서 외주 조건으로 필터링:",
+            filteredRowsWithIds.length
+          );
+        }
         // 전화번호 필드들에 하이픈 추가 가공 (ID 유지)
         const processedRowsWithIds = filteredRowsWithIds.map((item: any) => {
           const processedRow = {...item.row_data};
@@ -455,17 +889,19 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // 매핑코드를 통해 매입처로 업체명 업데이트
+      // 필터에 vendor가 있으면 해당 vendor만 포함 (purchase 테이블 기준)
+      const filterVendors = filters?.vendor;
+      const allowedVendors = filterVendors
+        ? Array.isArray(filterVendors)
+          ? filterVendors
+          : [filterVendors]
+        : null;
+
+      // 먼저 모든 행에 매핑코드 정보 주입 (사방넷명, 공급가, 매입처명)
       dataRows.forEach((row: any) => {
         // 내주는 제외 (외주만 처리)
         if (row.내외주 !== "외주") {
           return;
-        }
-
-        if (row.매핑코드 && productVendorNameMap[row.매핑코드]) {
-          row.업체명 = productVendorNameMap[row.매핑코드];
-        } else {
-          row.업체명 = "매입처미지정";
         }
 
         // 공급가와 사방넷명 주입
@@ -502,14 +938,80 @@ export async function POST(request: NextRequest) {
         }
       });
 
-      // 매입처별로 그룹화 (내주 제외)
-      const vendorGroups: {[vendor: string]: any[]} = {};
-      dataRows.forEach((row) => {
-        // 내주는 제외
+      // 매핑코드를 통해 매입처로 업체명 업데이트 및 중복 제거
+      const seenOrders = new Map<string, any>(); // 중복 주문 추적 (내부코드 또는 주문번호 사용)
+      const processedDataRows: any[] = [];
+
+      dataRows.forEach((row: any) => {
+        // 내주는 제외 (외주만 처리)
         if (row.내외주 !== "외주") {
           return;
         }
 
+        // 매핑코드를 통해 매입처명 가져오기
+        let vendor = "매입처미지정";
+        if (row.매핑코드) {
+          const vendorName = productVendorNameMap[row.매핑코드];
+          if (vendorName && typeof vendorName === "string") {
+            vendor = vendorName;
+          }
+        }
+
+        // 업체명 설정
+        row.업체명 = vendor;
+
+        // 필터에 vendor가 있으면 해당 vendor만 포함 (purchase 테이블 기준)
+        if (allowedVendors && !allowedVendors.includes(vendor)) {
+          return;
+        }
+
+        // 중복 주문 제거 (내부코드 또는 주문번호로 확인)
+        // 주문번호 또는 내부코드로 중복 확인 (상품명/사방넷명과 무관하게 주문 단위로 중복 제거)
+        const orderIdentifier = row["내부코드"] || row["주문번호"];
+        // 주문 단위로만 중복 제거 (매핑코드 제외하여 같은 주문의 다른 상품도 중복으로 처리)
+        const orderKey = orderIdentifier
+          ? `${vendor}_${orderIdentifier}`
+          : `${vendor}_${row["수취인명"]}_${row["주소"]}`;
+
+        if (seenOrders.has(orderKey)) {
+          // 이미 처리된 주문이면 건너뛰기 (사방넷명이 있는 경우 우선, 없으면 상품명 사용)
+          const existingRow = seenOrders.get(orderKey);
+          const hasSabangName =
+            row["사방넷명"] || row["sabangName"] || row["sabang_name"];
+          const existingHasSabangName =
+            existingRow["사방넷명"] ||
+            existingRow["sabangName"] ||
+            existingRow["sabang_name"];
+
+          // 새 행에 사방넷명이 있고 기존 행에 없으면 교체
+          if (hasSabangName && !existingHasSabangName) {
+            seenOrders.set(orderKey, row);
+            // processedDataRows에서 기존 행 제거하고 새 행 추가
+            const index = processedDataRows.findIndex((r: any) => {
+              const rVendor =
+                r.업체명 ||
+                (r.매핑코드 && productVendorNameMap[r.매핑코드]
+                  ? productVendorNameMap[r.매핑코드]
+                  : "매입처미지정");
+              const rOrderIdentifier = r["내부코드"] || r["주문번호"];
+              const rOrderKey = rOrderIdentifier
+                ? `${rVendor}_${rOrderIdentifier}`
+                : `${rVendor}_${r["수취인명"]}_${r["주소"]}`;
+              return rOrderKey === orderKey;
+            });
+            if (index !== -1) {
+              processedDataRows[index] = row;
+            }
+          }
+          return; // 이미 처리된 주문은 건너뛰기
+        }
+        seenOrders.set(orderKey, row);
+        processedDataRows.push(row);
+      });
+
+      // 매입처별로 그룹화 (필터링 및 중복 제거 완료된 데이터 사용)
+      const vendorGroups: {[vendor: string]: any[]} = {};
+      processedDataRows.forEach((row) => {
         const vendor = row.업체명;
         if (!vendorGroups[vendor]) {
           vendorGroups[vendor] = [];
@@ -633,7 +1135,7 @@ export async function POST(request: NextRequest) {
 
         // 데이터를 2차원 배열로 변환
         let excelData: any[][];
-        
+
         if (purchaseTemplateHeaders) {
           // purchase 템플릿 사용
           excelData = vendorRows.map((row: any) => {
@@ -643,7 +1145,7 @@ export async function POST(request: NextRequest) {
               purchaseTemplateHeaders,
               headerAliases
             );
-            
+
             // 추가 처리 (전화번호, 수취인명 등)
             return mappedRow.map((value: any, idx: number) => {
               const header = purchaseTemplateHeaders[idx];
@@ -665,7 +1167,8 @@ export async function POST(request: NextRequest) {
                 header.display_name.includes("주문 번호")
               ) {
                 // 내부코드가 있으면 우선 사용, 없으면 기존 값 사용
-                stringValue = row["내부코드"] || row["주문번호"] || stringValue || "";
+                stringValue =
+                  row["내부코드"] || row["주문번호"] || stringValue || "";
               }
 
               // 전화번호 처리
@@ -705,7 +1208,10 @@ export async function POST(request: NextRequest) {
             headers.forEach((header: any) => {
               const headerStr =
                 typeof header === "string" ? header : String(header || "");
-              if (headerStr.includes("전화번호1") || headerStr === "전화번호1") {
+              if (
+                headerStr.includes("전화번호1") ||
+                headerStr === "전화번호1"
+              ) {
                 let value = mapDataToTemplate(row, headerStr, {
                   templateName: templateData.name,
                   formatPhone: true, // 외주 발주서에서는 전화번호에 하이픈 추가

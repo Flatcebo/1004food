@@ -46,6 +46,11 @@ export function buildFilterConditions(
   const conditions: any[] = [];
   const updateConditions: any[] = [];
 
+  // company_id 조건 추가 (옵션에 companyId가 있으면)
+  if (options?.companyId) {
+    conditions.push(sql`u.company_id = ${options.companyId}`);
+  }
+
   // 검색 필드 매핑
   const fieldMap: {[key: string]: string} = {
     수취인명: "수취인명",
@@ -158,16 +163,16 @@ export function buildFilterConditions(
     }
   }
 
-  // 업로드 시작일 필터
-  if (uploadTimeFrom) {
+  // 업로드 시작일 필터 (빈 문자열 체크 추가)
+  if (uploadTimeFrom && typeof uploadTimeFrom === 'string' && uploadTimeFrom.trim() !== '') {
     conditions.push(sql`u.created_at >= ${uploadTimeFrom}::date`);
     if (options?.includeUpdateConditions) {
       updateConditions.push(sql`u.created_at >= ${uploadTimeFrom}::date`);
     }
   }
 
-  // 업로드 종료일 필터
-  if (uploadTimeTo) {
+  // 업로드 종료일 필터 (빈 문자열 체크 추가)
+  if (uploadTimeTo && typeof uploadTimeTo === 'string' && uploadTimeTo.trim() !== '') {
     conditions.push(
       sql`u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')`
     );

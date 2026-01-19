@@ -114,6 +114,11 @@ function getDefaultHeaderAliases(): ColumnAlias[] {
       label: "부피",
       aliases: ["부피", "부피중량", "무게", "중량"],
     },
+    {
+      key: "supplyPrice",
+      label: "공급단가",
+      aliases: ["공급단가", "공급가", "공급가격", "상품공급가", "supply_price", "supplyPrice"],
+    },
   ];
 }
 

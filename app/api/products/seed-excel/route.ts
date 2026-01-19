@@ -2,6 +2,7 @@ import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
 import * as XLSX from "xlsx";
 import {mapExcelHeaderToDbColumn} from "@/constants/productColumnMappings";
+import {getCompanyIdFromRequest} from "@/lib/company";
 
 // 한국 시간(KST, UTC+9)을 반환하는 함수
 function getKoreaTime(): Date {
@@ -15,6 +16,15 @@ export async function POST(request: NextRequest) {
   const startTime = Date.now();
 
   try {
+    // company_id 추출
+    const companyId = await getCompanyIdFromRequest(request);
+    if (!companyId) {
+      return NextResponse.json(
+        {success: false, error: "company_id가 필요합니다."},
+        {status: 400}
+      );
+    }
+
     const formData = await request.formData();
     const file = formData.get("file") as File;
 
@@ -227,10 +237,11 @@ export async function POST(request: NextRequest) {
           
           return sql`
             INSERT INTO products (
-              type, post_type, name, code, pkg, price, sale_price, post_fee,
+              company_id, type, post_type, name, code, pkg, price, sale_price, post_fee,
               purchase, bill_type, category, product_type, sabang_name, etc,
               created_at, updated_at
             ) VALUES (
+              ${companyId},
               ${product.type || null},
               ${normalizedPostType},
               ${product.name},
@@ -248,7 +259,7 @@ export async function POST(request: NextRequest) {
               ${koreaTime.toISOString()}::timestamp,
               ${koreaTime.toISOString()}::timestamp
             )
-            ON CONFLICT (name, code, post_type) DO UPDATE SET
+            ON CONFLICT (company_id, name, code, post_type) DO UPDATE SET
               type = EXCLUDED.type,
               post_type = COALESCE(EXCLUDED.post_type, ''),
               pkg = EXCLUDED.pkg,

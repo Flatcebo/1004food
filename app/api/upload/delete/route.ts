@@ -39,53 +39,68 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // 선택된 행들을 삭제 (company_id 필터링)
-    const result = await sql`
-      DELETE FROM upload_rows ur
-      USING uploads u
-      WHERE ur.upload_id = u.id 
-        AND ur.id = ANY(${rowIds}::int[])
-        AND u.company_id = ${companyId}
-      RETURNING ur.id, ur.upload_id
-    `;
+    // 트랜잭션 시작
+    await sql`BEGIN`;
 
-    // 삭제된 row들의 upload_id 목록 추출
-    const affectedUploadIds = [
-      ...new Set(result.map((r: any) => r.upload_id)),
-    ];
-
-    // 각 upload_id에 대해 남은 row 개수 확인하고, 0개면 uploads도 삭제
-    const deletedUploadIds: number[] = [];
-    for (const uploadId of affectedUploadIds) {
-      const remainingRows = await sql`
-        SELECT COUNT(*) as count
-        FROM upload_rows
-        WHERE upload_id = ${uploadId}
+    try {
+      // 선택된 행들을 삭제 (company_id 필터링)
+      const result = await sql`
+        DELETE FROM upload_rows ur
+        USING uploads u
+        WHERE ur.upload_id = u.id 
+          AND ur.id = ANY(${rowIds}::int[])
+          AND u.company_id = ${companyId}
+        RETURNING ur.id, ur.upload_id
       `;
 
-      if (remainingRows[0].count === 0) {
-        // 남은 row가 없으면 해당 uploads 레코드도 삭제
-        await sql`
-          DELETE FROM uploads
-          WHERE id = ${uploadId}
-            AND company_id = ${companyId}
+      // 삭제된 row들의 upload_id 목록 추출
+      const affectedUploadIds = [
+        ...new Set(result.map((r: any) => r.upload_id)),
+      ];
+
+      // 각 upload_id에 대해 남은 row 개수 확인하고, 0개면 uploads도 삭제
+      const deletedUploadIds: number[] = [];
+      for (const uploadId of affectedUploadIds) {
+        const remainingRows = await sql`
+          SELECT COUNT(*)::int as count
+          FROM upload_rows
+          WHERE upload_id = ${uploadId}
         `;
-        deletedUploadIds.push(uploadId);
+
+        // COUNT 결과를 숫자로 변환하여 비교 (문자열일 수 있으므로)
+        const remainingCount = Number(remainingRows[0]?.count || 0);
+
+        if (remainingCount === 0) {
+          // 남은 row가 없으면 해당 uploads 레코드도 삭제
+          await sql`
+            DELETE FROM uploads
+            WHERE id = ${uploadId}
+              AND company_id = ${companyId}
+          `;
+          deletedUploadIds.push(uploadId);
+        }
       }
+
+      // 트랜잭션 커밋
+      await sql`COMMIT`;
+
+      const responseMessage =
+        deletedUploadIds.length > 0
+          ? `${result.length}개의 데이터가 성공적으로 삭제되었습니다. (발주서 ${deletedUploadIds.length}개도 함께 삭제됨)`
+          : `${result.length}개의 데이터가 성공적으로 삭제되었습니다.`;
+
+      return NextResponse.json({
+        success: true,
+        message: responseMessage,
+        deletedCount: result.length,
+        deletedIds: result.map((r: any) => r.id),
+        deletedUploadIds,
+      });
+    } catch (transactionError: any) {
+      // 트랜잭션 롤백
+      await sql`ROLLBACK`;
+      throw transactionError;
     }
-
-    const responseMessage =
-      deletedUploadIds.length > 0
-        ? `${result.length}개의 데이터가 성공적으로 삭제되었습니다. (발주서 ${deletedUploadIds.length}개도 함께 삭제됨)`
-        : `${result.length}개의 데이터가 성공적으로 삭제되었습니다.`;
-
-    return NextResponse.json({
-      success: true,
-      message: responseMessage,
-      deletedCount: result.length,
-      deletedIds: result.map((r: any) => r.id),
-      deletedUploadIds,
-    });
   } catch (error: any) {
     console.error("데이터 삭제 실패:", error);
     return NextResponse.json(

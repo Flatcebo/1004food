@@ -1206,8 +1206,59 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             }
           }
 
+          // 원본 헤더에서 "공급단가" 헤더 인덱스 찾기
+          let supplyPriceIdx = -1;
+          if (rawHeader && Array.isArray(rawHeader)) {
+            try {
+              supplyPriceIdx = rawHeader.findIndex(
+                (h: any) => {
+                  if (!h || typeof h !== "string") return false;
+                  const headerStr = String(h).trim();
+                  return headerStr === "공급단가" || 
+                         headerStr.includes("공급단가") ||
+                         normalizeHeader(headerStr) === normalizeHeader("공급단가");
+                }
+              );
+              if (supplyPriceIdx !== -1) {
+                console.log(`✅ [공급단가] 원본 헤더에서 발견: 인덱스 ${supplyPriceIdx}, 헤더명: "${rawHeader[supplyPriceIdx]}"`);
+              }
+            } catch (error) {
+              console.warn("공급단가 헤더 찾기 실패:", error);
+            }
+          }
+
           // 데이터는 정규화된 헤더로 저장 (기존 방식 유지)
           let jsonData = [canonicalHeader, ...canonicalRows];
+
+          // "공급단가" 헤더가 있으면 정규화된 헤더와 데이터에 추가
+          if (supplyPriceIdx !== -1) {
+            // 정규화된 헤더에 "공급단가" 추가
+            const headerRow = jsonData[0] as any[];
+            if (!headerRow.includes("공급단가")) {
+              headerRow.push("공급단가");
+              console.log(`✅ [공급단가] 정규화된 헤더에 추가됨`);
+            }
+
+            // 각 데이터 행에 "공급단가" 값 추가
+            for (let i = 1; i < jsonData.length; i++) {
+              const originalRowIdx = headerRowIndex + i; // 원본 데이터의 행 인덱스
+              if (originalRowIdx < raw.length) {
+                const originalRow = raw[originalRowIdx];
+                if (originalRow && originalRow[supplyPriceIdx] !== undefined && originalRow[supplyPriceIdx] !== null) {
+                  const supplyPriceValue = String(originalRow[supplyPriceIdx]).trim();
+                  jsonData[i].push(supplyPriceValue);
+                  if (i <= 3) {
+                    console.log(`✅ [공급단가] 행 ${i}에 값 추가: "${supplyPriceValue}"`);
+                  }
+                } else {
+                  jsonData[i].push(""); // 값이 없으면 빈 문자열
+                }
+              } else {
+                jsonData[i].push(""); // 원본 행이 없으면 빈 문자열
+              }
+            }
+            console.log(`✅ [공급단가] 모든 데이터 행에 추가 완료`);
+          }
 
           // 쇼핑몰명이 있으면 업체명 컬럼에 자동 입력
           if (shopNameIdx !== -1 && jsonData.length > 1) {

@@ -135,6 +135,11 @@ const DEFAULT_HEADER_ALIASES = [
       "orderCode",
     ],
   },
+  {
+    column_key: "supplyPrice",
+    column_label: "공급단가",
+    aliases: ["공급단가", "공급가", "공급가격", "상품공급가", "supply_price", "supplyPrice"],
+  },
 ];
 
 /**

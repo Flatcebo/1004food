@@ -341,14 +341,58 @@ const SavedDataTable = memo(function SavedDataTable({
     }
 
     // 체크박스 선택 여부에 따라 다운로드 방식 결정
-    // - 체크박스가 선택되지 않으면: 현재 적용된 필터로 검색된 전체 데이터 다운로드 (필터 전달)
+    // - 체크박스가 선택되지 않으면: 필터링된 전체 데이터의 ID를 API에서 가져와서 다운로드
     // - 체크박스가 선택되면: 선택된 항목만 다운로드 (rowIds 전달)
     let rowIdsToDownload: number[] | null = null;
     if (selectedRows.size > 0) {
       // 체크박스가 선택된 경우: 선택된 행 ID만 사용
       rowIdsToDownload = Array.from(selectedRows);
+    } else {
+      // 체크박스가 선택되지 않은 경우: 필터링된 전체 데이터의 ID를 API에서 가져오기
+      try {
+        const params = new URLSearchParams();
+        // 적용된 필터만 사용
+        if (appliedType) params.append("type", appliedType);
+        if (appliedPostType) params.append("postType", appliedPostType);
+        if (appliedCompany && appliedCompany.length > 0) {
+          appliedCompany.forEach((c) => params.append("company", c));
+        }
+        if (appliedVendor && appliedVendor.length > 0) {
+          appliedVendor.forEach((v) => params.append("vendor", v));
+        }
+        if (appliedOrderStatus) params.append("orderStatus", appliedOrderStatus);
+        if (appliedSearchField && appliedSearchValue) {
+          params.append("searchField", appliedSearchField);
+          params.append("searchValue", appliedSearchValue);
+        }
+        if (appliedUploadTimeFrom) params.append("uploadTimeFrom", appliedUploadTimeFrom);
+        if (appliedUploadTimeTo) params.append("uploadTimeTo", appliedUploadTimeTo);
+        
+        // 필터링된 전체 데이터를 한 번에 가져오기 (limit을 totalCount로 설정)
+        // totalCount가 0이거나 없으면 1000으로 제한 (너무 큰 경우 방지)
+        const limit = totalCount > 0 ? Math.min(totalCount, 10000) : 1000;
+        params.append("page", "1");
+        params.append("limit", limit.toString());
+        
+        const listResponse = await fetch(`/api/upload/list?${params.toString()}`, {
+          headers: getAuthHeaders(),
+        });
+        const listResult = await listResponse.json();
+        
+        if (listResult.success && listResult.data) {
+          rowIdsToDownload = listResult.data.map((row: any) => row.id).filter((id: any) => id != null);
+          
+        } else {
+          // API 호출 실패 시 현재 페이지의 데이터 ID만 사용
+          rowIdsToDownload = tableRows.map((row: any) => row.id).filter((id: any) => id != null);
+          console.warn("⚠️ 필터링된 전체 데이터 ID 수집 실패, 현재 페이지 데이터만 사용");
+        }
+      } catch (error) {
+        console.error("필터링된 데이터 ID 수집 실패:", error);
+        // 에러 발생 시 현재 페이지의 데이터 ID만 사용
+        rowIdsToDownload = tableRows.map((row: any) => row.id).filter((id: any) => id != null);
+      }
     }
-    // 체크박스가 선택되지 않은 경우: rowIdsToDownload는 null로 유지하여 필터 사용
 
     setIsDownloading(true);
     try {
@@ -387,19 +431,8 @@ const SavedDataTable = memo(function SavedDataTable({
       // 사방넷 등록 양식인지 확인
       const isSabangnet = templateName.includes("사방넷");
 
-      // 체크박스가 선택된 경우: rowIds를 직접 API에 전달 (API에서 내주/외주 필터링 처리)
-      // 전체 다운로드인 경우: 필터를 전달하여 페이지네이션 무시하고 전체 데이터 조회
-      if (!rowIdsToDownload) {
-        // 체크박스가 선택되지 않은 경우: 필터에 발주서 타입 조건 추가
-        if (isInhouse) {
-          filters.type = "내주";
-        } else if (isOutsource) {
-          filters.type = "외주";
-        } else if (isCJOutsource) {
-          filters.searchField = "매핑코드";
-          filters.searchValue = "106464";
-        }
-      }
+      // 체크박스가 선택되지 않은 경우에도 rowIdsToDownload가 있으면 ID로 다운로드
+      // (필터링된 데이터의 ID를 모두 수집했으므로)
 
       // 템플릿 종류에 따라 API 선택
       const apiUrl = isOutsource
@@ -413,54 +446,25 @@ const SavedDataTable = memo(function SavedDataTable({
       const headers = getAuthHeaders();
 
       // 다운로드 요청 본문 구성
-      // - 체크박스 선택됨: rowIds만 전달, filters는 undefined
-      // - 체크박스 선택 안됨: rowIds는 null, filters 전달 (검색된 전체 데이터)
+      // - rowIdsToDownload가 있으면: rowIds만 전달 (필터링된 데이터의 ID 또는 선택된 ID)
+      // - rowIdsToDownload가 없으면: filters 전달 (필터가 없는 경우)
       const requestBody: any = {
         templateId: selectedTemplate,
         preferSabangName: useSabangName,
       };
 
       if (rowIdsToDownload && rowIdsToDownload.length > 0) {
-        // 체크박스가 선택된 경우: 선택된 항목만 다운로드
+        // 필터링된 데이터의 ID 또는 선택된 ID로 다운로드
         requestBody.rowIds = rowIdsToDownload;
         requestBody.filters = undefined;
+        console.log("📤 다운로드 요청: rowIds로 전달", {
+          rowIdsCount: rowIdsToDownload.length,
+        });
       } else {
-        // 체크박스가 선택되지 않은 경우: 필터로 검색된 전체 데이터 다운로드
+        // 필터가 없는 경우에만 filters 전달
         requestBody.rowIds = null;
-        // 필터가 실제로 적용되어 있는지 확인 (빈 배열, 빈 문자열, undefined, null 제외)
-        const hasActiveFilters = (() => {
-          // type, postType, orderStatus, searchField, searchValue, uploadTimeFrom, uploadTimeTo 체크
-          if (filters.type && filters.type.trim() !== "") return true;
-          if (filters.postType && filters.postType.trim() !== "") return true;
-          if (filters.orderStatus && filters.orderStatus.trim() !== "")
-            return true;
-          if (
-            filters.searchField &&
-            filters.searchField.trim() !== "" &&
-            filters.searchValue &&
-            filters.searchValue.trim() !== ""
-          )
-            return true;
-          if (filters.uploadTimeFrom && filters.uploadTimeFrom.trim() !== "")
-            return true;
-          if (filters.uploadTimeTo && filters.uploadTimeTo.trim() !== "")
-            return true;
-          // company, vendor는 배열이므로 길이 체크
-          if (
-            filters.company &&
-            Array.isArray(filters.company) &&
-            filters.company.length > 0
-          )
-            return true;
-          if (
-            filters.vendor &&
-            Array.isArray(filters.vendor) &&
-            filters.vendor.length > 0
-          )
-            return true;
-          return false;
-        })();
-        requestBody.filters = hasActiveFilters ? filters : undefined;
+        requestBody.filters = undefined;
+        console.log("📤 다운로드 요청: filters 없음 (모든 데이터)");
       }
 
       const response = await fetch(apiUrl, {

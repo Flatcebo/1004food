@@ -140,6 +140,7 @@ export async function POST(request: NextRequest) {
             ur.row_data,
             ur.shop_name,
             ur.mall_id,
+            ur.supply_price as row_supply_price,
             ur.created_at as row_created_at,
             p.id as product_id,
             p.code as product_code,
@@ -246,12 +247,19 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          // 공급가: 행사가 우선, 없으면 row_data의 공급가 또는 products의 sale_price
+          // 공급가 우선순위: 
+          // 1. 행사가 (아래에서 적용)
+          // 2. upload_rows.supply_price 컬럼 (엑셀 파일에서 수집한 공급단가)
+          // 3. 주문 데이터의 공급단가 (row_data["공급단가"])
+          // 4. 주문 데이터의 공급가 (row_data["공급가"])
+          // 5. 매핑된 상품의 공급단가 (order.product_sale_price)
+          // 6. 기타 (row_data["sale_price"] 등)
           let salePrice =
+            order.row_supply_price ||
+            rowData["공급단가"] ||
             rowData["공급가"] ||
             order.product_sale_price ||
             rowData["sale_price"] ||
-            rowData["공급단가"] ||
             0;
           let salePriceNum = typeof salePrice === "string" ? parseFloat(salePrice) : salePrice || 0;
 

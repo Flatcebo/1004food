@@ -155,12 +155,16 @@ export async function POST(request: NextRequest) {
             ? quantity
             : parseFloat(String(quantity)) || 1;
 
-        // 공급가: products의 sale_price 또는 row_data의 공급가
+        // 공급가 우선순위:
+        // 1. 주문 데이터의 공급단가 (row_data["공급단가"])
+        // 2. 주문 데이터의 공급가 (row_data["공급가"])
+        // 3. 매핑된 상품의 공급단가 (order.productSalePrice)
+        // 4. 기타 (row_data["sale_price"] 등)
         let salePrice =
-          order.productSalePrice ||
-          rowData["공급가"] ||
-          rowData["sale_price"] ||
           rowData["공급단가"] ||
+          rowData["공급가"] ||
+          order.productSalePrice ||
+          rowData["sale_price"] ||
           0;
         const salePriceNum =
           typeof salePrice === "number"

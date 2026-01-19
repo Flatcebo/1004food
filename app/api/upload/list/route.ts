@@ -150,18 +150,31 @@ export async function GET(request: NextRequest) {
     }
     
     if (vendors && vendors.length > 0) {
+      console.log("🔍 매입처명 필터링 조건 추가:", {
+        vendors,
+        vendorsLength: vendors.length,
+        vendorsType: typeof vendors,
+        firstVendor: vendors[0],
+      });
+      
       // 다중 vendors 필터링 (OR 조건)
-      // 매핑코드를 통해 products 테이블의 purchase(매입처명)와 비교
+      // purchase 테이블의 name 필드와 비교
+      // products.purchase가 purchase.name과 일치하는 경우를 찾음
       // 괄호로 묶어서 우선순위 명확히 (다른 조건들과 AND로 연결될 때 문제 방지)
+      // 괄호가 포함된 문자열도 정확히 매칭되도록 직접 비교
       conditions.push(sql`(
         EXISTS (
           SELECT 1 FROM products p
+          INNER JOIN purchase pur ON p.purchase = pur.name
           WHERE p.code = ur.row_data->>'매핑코드'
           AND p.company_id = ${companyId}
-          AND p.purchase = ANY(${vendors})
+          AND pur.company_id = ${companyId}
+          AND pur.name = ANY(${vendors}::text[])
         )
-        OR ur.row_data->>'업체명' = ANY(${vendors})
+        OR ur.row_data->>'업체명' = ANY(${vendors}::text[])
       )`);
+      
+      console.log("✅ 매입처명 조건 추가 완료");
     }
     if (companies && companies.length > 0) {
       // 다중 companies 필터링 (OR 조건)
@@ -280,7 +293,7 @@ export async function GET(request: NextRequest) {
         `;
         const testOrderStatusResult = await testOrderStatusQuery;
         
-        // 매입처명만 필터링
+        // 매입처명만 필터링 (purchase 테이블 사용)
         let testVendorResult = null;
         if (vendors && vendors.length > 0) {
           const testVendorQuery = sql`
@@ -291,17 +304,19 @@ export async function GET(request: NextRequest) {
               AND (
                 EXISTS (
                   SELECT 1 FROM products p
+                  INNER JOIN purchase pur ON p.purchase = pur.name
                   WHERE p.code = ur.row_data->>'매핑코드'
                   AND p.company_id = ${companyId}
-                  AND p.purchase = ANY(${vendors})
+                  AND pur.company_id = ${companyId}
+                  AND pur.name = ANY(${vendors}::text[])
                 )
-                OR ur.row_data->>'업체명' = ANY(${vendors})
+                OR ur.row_data->>'업체명' = ANY(${vendors}::text[])
               )
           `;
           testVendorResult = await testVendorQuery;
         }
         
-        // 매입처명 + 주문상태 함께 필터링
+        // 매입처명 + 주문상태 함께 필터링 (purchase 테이블 사용)
         let testBothResult = null;
         if (vendors && vendors.length > 0) {
           const testBothQuery = sql`
@@ -312,11 +327,13 @@ export async function GET(request: NextRequest) {
               AND (
                 EXISTS (
                   SELECT 1 FROM products p
+                  INNER JOIN purchase pur ON p.purchase = pur.name
                   WHERE p.code = ur.row_data->>'매핑코드'
                   AND p.company_id = ${companyId}
-                  AND p.purchase = ANY(${vendors})
+                  AND pur.company_id = ${companyId}
+                  AND pur.name = ANY(${vendors}::text[])
                 )
-                OR ur.row_data->>'업체명' = ANY(${vendors})
+                OR ur.row_data->>'업체명' = ANY(${vendors}::text[])
               )
               AND ur.row_data->>'주문상태' = ${orderStatus}
           `;
@@ -325,10 +342,45 @@ export async function GET(request: NextRequest) {
         
         console.log("🔍 테스트 쿼리 결과:", {
           orderStatus,
+          vendors,
           orderStatusOnly: testOrderStatusResult[0]?.count || 0,
           vendorOnly: testVendorResult?.[0]?.count || 0,
           bothConditions: testBothResult?.[0]?.count || 0,
         });
+        
+        // 실제 데이터베이스에 저장된 매입처명 값 샘플 확인
+        if (vendors && vendors.length > 0) {
+          try {
+            const samplePurchaseQuery = sql`
+              SELECT DISTINCT pur.name as purchase_name
+              FROM purchase pur
+              WHERE pur.company_id = ${companyId}
+                AND pur.name IS NOT NULL
+              LIMIT 10
+            `;
+            const samplePurchases = await samplePurchaseQuery;
+            console.log("🔍 purchase 테이블의 name 샘플:", {
+              samples: samplePurchases.map((p: any) => p.purchase_name),
+              filterVendors: vendors,
+            });
+            
+            const sampleCompanyNameQuery = sql`
+              SELECT DISTINCT ur.row_data->>'업체명' as company_name
+              FROM upload_rows ur
+              INNER JOIN uploads u ON ur.upload_id = u.id
+              WHERE u.company_id = ${companyId}
+                AND ur.row_data->>'업체명' IS NOT NULL
+              LIMIT 10
+            `;
+            const sampleCompanyNames = await sampleCompanyNameQuery;
+            console.log("🔍 upload_rows의 업체명 샘플:", {
+              samples: sampleCompanyNames.map((c: any) => c.company_name),
+              filterVendors: vendors,
+            });
+          } catch (sampleError) {
+            console.error("샘플 조회 실패:", sampleError);
+          }
+        }
       } catch (testError) {
         console.error("테스트 쿼리 실패:", testError);
       }
