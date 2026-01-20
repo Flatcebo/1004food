@@ -104,27 +104,19 @@ export async function POST(request: NextRequest) {
 
       if (lastLoginColumnExists[0]?.exists) {
         // JavaScript에서 한국 시간(Asia/Seoul)을 정확히 계산
-        // Intl.DateTimeFormat을 사용하여 한국 시간대의 현재 시간을 가져옴
+        // 한국 시간대(UTC+9)로 변환
         const now = new Date();
-        const koreaTimeFormatter = new Intl.DateTimeFormat('en-US', {
-          timeZone: 'Asia/Seoul',
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: false
-        });
+        const koreaOffset = 9 * 60; // 한국은 UTC+9 (분 단위)
+        const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+        const koreaTime = new Date(utc + (koreaOffset * 60000));
         
-        // 한국 시간으로 포맷팅
-        const parts = koreaTimeFormatter.formatToParts(now);
-        const year = parts.find(p => p.type === 'year')?.value;
-        const month = parts.find(p => p.type === 'month')?.value;
-        const day = parts.find(p => p.type === 'day')?.value;
-        const hour = parts.find(p => p.type === 'hour')?.value;
-        const minute = parts.find(p => p.type === 'minute')?.value;
-        const second = parts.find(p => p.type === 'second')?.value;
+        // YYYY-MM-DD HH:mm:ss 형식으로 포맷팅
+        const year = koreaTime.getFullYear();
+        const month = String(koreaTime.getMonth() + 1).padStart(2, '0');
+        const day = String(koreaTime.getDate()).padStart(2, '0');
+        const hour = String(koreaTime.getHours()).padStart(2, '0');
+        const minute = String(koreaTime.getMinutes()).padStart(2, '0');
+        const second = String(koreaTime.getSeconds()).padStart(2, '0');
         
         const koreaTimeString = `${year}-${month}-${day} ${hour}:${minute}:${second}`;
         

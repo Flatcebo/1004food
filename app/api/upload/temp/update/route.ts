@@ -205,13 +205,6 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    console.log("✅ 쿼리 실행 완료. 결과:", {
-      resultLength: result.length,
-      fileId: result[0]?.file_id,
-      rowCount: result[0]?.row_count,
-      isConfirmed: result[0]?.is_confirmed,
-    });
-
     if (!result || result.length === 0) {
       console.error("❌ 파일을 찾을 수 없음. fileId:", fileId);
       return NextResponse.json(

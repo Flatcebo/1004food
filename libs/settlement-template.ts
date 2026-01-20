@@ -261,22 +261,24 @@ export function createSettlementTemplate(
     currentRow++;
   });
 
-  // 주문 row 끝에 한 행 공란 처리 (테두리 있게)
-  const emptyRow = worksheet.getRow(currentRow);
-  emptyRow.height = 22;
-  const emptyCellA = emptyRow.getCell(1);
-  const emptyCellB = emptyRow.getCell(2);
-  const emptyCellC = emptyRow.getCell(3);
-  const emptyCellD = emptyRow.getCell(4);
-  [emptyCellA, emptyCellB, emptyCellC, emptyCellD].forEach((cell) => {
-    cell.border = {
-      top: {style: "thin", color: {argb: "FF000000"}},
-      left: {style: "thin", color: {argb: "FF000000"}},
-      bottom: {style: "thin", color: {argb: "FF000000"}},
-      right: {style: "thin", color: {argb: "FF000000"}},
-    };
-  });
-  currentRow++;
+  // 주문 row 끝에 공란 행 6개 처리 (테두리 있게)
+  for (let i = 0; i < 6; i++) {
+    const emptyRow = worksheet.getRow(currentRow);
+    emptyRow.height = 22;
+    const emptyCellA = emptyRow.getCell(1);
+    const emptyCellB = emptyRow.getCell(2);
+    const emptyCellC = emptyRow.getCell(3);
+    const emptyCellD = emptyRow.getCell(4);
+    [emptyCellA, emptyCellB, emptyCellC, emptyCellD].forEach((cell) => {
+      cell.border = {
+        top: {style: "thin", color: {argb: "FF000000"}},
+        left: {style: "thin", color: {argb: "FF000000"}},
+        bottom: {style: "thin", color: {argb: "FF000000"}},
+        right: {style: "thin", color: {argb: "FF000000"}},
+      };
+    });
+    currentRow++;
+  }
 
   // ===== 총합 행 =====
   const totalRow = worksheet.getRow(currentRow);

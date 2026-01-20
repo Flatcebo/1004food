@@ -88,19 +88,12 @@ export async function generateUniqueCodesForVendors(
   const dateStr = getDateString();
   const codes: string[] = [];
 
-  console.log(
-    `[generateUniqueCodesForVendors] 총 ${vendorNames.length}개 코드 생성 시작`
-  );
-
   // prefix별 현재 increment 추적 (업체명 전체가 아닌 prefix 기준)
   const prefixIncrements = new Map<string, number>();
 
   // 각 고유 prefix별로 최대 increment 초기화
   const uniquePrefixes = Array.from(
     new Set(vendorNames.map((name) => getVendorPrefix(name)))
-  );
-  console.log(
-    `[generateUniqueCodesForVendors] 고유 prefix ${uniquePrefixes.length}개`
   );
 
   for (const prefix of uniquePrefixes) {
@@ -127,9 +120,6 @@ export async function generateUniqueCodesForVendors(
   // 생성된 코드 내에서 중복 확인
   const codeSet = new Set(codes);
   if (codeSet.size !== codes.length) {
-    console.error(
-      `[generateUniqueCodesForVendors] 배치 내 중복 발견! 생성: ${codes.length}개, 고유: ${codeSet.size}개`
-    );
     throw new Error("생성된 코드 배치 내에 중복이 있습니다.");
   }
 
@@ -139,9 +129,6 @@ export async function generateUniqueCodesForVendors(
     throw new Error("생성된 코드가 DB에 이미 존재합니다.");
   }
 
-  console.log(
-    `[generateUniqueCodesForVendors] 코드 생성 완료 (${codes.length}개)`
-  );
   return codes;
 }
 

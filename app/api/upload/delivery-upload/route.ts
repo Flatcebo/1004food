@@ -79,6 +79,7 @@ export async function POST(request: NextRequest) {
           "운송장",
           "송장번호",
           "송장",
+          "등기번호",
           "trackingnumber",
           "tracking",
         ],
@@ -126,6 +127,7 @@ export async function POST(request: NextRequest) {
         if (
           normalized === "운송장번호" ||
           normalized === "송장번호" ||
+          normalized === "등기번호" ||
           normalized === "trackingnumber"
         ) {
           trackingNumberIdx = index;
@@ -170,6 +172,8 @@ export async function POST(request: NextRequest) {
           normalized.includes("운송장") ||
           normalized.includes("송장번호") ||
           normalized.includes("송장") ||
+          normalized.includes("등기번호") ||
+          normalized.includes("등기") ||
           normalized.includes("trackingnumber") ||
           normalized.includes("tracking")
         ) {
@@ -214,11 +218,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: `운송장 헤더를 찾을 수 없습니다. '운송장' 또는 '운송장번호' 헤더가 필요합니다.\n발견된 헤더: ${headers.join(
+          error: `운송장 헤더를 찾을 수 없습니다. '운송장', '운송장번호', 또는 '등기번호' 헤더가 필요합니다.\n발견된 헤더: ${headers.join(
             ", "
           )}`,
           foundHeaders: headers,
-          missingHeaders: ["운송장", "운송장번호"],
+          missingHeaders: ["운송장", "운송장번호", "등기번호"],
         },
         {status: 400}
       );

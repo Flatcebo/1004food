@@ -107,17 +107,6 @@ export function checkFileValidation(file: UploadedFile | any): {
     const postType =
       postTypeIdx !== -1 ? String(row[postTypeIdx] || "").trim() : "";
 
-    console.log(`행 ${i} 검증:`, {
-      productName,
-      mappingCode,
-      vendorName,
-      type,
-      postType,
-      hasProductCodeMap: !!productCodeMap[productName],
-      hasTableMapping:
-        mappingIdx !== -1 && !!String(row[mappingIdx] || "").trim(),
-    });
-
     // 매핑코드가 없으면 false
     if (!mappingCode) {
       const errorMsg = `행 ${i}: 매핑코드가 공란입니다. 상품명: "${productName}"`;

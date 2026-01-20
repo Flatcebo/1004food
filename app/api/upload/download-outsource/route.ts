@@ -1,6 +1,6 @@
 import sql from "@/lib/db";
 import {NextRequest, NextResponse} from "next/server";
-import {getCompanyIdFromRequest} from "@/lib/company";
+import {getCompanyIdFromRequest, getUserIdFromRequest} from "@/lib/company";
 import * as Excel from "exceljs";
 import {mapDataToTemplate, sortExcelData} from "@/utils/excelDataMapping";
 import JSZip from "jszip";
@@ -69,10 +69,51 @@ function formatPhoneNumber(phoneNumber: string): string {
   return phoneNumber;
 }
 
+// grade가 "온라인"인 경우 전화번호1에 공백 추가
+function formatPhoneNumber1ForOnline(phoneNumber: string): string {
+  if (!phoneNumber || phoneNumber.trim() === "") return phoneNumber;
+
+  // 하이픈이 있는 경우: 첫 번째 하이픈 앞에 공백 추가
+  if (phoneNumber.includes("-")) {
+    const firstDashIndex = phoneNumber.indexOf("-");
+    return (
+      phoneNumber.slice(0, firstDashIndex) +
+      " " +
+      phoneNumber.slice(firstDashIndex)
+    );
+  }
+
+  // 하이픈이 없는 경우: 앞번호 뒤에 공백 추가
+  const numOnly = phoneNumber.replace(/\D/g, "");
+  if (numOnly.length === 0) return phoneNumber;
+
+  let prefixLength = 3; // 기본값: 3자리 (010 등)
+
+  if (numOnly.startsWith("02")) {
+    prefixLength = 2; // 02
+  } else if (numOnly.startsWith("0508") || numOnly.startsWith("050")) {
+    prefixLength = 4; // 0508, 050X
+  } else if (numOnly.startsWith("0") && numOnly.length >= 11) {
+    prefixLength = 3; // 010 등
+  }
+
+  const prefix = numOnly.slice(0, prefixLength);
+  const suffix = numOnly.slice(prefixLength);
+
+  return prefix + " " + suffix;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const {templateId, rowIds, filters, rows, preferSabangName} = body;
+    const {
+      templateId,
+      rowIds,
+      filters,
+      rows,
+      preferSabangName,
+      useInternalCode = true,
+    } = body;
 
     if (!templateId) {
       return NextResponse.json(
@@ -91,6 +132,28 @@ export async function POST(request: NextRequest) {
         {status: 400}
       );
     }
+
+    // user_id 추출 및 grade 확인
+    const userId = await getUserIdFromRequest(request);
+    let userGrade: string | null = null;
+
+    if (userId && companyId) {
+      try {
+        const userResult = await sql`
+          SELECT grade
+          FROM users
+          WHERE id = ${userId} AND company_id = ${companyId}
+        `;
+
+        if (userResult.length > 0) {
+          userGrade = userResult[0].grade;
+        }
+      } catch (error) {
+        console.error("사용자 정보 조회 실패:", error);
+      }
+    }
+
+    const isOnlineUser = userGrade === "온라인";
 
     // 템플릿 정보 조회 (company_id 필터링)
     const templateResult = await sql`
@@ -774,9 +837,12 @@ export async function POST(request: NextRequest) {
 
           // 전화번호1 가공
           if (processedRow["전화번호1"]) {
-            processedRow["전화번호1"] = formatPhoneNumber(
-              processedRow["전화번호1"]
-            );
+            let phone1 = formatPhoneNumber(processedRow["전화번호1"]);
+            // grade가 "온라인"인 경우 공백 추가
+            if (isOnlineUser) {
+              phone1 = formatPhoneNumber1ForOnline(phone1);
+            }
+            processedRow["전화번호1"] = phone1;
           }
 
           // 전화번호2 가공
@@ -829,9 +895,12 @@ export async function POST(request: NextRequest) {
 
           // 전화번호1 가공
           if (processedRow["전화번호1"]) {
-            processedRow["전화번호1"] = formatPhoneNumber(
-              processedRow["전화번호1"]
-            );
+            let phone1 = formatPhoneNumber(processedRow["전화번호1"]);
+            // grade가 "온라인"인 경우 공백 추가
+            if (isOnlineUser) {
+              phone1 = formatPhoneNumber1ForOnline(phone1);
+            }
+            processedRow["전화번호1"] = phone1;
           }
 
           // 전화번호2 가공
@@ -1066,9 +1135,24 @@ export async function POST(request: NextRequest) {
         const sheet = wb.addWorksheet(templateData.worksheetName);
 
         // 헤더 결정: purchase 템플릿이 있으면 사용, 없으면 기존 헤더 사용
-        const finalHeaders = purchaseTemplateHeaders
+        let finalHeaders = purchaseTemplateHeaders
           ? getTemplateHeaderNames(purchaseTemplateHeaders)
           : headers;
+
+        // 헤더명 변경: "주문하신분" -> "주문자명", K헤더(인덱스 10) "전화번호" -> "주문자번호"
+        finalHeaders = finalHeaders.map((header: string, index: number) => {
+          if (header === "주문하신분" || header.includes("주문하신분")) {
+            return "주문자명";
+          }
+          // K헤더(인덱스 10, 0-based)인 경우에만 "전화번호" -> "주문자번호"
+          if (
+            index === 10 &&
+            (header === "전화번호" || header.includes("전화번호"))
+          ) {
+            return "주문자번호";
+          }
+          return header;
+        });
 
         // 헤더 추가
         const headerRow = sheet.addRow(finalHeaders);
@@ -1160,15 +1244,45 @@ export async function POST(request: NextRequest) {
                 stringValue = "★" + stringValue;
               }
 
-              // 주문번호인 경우 내부코드 사용
+              // 주문번호인 경우 내부코드 사용 또는 sabang_code 사용
               if (
                 header.column_key === "orderNumber" ||
                 header.display_name.includes("주문번호") ||
                 header.display_name.includes("주문 번호")
               ) {
-                // 내부코드가 있으면 우선 사용, 없으면 기존 값 사용
+                // grade가 "온라인"인 경우 sabang_code만 사용 (내부코드 사용 안 함)
+                if (isOnlineUser) {
+                  stringValue =
+                    row["sabang_code"] || row["주문번호"] || stringValue || "";
+                } else if (useInternalCode) {
+                  stringValue =
+                    row["내부코드"] || row["주문번호"] || stringValue || "";
+                } else {
+                  stringValue =
+                    row["sabang_code"] || row["주문번호"] || stringValue || "";
+                }
+              }
+
+              // 주문자명 헤더 처리
+              if (
+                header.column_key === "ordererName" ||
+                header.display_name === "주문자명" ||
+                header.display_name.includes("주문자명")
+              ) {
                 stringValue =
-                  row["내부코드"] || row["주문번호"] || stringValue || "";
+                  row["주문자명"] || row["주문하신분"] || stringValue;
+              }
+
+              // 주문자번호 헤더 처리 (K헤더)
+              if (
+                header.display_name === "주문자번호" ||
+                (idx === 10 && header.display_name.includes("전화번호"))
+              ) {
+                stringValue =
+                  row["주문자 전화번호"] ||
+                  row["주문자전화번호"] ||
+                  row["전화번호"] ||
+                  stringValue;
               }
 
               // 전화번호 처리
@@ -1187,6 +1301,15 @@ export async function POST(request: NextRequest) {
                   stringValue = numOnly;
                 }
                 stringValue = formatPhoneNumber(stringValue);
+
+                // 전화번호1이고 grade가 "온라인"인 경우 공백 추가
+                if (
+                  (header.display_name === "전화번호1" ||
+                    header.display_name.includes("전화번호1")) &&
+                  isOnlineUser
+                ) {
+                  stringValue = formatPhoneNumber1ForOnline(stringValue);
+                }
               }
 
               // 우편번호 처리
@@ -1217,6 +1340,14 @@ export async function POST(request: NextRequest) {
                   formatPhone: true, // 외주 발주서에서는 전화번호에 하이픈 추가
                 });
                 phone1Value = value != null ? String(value) : "";
+                // formatPhoneNumber 적용
+                if (phone1Value) {
+                  phone1Value = formatPhoneNumber(phone1Value);
+                  // grade가 "온라인"인 경우 공백 추가
+                  if (isOnlineUser) {
+                    phone1Value = formatPhoneNumber1ForOnline(phone1Value);
+                  }
+                }
               }
             });
 
@@ -1224,6 +1355,13 @@ export async function POST(request: NextRequest) {
               // header를 문자열로 변환
               const headerStr =
                 typeof header === "string" ? header : String(header || "");
+
+              // I헤더(인덱스 8, 0-based)인 경우 주문 수량 반환
+              if (headerIdx === 8) {
+                const quantity =
+                  row["수량"] || row["주문수량"] || row["quantity"] || 1;
+                return String(quantity);
+              }
 
               // 빈 헤더인 경우 주문 수량 반환
               if (!headerStr || headerStr.trim() === "") {
@@ -1248,9 +1386,35 @@ export async function POST(request: NextRequest) {
                 stringValue = "★" + stringValue;
               }
 
-              // 주문번호인 경우 내부코드 사용
+              // 주문번호인 경우 내부코드 사용 또는 sabang_code 사용
               if (headerStr === "주문번호" || headerStr.includes("주문번호")) {
-                stringValue = row["내부코드"] || stringValue;
+                // grade가 "온라인"인 경우 sabang_code만 사용 (내부코드 사용 안 함)
+                if (isOnlineUser) {
+                  stringValue =
+                    row["sabang_code"] || row["주문번호"] || stringValue;
+                } else if (useInternalCode) {
+                  stringValue = row["내부코드"] || stringValue;
+                } else {
+                  stringValue = row["sabang_code"] || stringValue;
+                }
+              }
+
+              // 주문자명 헤더 처리 (주문하신분 -> 주문자명으로 변경됨)
+              if (headerStr === "주문자명" || headerStr.includes("주문자명")) {
+                stringValue =
+                  row["주문자명"] || row["주문하신분"] || stringValue;
+              }
+
+              // 주문자번호 헤더 처리 (K헤더 전화번호 -> 주문자번호로 변경됨)
+              if (
+                headerStr === "주문자번호" ||
+                (headerIdx === 10 && headerStr.includes("전화번호"))
+              ) {
+                stringValue =
+                  row["주문자 전화번호"] ||
+                  row["주문자전화번호"] ||
+                  row["전화번호"] ||
+                  stringValue;
               }
 
               if (headerStr.includes("전화") || headerStr.includes("연락")) {
@@ -1275,6 +1439,15 @@ export async function POST(request: NextRequest) {
 
                 // 하이픈 추가하여 전화번호 형식 맞춤
                 stringValue = formatPhoneNumber(stringValue);
+
+                // 전화번호1이고 grade가 "온라인"인 경우 공백 추가
+                if (
+                  (headerStr === "전화번호1" ||
+                    headerStr.includes("전화번호1")) &&
+                  isOnlineUser
+                ) {
+                  stringValue = formatPhoneNumber1ForOnline(stringValue);
+                }
               }
 
               if (headerStr.includes("우편")) {
@@ -1325,6 +1498,17 @@ export async function POST(request: NextRequest) {
             }
           });
         });
+
+        // I1 셀에 총 row 수 작성 (I열은 9번째 열)
+        const totalRowCount = excelData.length;
+        const i1Cell = sheet.getCell("I1");
+        i1Cell.value = totalRowCount;
+
+        // I열의 데이터 행들(2행부터)을 공란 처리
+        for (let rowNum = 2; rowNum <= sheet.rowCount; rowNum++) {
+          const iCell = sheet.getCell(`I${rowNum}`);
+          iCell.value = "";
+        }
 
         // 엑셀 버퍼 생성
         const buffer = await wb.xlsx.writeBuffer();
@@ -1519,9 +1703,12 @@ export async function POST(request: NextRequest) {
 
       // 전화번호1 가공
       if (processedRow["전화번호1"]) {
-        processedRow["전화번호1"] = formatPhoneNumber(
-          processedRow["전화번호1"]
-        );
+        let phone1 = formatPhoneNumber(processedRow["전화번호1"]);
+        // grade가 "온라인"인 경우 공백 추가
+        if (isOnlineUser) {
+          phone1 = formatPhoneNumber1ForOnline(phone1);
+        }
+        processedRow["전화번호1"] = phone1;
       }
 
       // 전화번호2 가공
@@ -1625,6 +1812,17 @@ export async function POST(request: NextRequest) {
         }
       });
     });
+
+    // I1 셀에 총 row 수 작성 (I열은 9번째 열)
+    const totalRowCount = excelData.length;
+    const i1Cell = sheet.getCell("I1");
+    i1Cell.value = totalRowCount;
+
+    // I열의 데이터 행들(2행부터)을 공란 처리
+    for (let rowNum = 2; rowNum <= sheet.rowCount; rowNum++) {
+      const iCell = sheet.getCell(`I${rowNum}`);
+      iCell.value = "";
+    }
 
     // 엑셀 파일 생성
     const buffer = await wb.xlsx.writeBuffer();

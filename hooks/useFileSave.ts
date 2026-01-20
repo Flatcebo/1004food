@@ -644,8 +644,6 @@ export function useFileSave({
                 productInfo.postType = "";
               }
 
-              console.log("productInfo >>>", productInfo);
-              console.log("newProducts >>>", newProducts);
               // 이미 수집된 상품인지 확인 (중복 방지) - 상품명, 매핑코드, 택배사 모두 같아야 중복으로 간주
               // 택배사는 null/undefined를 빈 문자열로 정규화하여 비교
               const normalizedPostType = productInfo.postType || "";
@@ -780,13 +778,6 @@ export function useFileSave({
               mallId: fileData.mallId || null, // mallId 포함
               isConfirmed: true,
             }),
-          });
-
-          console.log("📤 useFileSave에서 업데이트 요청:", {
-            fileId: fileData.id,
-            fileName: fileData.fileName,
-            vendorName: fileData.vendorName,
-            mallId: fileData.mallId,
           });
 
           const updateResult = await updateResponse.json();

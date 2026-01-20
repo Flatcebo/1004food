@@ -1041,14 +1041,34 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
 
           // 각 내부 컬럼에 대응하는 원본 인덱스 계산
           const indexMap: {[key: string]: number} = {};
+          const user = useAuthStore.getState().user;
+          const isOnlineUser = user?.grade === "온라인";
+          
           internalColumns.forEach((col) => {
-            const idx = rawHeader.findIndex((h) =>
-              col.aliases.some(
-                (al) => normalizeHeader(String(h)) === normalizeHeader(al)
-              )
-            );
-            indexMap[col.key] = idx; // 없으면 -1
+            // grade === "온라인"인 경우 "주문번호" 컬럼은 "주문번호(사방넷)"만 찾기
+            if (col.key === "orderCode" && isOnlineUser) {
+              const sabangnetIdx = rawHeader.findIndex((h) => {
+                const normalizedH = normalizeHeader(String(h));
+                return normalizedH === normalizeHeader("주문번호(사방넷)");
+              });
+              indexMap[col.key] = sabangnetIdx; // 없으면 -1
+            } else {
+              // 그 외의 경우 기존 로직 사용
+              const idx = rawHeader.findIndex((h) =>
+                col.aliases.some(
+                  (al) => normalizeHeader(String(h)) === normalizeHeader(al)
+                )
+              );
+              indexMap[col.key] = idx; // 없으면 -1
+            }
           });
+          
+          // 디버깅: 온라인 사용자의 경우 주문번호 인덱스 확인
+          if (isOnlineUser && indexMap["orderCode"] !== -1) {
+            console.log(`✅ [온라인 사용자] "주문번호(사방넷)" 헤더 발견: 인덱스 ${indexMap["orderCode"]}, 헤더명: "${rawHeader[indexMap["orderCode"]]}"`);
+          } else if (isOnlineUser) {
+            console.warn(`⚠️ [온라인 사용자] "주문번호(사방넷)" 헤더를 찾을 수 없음`);
+          }
 
           // 내부 절대 순서로 헤더/데이터 재구성
           // 헤더 행 다음부터 데이터로 사용
