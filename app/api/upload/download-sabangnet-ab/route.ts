@@ -56,19 +56,53 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 어제~오늘 날짜 계산 (한국 시간 기준)
-    const today = new Date();
-    const koreaTime = new Date(today.getTime() + 9 * 60 * 60 * 1000);
+    // 날짜 계산 (한국 서울 시간 기준)
+    // 현재 시간을 한국 시간으로 변환
+    const now = new Date();
+    const koreaOffset = 9 * 60 * 60 * 1000; // UTC+9 (한국 시간)
+    const utcTime = now.getTime() + (now.getTimezoneOffset() * 60 * 1000);
+    const koreaTime = new Date(utcTime + koreaOffset);
     
-    const yesterdayStart = new Date(koreaTime);
-    yesterdayStart.setDate(yesterdayStart.getDate() - 1);
-    yesterdayStart.setHours(0, 0, 0, 0);
+    let dateFromUTC: Date;
+    let dateToUTC: Date;
     
-    const todayEnd = new Date(koreaTime);
-    todayEnd.setHours(23, 59, 59, 999);
-    
-    const yesterdayStartUTC = new Date(yesterdayStart.getTime() - 9 * 60 * 60 * 1000);
-    const todayEndUTC = new Date(todayEnd.getTime() - 9 * 60 * 60 * 1000);
+    if (dateFilter === "yesterday") {
+      // 어제만 (한국 시간 기준)
+      const yesterdayStart = new Date(koreaTime);
+      yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+      yesterdayStart.setHours(0, 0, 0, 0);
+      
+      const yesterdayEnd = new Date(koreaTime);
+      yesterdayEnd.setDate(yesterdayEnd.getDate() - 1);
+      yesterdayEnd.setHours(23, 59, 59, 999);
+      
+      // 한국 시간을 UTC로 변환 (데이터베이스는 UTC로 저장되어 있음)
+      dateFromUTC = new Date(yesterdayStart.getTime() - koreaOffset);
+      dateToUTC = new Date(yesterdayEnd.getTime() - koreaOffset);
+    } else if (dateFilter === "today") {
+      // 오늘만 (한국 시간 기준)
+      const todayStart = new Date(koreaTime);
+      todayStart.setHours(0, 0, 0, 0);
+      
+      const todayEnd = new Date(koreaTime);
+      todayEnd.setHours(23, 59, 59, 999);
+      
+      // 한국 시간을 UTC로 변환
+      dateFromUTC = new Date(todayStart.getTime() - koreaOffset);
+      dateToUTC = new Date(todayEnd.getTime() - koreaOffset);
+    } else {
+      // 전체 (어제~오늘, 한국 시간 기준)
+      const yesterdayStart = new Date(koreaTime);
+      yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+      yesterdayStart.setHours(0, 0, 0, 0);
+      
+      const todayEnd = new Date(koreaTime);
+      todayEnd.setHours(23, 59, 59, 999);
+      
+      // 한국 시간을 UTC로 변환
+      dateFromUTC = new Date(yesterdayStart.getTime() - koreaOffset);
+      dateToUTC = new Date(todayEnd.getTime() - koreaOffset);
+    }
 
     // 조회할 업체 목록 결정
     let targetVendorNames: string[] = [];
@@ -115,8 +149,8 @@ export async function POST(request: NextRequest) {
             FROM upload_rows ur
             INNER JOIN uploads u ON ur.upload_id = u.id
             WHERE u.company_id = ${companyId}
-              AND u.created_at >= ${yesterdayStartUTC.toISOString()}
-              AND u.created_at <= ${todayEndUTC.toISOString()}
+              AND u.created_at >= ${dateFromUTC.toISOString()}
+              AND u.created_at <= ${dateToUTC.toISOString()}
               AND ur.row_data->>'업체명' = ANY(${allowedVendorNames})
               AND ur.row_data->>'업체명' IS NOT NULL
               AND ur.row_data->>'업체명' != ''
