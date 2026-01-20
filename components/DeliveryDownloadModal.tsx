@@ -294,7 +294,7 @@ export default function DeliveryDownloadModal({
         </div>
 
         {/* 전체 AB 다운로드 버튼 */}
-        <div className="mb-6 flex justify-end">
+        <div className="mb-6 flex justify-end items-center gap-3">
           {(() => {
             // 활성화된 AB 버튼이 있는 업체 확인 (sabang_code 입력률 1% 이상)
             const hasActiveSabangnetButton = vendors.some((vendor) => {
@@ -307,27 +307,42 @@ export default function DeliveryDownloadModal({
             });
 
             return (
-              <button
-                onClick={handleDownloadAllSabangnetAB}
-                disabled={downloadingAllSabangnet || !hasActiveSabangnetButton}
-                className={`px-6 py-2 rounded-md text-sm font-semibold transition-colors flex items-center gap-2 ${
-                  downloadingAllSabangnet || !hasActiveSabangnetButton
-                    ? "bg-gray-400 cursor-not-allowed text-white"
-                    : "bg-green-600 hover:bg-green-700 text-white"
-                }`}
-              >
-                {downloadingAllSabangnet ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>다운로드 중...</span>
-                  </>
-                ) : (
-                  <>
-                    <IoDownload className="text-lg" />
-                    <span>전체 AB 다운</span>
-                  </>
-                )}
-              </button>
+              <>
+                <select
+                  value={dateFilter}
+                  onChange={(e) =>
+                    setDateFilter(
+                      e.target.value as "yesterday" | "today" | "all"
+                    )
+                  }
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                >
+                  <option value="all">전체</option>
+                  <option value="yesterday">어제</option>
+                  <option value="today">오늘</option>
+                </select>
+                <button
+                  onClick={handleDownloadAllSabangnetAB}
+                  disabled={downloadingAllSabangnet || !hasActiveSabangnetButton}
+                  className={`px-6 py-2 rounded-md text-sm font-semibold transition-colors flex items-center gap-2 ${
+                    downloadingAllSabangnet || !hasActiveSabangnetButton
+                      ? "bg-gray-400 cursor-not-allowed text-white"
+                      : "bg-green-600 hover:bg-green-700 text-white"
+                  }`}
+                >
+                  {downloadingAllSabangnet ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>다운로드 중...</span>
+                    </>
+                  ) : (
+                    <>
+                      <IoDownload className="text-lg" />
+                      <span>전체 AB 다운</span>
+                    </>
+                  )}
+                </button>
+              </>
             );
           })()}
         </div>
