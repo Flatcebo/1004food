@@ -63,6 +63,13 @@ export function useFileSave({
       if (confirmedFileIds.length > 0) {
         filesToUpload = confirmedFileIds
           .map((fileId) => {
+            // uploadedFiles에서 먼저 확인 (서버에서 최신 상태)
+            const uploadedFile = uploadedFiles.find((f) => f.id === fileId);
+            if (uploadedFile) {
+              return uploadedFile;
+            }
+            
+            // uploadedFiles에 없으면 sessionStorage에서 확인
             const storedFile = sessionStorage.getItem(`uploadedFile_${fileId}`);
             if (storedFile) {
               try {
@@ -72,7 +79,9 @@ export function useFileSave({
                 return null;
               }
             }
-            return uploadedFiles.find((f) => f.id === fileId);
+            
+            // 둘 다 없으면 null 반환 (삭제된 파일)
+            return null;
           })
           .filter((f) => f != null);
       } else {
@@ -83,9 +92,21 @@ export function useFileSave({
       }
 
       if (filesToUpload.length === 0) {
-        alert("업로드할 파일이 없습니다.");
+        alert("업로드할 파일이 없습니다. 파일이 삭제되었거나 찾을 수 없습니다.");
         stopLoading();
         return false;
+      }
+
+      // 삭제된 파일이 confirmedFiles에 남아있는지 확인
+      if (filesToUpload.length < confirmedFileIds.length) {
+        const missingFileIds = confirmedFileIds.filter(
+          (fileId) => !filesToUpload.some((f) => f.id === fileId)
+        );
+        console.warn("삭제된 파일이 confirmedFiles에 남아있음:", missingFileIds);
+        // 삭제된 파일을 confirmedFiles에서 제거
+        missingFileIds.forEach((fileId) => {
+          unconfirmFile(fileId);
+        });
       }
 
       updateLoadingMessage("파일 유효성 검사 중...");
@@ -695,7 +716,12 @@ export function useFileSave({
         // 각 파일을 서버에서 is_confirmed = true로 업데이트
         const updatePromises = fileIdsToConfirm.map(async (fileId) => {
           const file = filesToUpload.find((f) => f.id === fileId);
-          if (!file) return null;
+          if (!file) {
+            console.warn(`파일을 찾을 수 없음: ${fileId}`);
+            // 삭제된 파일을 confirmedFiles에서 제거
+            unconfirmFile(fileId);
+            return null;
+          }
 
           // uploadData에서 해당 파일의 업데이트된 productIdMap 찾기
           const uploadDataItem = uploadData.find(
@@ -765,6 +791,13 @@ export function useFileSave({
 
           const updateResult = await updateResponse.json();
           if (!updateResult.success) {
+            // 파일을 찾을 수 없는 경우 (404 또는 파일이 삭제된 경우)
+            if (updateResult.error?.includes("찾을 수 없") || updateResponse.status === 404) {
+              console.warn(`파일이 서버에 존재하지 않음: ${fileData.fileName} (${fileId})`);
+              // 삭제된 파일을 confirmedFiles에서 제거
+              unconfirmFile(fileId);
+              return null;
+            }
             console.error(
               `파일 ${fileData.fileName} 확인 상태 업데이트 실패:`,
               updateResult.error
@@ -774,7 +807,21 @@ export function useFileSave({
           return fileId;
         });
 
-        await Promise.all(updatePromises);
+        const updateResults = await Promise.all(updatePromises);
+        const successfullyUpdatedFileIds = updateResults.filter((id) => id !== null) as string[];
+        
+        // 업데이트 실패한 파일이 있으면 사용자에게 알림
+        if (successfullyUpdatedFileIds.length < fileIdsToConfirm.length) {
+          const failedCount = fileIdsToConfirm.length - successfullyUpdatedFileIds.length;
+          console.warn(`${failedCount}개 파일이 업데이트에 실패했습니다. (삭제되었거나 찾을 수 없음)`);
+        }
+
+        // 업데이트된 파일이 없으면 저장 중단
+        if (successfullyUpdatedFileIds.length === 0) {
+          alert("저장할 파일이 없습니다. 모든 파일이 삭제되었거나 찾을 수 없습니다.");
+          stopLoading();
+          return false;
+        }
 
         // company-id 헤더 포함
         const confirmHeaders: HeadersInit = {

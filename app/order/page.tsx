@@ -710,12 +710,18 @@ function OrderPageContent() {
         removeUploadedFile(fileId);
         unconfirmFile(fileId); // confirmedFiles에서도 제거
         sessionStorage.removeItem(`uploadedFile_${fileId}`);
+
+        // 서버에서 파일 목록 다시 불러오기 (삭제된 파일이 리스트에서 제거되도록)
+        await loadFilesFromServer();
       } else {
         console.error("서버에서 파일 삭제 실패:", result.error);
         // 서버 삭제 실패해도 로컬에서는 삭제
         removeUploadedFile(fileId);
         unconfirmFile(fileId);
         sessionStorage.removeItem(`uploadedFile_${fileId}`);
+
+        // 서버에서 파일 목록 다시 불러오기 (동기화)
+        await loadFilesFromServer();
       }
     } catch (error) {
       console.error("서버에서 파일 삭제 실패:", error);
@@ -723,6 +729,9 @@ function OrderPageContent() {
       removeUploadedFile(fileId);
       unconfirmFile(fileId);
       sessionStorage.removeItem(`uploadedFile_${fileId}`);
+
+      // 서버에서 파일 목록 다시 불러오기 (동기화)
+      await loadFilesFromServer();
     } finally {
       // 파일 삭제 후 input value 초기화 (같은 파일을 다시 선택할 수 있도록)
       if (fileInputRef.current) {

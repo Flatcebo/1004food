@@ -63,6 +63,12 @@ function FileViewContent() {
   const originalMessagesRef = useRef<{[rowIdx: number]: string}>({});
   // 순수 원본 배송메시지 저장 (rowIdx -> 순수 원본 메시지, 업체명 제거된 메시지)
   const pureOriginalMessagesRef = useRef<{[rowIdx: number]: string}>({});
+  // 원본 상품명 및 수량 저장 (rowIdx -> {productName, quantity})
+  const originalProductDataRef = useRef<{[rowIdx: number]: {productName: string; quantity: string}}>({});
+  // 수량 변환 상태 (변환되었는지 여부)
+  const [isQuantityConverted, setIsQuantityConverted] = useState(false);
+  // 드래그 시작 시점의 선택 상태 저장
+  const dragStartSelectionRef = useRef<boolean>(false);
   const [codeEditWindow, setCodeEditWindow] = useState<{
     open: boolean;
     rowIdx: number;
@@ -84,6 +90,10 @@ function FileViewContent() {
   const [isEditMode, setIsEditMode] = useState(false);
   // 체크박스 선택 상태
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
+  // 드래그 선택 상태
+  const [dragStartRow, setDragStartRow] = useState<number | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStartPos, setDragStartPos] = useState<{x: number; y: number} | null>(null);
   // 일괄 적용 인풋 상태
   const [bulkProductName, setBulkProductName] = useState("");
   const [bulkQuantity, setBulkQuantity] = useState("");
@@ -222,6 +232,7 @@ function FileViewContent() {
       setSelectedRows(new Set());
       setBulkProductName("");
       setBulkQuantity("");
+      // 수량 변환 상태는 유지 (사용자가 원하면 다시 변환/복원 가능)
     }
     setIsEditMode(next);
   };
@@ -249,6 +260,102 @@ function FileViewContent() {
     }
     setSelectedRows(newSelectedRows);
   };
+
+  // 드래그 시작
+  const handleDragStart = (rowIndex: number, e: React.MouseEvent) => {
+    // 체크박스 클릭이 아닌 드래그인 경우에만 처리
+    if (e.button !== 0) return; // 왼쪽 마우스 버튼만
+    
+    // 체크박스 직접 클릭이 아닌 경우에만 드래그 시작
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' && target.getAttribute('type') === 'checkbox') {
+      // 체크박스 직접 클릭은 일반 클릭으로 처리
+      return;
+    }
+    
+    // 드래그 시작 위치 저장
+    setDragStartPos({x: e.clientX, y: e.clientY});
+    setIsDragging(true);
+    setDragStartRow(rowIndex);
+    
+    // 드래그 시작 시점의 선택 상태 저장 (토글 전 상태)
+    dragStartSelectionRef.current = selectedRows.has(rowIndex);
+    
+    // 현재 행 선택 상태 토글
+    const newSelectedRows = new Set(selectedRows);
+    if (newSelectedRows.has(rowIndex)) {
+      newSelectedRows.delete(rowIndex);
+    } else {
+      newSelectedRows.add(rowIndex);
+    }
+    setSelectedRows(newSelectedRows);
+    
+    e.preventDefault();
+  };
+
+  // 드래그 중
+  const handleDragOver = (rowIndex: number, e: React.MouseEvent) => {
+    if (!isDragging || dragStartRow === null || !dragStartPos) return;
+    
+    // 드래그 거리 확인 (너무 작은 이동은 무시)
+    const dragDistance = Math.abs(e.clientY - dragStartPos.y);
+    if (dragDistance < 5) return; // 5px 미만은 클릭으로 간주
+    
+    e.preventDefault();
+    
+    // 시작 행부터 현재 행까지 범위 선택
+    const start = Math.min(dragStartRow, rowIndex);
+    const end = Math.max(dragStartRow, rowIndex);
+    
+    const newSelectedRows = new Set(selectedRows);
+    // 드래그 시작 시점의 선택 상태를 기준으로 범위 선택/해제
+    const startWasSelected = dragStartSelectionRef.current;
+    
+    for (let i = start; i <= end; i++) {
+      if (startWasSelected) {
+        // 시작 행이 선택되어 있었으면 범위 선택
+        newSelectedRows.add(i);
+      } else {
+        // 시작 행이 선택되지 않았었으면 범위 해제
+        newSelectedRows.delete(i);
+      }
+    }
+    
+    setSelectedRows(newSelectedRows);
+  };
+
+  // 드래그 종료
+  const handleDragEnd = () => {
+    setIsDragging(false);
+    setDragStartRow(null);
+    setDragStartPos(null);
+    dragStartSelectionRef.current = false;
+  };
+
+  // 마우스가 체크박스 영역을 벗어날 때도 드래그 종료 처리
+  useEffect(() => {
+    const handleMouseUp = () => {
+      if (isDragging) {
+        handleDragEnd();
+      }
+    };
+
+    const handleMouseLeave = () => {
+      if (isDragging) {
+        handleDragEnd();
+      }
+    };
+
+    if (isDragging) {
+      document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener('mouseleave', handleMouseLeave);
+      
+      return () => {
+        document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('mouseleave', handleMouseLeave);
+      };
+    }
+  }, [isDragging]);
 
   // 일괄 적용 함수
   const handleBulkApply = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -1126,8 +1233,8 @@ function FileViewContent() {
     window.close();
   };
 
-  // 주문 복사 기능: 상품명을 수량별로 정리하여 클립보드에 복사
-  const handleCopyOrderSummary = useCallback(() => {
+  // 수량 변환 함수: "|n세트" 패턴을 제거하고 수량으로 변환 (또는 원상태로 복원)
+  const handleQuantityConversion = useCallback(() => {
     if (
       !tableData.length ||
       !headerIndex ||
@@ -1141,7 +1248,158 @@ function FileViewContent() {
     const productNameIdx = headerIndex.nameIdx;
     const qtyIdx = headerRow.findIndex((h: any) => h === "수량");
 
-    // 상품명별 수량 집계
+    if (qtyIdx === -1) {
+      alert("수량 컬럼을 찾을 수 없습니다.");
+      return;
+    }
+
+    // 변환할 행 선택 (체크박스가 있으면 선택된 행, 없으면 전체)
+    const rowsToConvert = selectedRows.size > 0
+      ? Array.from(selectedRows)
+      : Array.from({length: tableData.length - 1}, (_, i) => i + 1);
+
+    if (rowsToConvert.length === 0) {
+      alert("변환할 행을 선택해주세요.");
+      return;
+    }
+
+    const newTableData = [...tableData];
+    let hasChanges = false;
+
+    if (!isQuantityConverted) {
+      // 변환: "|n세트" 제거하고 수량으로 변환
+      rowsToConvert.forEach((rowIndex) => {
+        const row = newTableData[rowIndex];
+        const productName = String(row[productNameIdx] || "").trim();
+        const currentQuantity = String(row[qtyIdx] || "1").trim();
+
+        // "|n세트" 패턴 찾기
+        const setMatch = productName.match(/^(.+)\|(\d+)세트$/);
+        if (setMatch) {
+          const [, baseName, setCount] = setMatch;
+          const setCountNum = Number(setCount);
+
+          // 원본 데이터 저장 (아직 저장되지 않은 경우만)
+          if (!originalProductDataRef.current[rowIndex]) {
+            originalProductDataRef.current[rowIndex] = {
+              productName: productName,
+              quantity: currentQuantity,
+            };
+          }
+
+          // 상품명에서 "|n세트" 제거
+          newTableData[rowIndex][productNameIdx] = baseName;
+          // 수량에 세트 수 입력
+          newTableData[rowIndex][qtyIdx] = String(setCountNum);
+          hasChanges = true;
+        }
+      });
+
+      if (hasChanges) {
+        setIsQuantityConverted(true);
+        setTableData(newTableData);
+        // 파일 업데이트
+        if (fileId) {
+          const updatedFile = {
+            ...file,
+            tableData: newTableData,
+          };
+          setFile(updatedFile);
+          try {
+            sessionStorage.setItem(
+              `uploadedFile_${fileId}`,
+              JSON.stringify(updatedFile)
+            );
+          } catch (error) {
+            console.error("sessionStorage 저장 실패:", error);
+          }
+          const updatedFiles = uploadedFiles.map((f) =>
+            f.id === fileId ? updatedFile : f
+          );
+          setUploadedFiles(updatedFiles);
+        }
+        alert("수량 변환이 완료되었습니다.");
+      } else {
+        alert("변환할 수 있는 항목이 없습니다. (|n세트 형식이 없음)");
+      }
+    } else {
+      // 원상태로 복원
+      rowsToConvert.forEach((rowIndex) => {
+        const originalData = originalProductDataRef.current[rowIndex];
+        if (originalData) {
+          newTableData[rowIndex][productNameIdx] = originalData.productName;
+          newTableData[rowIndex][qtyIdx] = originalData.quantity;
+          hasChanges = true;
+          // 복원 후 원본 데이터 삭제
+          delete originalProductDataRef.current[rowIndex];
+        }
+      });
+
+      if (hasChanges) {
+        // 모든 행이 복원되었는지 확인
+        const remainingConvertedRows = rowsToConvert.filter(
+          (rowIndex) => originalProductDataRef.current[rowIndex]
+        );
+        if (remainingConvertedRows.length === 0) {
+          setIsQuantityConverted(false);
+        }
+        setTableData(newTableData);
+        // 파일 업데이트
+        if (fileId) {
+          const updatedFile = {
+            ...file,
+            tableData: newTableData,
+          };
+          setFile(updatedFile);
+          try {
+            sessionStorage.setItem(
+              `uploadedFile_${fileId}`,
+              JSON.stringify(updatedFile)
+            );
+          } catch (error) {
+            console.error("sessionStorage 저장 실패:", error);
+          }
+          const updatedFiles = uploadedFiles.map((f) =>
+            f.id === fileId ? updatedFile : f
+          );
+          setUploadedFiles(updatedFiles);
+        }
+        alert("원상태로 복원되었습니다.");
+      } else {
+        alert("복원할 데이터가 없습니다.");
+      }
+    }
+  }, [
+    tableData,
+    headerIndex,
+    selectedRows,
+    isQuantityConverted,
+    fileId,
+    file,
+    uploadedFiles,
+    setUploadedFiles,
+  ]);
+
+  // 주문 복사 기능: 상품명을 수량별로 정리하여 클립보드에 복사
+  const handleCopyOrderSummary = useCallback(() => {
+    if (
+      !tableData.length ||
+      !headerIndex ||
+      typeof headerIndex.nameIdx !== "number"
+    ) {
+      alert("주문 데이터가 없습니다.");
+      return;
+    }
+
+    // 사방넷명으로 복사할지 확인
+    const useSabangName = confirm("사방넷명으로 복사하시겠습니까?");
+    
+    const headerRow = tableData[0];
+    const productNameIdx = headerIndex.nameIdx;
+    const qtyIdx = headerRow.findIndex((h: any) => h === "수량");
+    const mappingIdx = headerRow.findIndex((h: any) => h === "매핑코드");
+
+    // 상품명별 또는 사방넷명별 수량 집계
     const productCounts: {[key: string]: number} = {};
     let totalCount = 0;
 
@@ -1152,9 +1410,48 @@ function FileViewContent() {
       const quantity = qtyIdx !== -1 ? Number(row[qtyIdx]) || 1 : 1;
 
       if (productName) {
-        productCounts[productName] =
-          (productCounts[productName] || 0) + quantity;
-        totalCount += quantity;
+        let displayName = productName;
+        
+        // 사방넷명으로 복사하는 경우
+        if (useSabangName) {
+          // 매핑코드로 상품 찾기
+          const mappingCode = mappingIdx !== -1 ? String(row[mappingIdx] || "").trim() : "";
+          
+          // productIdMap에서 상품 ID 찾기
+          const productId = productIdMap[productName];
+          
+          let matchedProduct = null;
+          
+          // 1순위: productIdMap으로 찾기
+          if (productId !== undefined && productId !== null) {
+            matchedProduct = codes.find((c: any) => c.id === productId);
+          }
+          
+          // 2순위: 상품명으로 찾기
+          if (!matchedProduct) {
+            matchedProduct = codes.find(
+              (c: any) => c.name && String(c.name).trim() === productName
+            );
+          }
+          
+          // 3순위: 매핑코드로 찾기
+          if (!matchedProduct && mappingCode) {
+            matchedProduct = codes.find(
+              (c: any) => c.code && String(c.code).trim() === mappingCode
+            );
+          }
+          
+          // 사방넷명이 있으면 사용, 없으면 상품명 사용
+          if (matchedProduct?.sabangName && String(matchedProduct.sabangName).trim()) {
+            displayName = String(matchedProduct.sabangName).trim();
+          }
+        }
+        
+        if (displayName) {
+          productCounts[displayName] =
+            (productCounts[displayName] || 0) + quantity;
+          totalCount += quantity;
+        }
       }
     }
 
@@ -1193,7 +1490,7 @@ function FileViewContent() {
         console.error("클립보드 복사 실패:", error);
         alert("클립보드 복사에 실패했습니다.");
       });
-  }, [tableData, headerIndex]);
+  }, [tableData, headerIndex, codes, productIdMap]);
 
   useEffect(() => {
     // 상품 목록 fetch (DB에서)
@@ -1903,6 +2200,18 @@ function FileViewContent() {
               >
                 주문 복사
               </button>
+              {isEditMode && (
+                <button
+                  onClick={handleQuantityConversion}
+                  className={`px-4 py-1 rounded text-sm font-semibold transition-colors ${
+                    isQuantityConverted
+                      ? "bg-orange-500 hover:bg-orange-600 text-white"
+                      : "bg-green-500 hover:bg-green-600 text-white"
+                  }`}
+                >
+                  {isQuantityConverted ? "수량 변환 취소" : "수량 변환"}
+                </button>
+              )}
               <button
                 onClick={handleToggleEditMode}
                 className={`px-4 py-1 rounded text-sm font-semibold transition-colors ${
@@ -2228,17 +2537,44 @@ function FileViewContent() {
                       >
                         {isEditMode && (
                           <td 
-                            className="border px-2 py-1 border-gray-300 text-xs text-center cursor-pointer"
-                            onClick={() => handleRowSelect(actualRowIndex)}
+                            className="border px-2 py-1 border-gray-300 text-xs text-center cursor-pointer select-none"
+                            onMouseDown={(e) => {
+                              // 체크박스가 아닌 셀 영역에서만 드래그 시작
+                              const target = e.target as HTMLElement;
+                              if (target.tagName !== 'INPUT') {
+                                handleDragStart(actualRowIndex, e);
+                              }
+                            }}
+                            onMouseEnter={(e) => {
+                              if (isDragging) {
+                                handleDragOver(actualRowIndex, e);
+                              }
+                            }}
+                            onMouseUp={handleDragEnd}
+                            onMouseLeave={(e) => {
+                              // 마우스가 셀을 벗어날 때도 드래그 처리
+                              if (isDragging) {
+                                handleDragOver(actualRowIndex, e);
+                              }
+                            }}
                           >
                             <input
                               type="checkbox"
                               checked={selectedRows.has(actualRowIndex)}
                               onChange={(e) => {
                                 e.stopPropagation();
-                                handleRowSelect(actualRowIndex);
+                                // 드래그 중이 아닐 때만 처리
+                                if (!isDragging) {
+                                  handleRowSelect(actualRowIndex);
+                                }
                               }}
-                              onClick={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // 드래그 중이 아닐 때만 처리
+                                if (!isDragging) {
+                                  handleRowSelect(actualRowIndex);
+                                }
+                              }}
                               className="cursor-pointer"
                             />
                           </td>
