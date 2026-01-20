@@ -272,6 +272,14 @@ const SavedDataTable = memo(function SavedDataTable({
   } | null>(null);
   const [detailRow, setDetailRow] = useState<any>(null);
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
+  // 드래그 선택 상태
+  const [dragStartRow, setDragStartRow] = useState<number | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStartPos, setDragStartPos] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const dragStartSelectionRef = useRef<boolean>(false);
   const [isCanceling, setIsCanceling] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [templates, setTemplates] = useState<any[]>([]);
@@ -360,37 +368,50 @@ const SavedDataTable = memo(function SavedDataTable({
         if (appliedVendor && appliedVendor.length > 0) {
           appliedVendor.forEach((v) => params.append("vendor", v));
         }
-        if (appliedOrderStatus) params.append("orderStatus", appliedOrderStatus);
+        if (appliedOrderStatus)
+          params.append("orderStatus", appliedOrderStatus);
         if (appliedSearchField && appliedSearchValue) {
           params.append("searchField", appliedSearchField);
           params.append("searchValue", appliedSearchValue);
         }
-        if (appliedUploadTimeFrom) params.append("uploadTimeFrom", appliedUploadTimeFrom);
-        if (appliedUploadTimeTo) params.append("uploadTimeTo", appliedUploadTimeTo);
-        
+        if (appliedUploadTimeFrom)
+          params.append("uploadTimeFrom", appliedUploadTimeFrom);
+        if (appliedUploadTimeTo)
+          params.append("uploadTimeTo", appliedUploadTimeTo);
+
         // 필터링된 전체 데이터를 한 번에 가져오기 (limit을 totalCount로 설정)
         // totalCount가 0이거나 없으면 1000으로 제한 (너무 큰 경우 방지)
         const limit = totalCount > 0 ? Math.min(totalCount, 10000) : 1000;
         params.append("page", "1");
         params.append("limit", limit.toString());
-        
-        const listResponse = await fetch(`/api/upload/list?${params.toString()}`, {
-          headers: getAuthHeaders(),
-        });
+
+        const listResponse = await fetch(
+          `/api/upload/list?${params.toString()}`,
+          {
+            headers: getAuthHeaders(),
+          }
+        );
         const listResult = await listResponse.json();
-        
+
         if (listResult.success && listResult.data) {
-          rowIdsToDownload = listResult.data.map((row: any) => row.id).filter((id: any) => id != null);
-          
+          rowIdsToDownload = listResult.data
+            .map((row: any) => row.id)
+            .filter((id: any) => id != null);
         } else {
           // API 호출 실패 시 현재 페이지의 데이터 ID만 사용
-          rowIdsToDownload = tableRows.map((row: any) => row.id).filter((id: any) => id != null);
-          console.warn("⚠️ 필터링된 전체 데이터 ID 수집 실패, 현재 페이지 데이터만 사용");
+          rowIdsToDownload = tableRows
+            .map((row: any) => row.id)
+            .filter((id: any) => id != null);
+          console.warn(
+            "⚠️ 필터링된 전체 데이터 ID 수집 실패, 현재 페이지 데이터만 사용"
+          );
         }
       } catch (error) {
         console.error("필터링된 데이터 ID 수집 실패:", error);
         // 에러 발생 시 현재 페이지의 데이터 ID만 사용
-        rowIdsToDownload = tableRows.map((row: any) => row.id).filter((id: any) => id != null);
+        rowIdsToDownload = tableRows
+          .map((row: any) => row.id)
+          .filter((id: any) => id != null);
       }
     }
 
@@ -739,6 +760,121 @@ const SavedDataTable = memo(function SavedDataTable({
     });
   }, []);
 
+  // 드래그 시작
+  const handleDragStart = useCallback(
+    (rowId: number, e: React.MouseEvent) => {
+      if (e.button !== 0) return; // 왼쪽 마우스 버튼만
+
+      // 체크박스 직접 클릭인 경우는 일반 클릭으로 처리
+      const target = e.target as HTMLElement;
+      if (
+        target.tagName === "INPUT" &&
+        target.getAttribute("type") === "checkbox"
+      ) {
+        return;
+      }
+
+      // 드래그 시작 위치 저장
+      setDragStartPos({x: e.clientX, y: e.clientY});
+      setIsDragging(true);
+      setDragStartRow(rowId);
+
+      // 드래그 시작 시점의 선택 상태 저장 (토글 전 상태)
+      dragStartSelectionRef.current = selectedRows.has(rowId);
+
+      // 현재 행 선택 상태 토글
+      setSelectedRows((prev) => {
+        const newSelected = new Set(prev);
+        if (newSelected.has(rowId)) {
+          newSelected.delete(rowId);
+        } else {
+          newSelected.add(rowId);
+        }
+        return newSelected;
+      });
+
+      e.preventDefault();
+    },
+    [selectedRows]
+  );
+
+  // 드래그 중
+  const handleDragOver = useCallback(
+    (rowId: number, e: React.MouseEvent) => {
+      if (!isDragging || dragStartRow === null || !dragStartPos) return;
+
+      // 드래그 거리 확인 (너무 작은 이동은 무시)
+      const dragDistance = Math.abs(e.clientY - dragStartPos.y);
+      if (dragDistance < 5) return; // 5px 미만은 클릭으로 간주
+
+      e.preventDefault();
+
+      // 현재 페이지의 모든 행 ID 가져오기
+      const allRowIds = paginatedRows.map((row: any) => row.id);
+      const startIndex = allRowIds.indexOf(dragStartRow);
+      const endIndex = allRowIds.indexOf(rowId);
+
+      if (startIndex === -1 || endIndex === -1) return;
+
+      // 시작 행부터 현재 행까지 범위 선택
+      const start = Math.min(startIndex, endIndex);
+      const end = Math.max(startIndex, endIndex);
+
+      setSelectedRows((prev) => {
+        const newSelected = new Set(prev);
+        // 드래그 시작 시점의 선택 상태를 기준으로 범위 선택/해제
+        const startWasSelected = dragStartSelectionRef.current;
+
+        for (let i = start; i <= end; i++) {
+          const currentRowId = allRowIds[i];
+          if (startWasSelected) {
+            // 시작 행이 선택되어 있었으면 범위 선택
+            newSelected.add(currentRowId);
+          } else {
+            // 시작 행이 선택되지 않았었으면 범위 해제
+            newSelected.delete(currentRowId);
+          }
+        }
+
+        return newSelected;
+      });
+    },
+    [isDragging, dragStartRow, dragStartPos, paginatedRows]
+  );
+
+  // 드래그 종료
+  const handleDragEnd = useCallback(() => {
+    setIsDragging(false);
+    setDragStartRow(null);
+    setDragStartPos(null);
+    dragStartSelectionRef.current = false;
+  }, []);
+
+  // 마우스가 체크박스 영역을 벗어날 때도 드래그 종료 처리
+  useEffect(() => {
+    const handleMouseUp = () => {
+      if (isDragging) {
+        handleDragEnd();
+      }
+    };
+
+    const handleMouseLeave = () => {
+      if (isDragging) {
+        handleDragEnd();
+      }
+    };
+
+    if (isDragging) {
+      document.addEventListener("mouseup", handleMouseUp);
+      document.addEventListener("mouseleave", handleMouseLeave);
+
+      return () => {
+        document.removeEventListener("mouseup", handleMouseUp);
+        document.removeEventListener("mouseleave", handleMouseLeave);
+      };
+    }
+  }, [isDragging, handleDragEnd]);
+
   // 상세 보기 핸들러 메모이제이션
   const handleDetailClick = useCallback((row: any) => {
     setDetailRow(row);
@@ -927,6 +1063,10 @@ const SavedDataTable = memo(function SavedDataTable({
       filteredHeaders,
       selectedRows,
       handleSelectRow,
+      handleDragStart,
+      handleDragOver,
+      handleDragEnd,
+      isDragging,
       handleDetailClick,
       handleEditClick,
       getCombinedCellValue,
@@ -945,6 +1085,10 @@ const SavedDataTable = memo(function SavedDataTable({
       filteredHeaders: string[];
       selectedRows: Set<number>;
       handleSelectRow: (rowId: number, checked: boolean) => void;
+      handleDragStart: (rowId: number, e: React.MouseEvent) => void;
+      handleDragOver: (rowId: number, e: React.MouseEvent) => void;
+      handleDragEnd: () => void;
+      isDragging: boolean;
       handleDetailClick: (row: any) => void;
       handleEditClick: (rowId: number, rowData: any) => void;
       getCombinedCellValue: (row: any, header: string) => string;
@@ -998,6 +1142,10 @@ const SavedDataTable = memo(function SavedDataTable({
             rowId={row.id}
             isSelected={isSelected}
             handleSelectRow={handleSelectRow}
+            handleDragStart={handleDragStart}
+            handleDragOver={handleDragOver}
+            handleDragEnd={handleDragEnd}
+            isDragging={isDragging}
           />
           {filteredHeaders.map((header, colIdx) => {
             const isMappingCode = header === "매핑코드";
@@ -1182,21 +1330,65 @@ const SavedDataTable = memo(function SavedDataTable({
       rowId,
       isSelected,
       handleSelectRow,
+      handleDragStart,
+      handleDragOver,
+      handleDragEnd,
+      isDragging,
     }: {
       rowId: number;
       isSelected: boolean;
       handleSelectRow: (rowId: number, checked: boolean) => void;
+      handleDragStart: (rowId: number, e: React.MouseEvent) => void;
+      handleDragOver: (rowId: number, e: React.MouseEvent) => void;
+      handleDragEnd: () => void;
+      isDragging: boolean;
     }) => (
       <td
-        className="border px-2 border-gray-300 text-xs text-center align-middle cursor-pointer hover:bg-gray-50"
+        className="border px-2 border-gray-300 text-xs text-center align-middle cursor-pointer hover:bg-gray-50 select-none"
         style={{width: "40px", height: "56px"}}
-        onClick={() => handleSelectRow(rowId, !isSelected)}
+        onMouseDown={(e) => {
+          // 체크박스가 아닌 셀 영역에서만 드래그 시작
+          const target = e.target as HTMLElement;
+          if (target.tagName !== "INPUT") {
+            handleDragStart(rowId, e);
+          }
+        }}
+        onMouseEnter={(e) => {
+          if (isDragging) {
+            handleDragOver(rowId, e);
+          }
+        }}
+        onMouseUp={handleDragEnd}
+        onMouseLeave={(e) => {
+          // 마우스가 셀을 벗어날 때도 드래그 처리
+          if (isDragging) {
+            handleDragOver(rowId, e);
+          }
+        }}
+        onClick={(e) => {
+          // 드래그가 아닌 단순 클릭인 경우에만 토글
+          if (!isDragging) {
+            handleSelectRow(rowId, !isSelected);
+          }
+        }}
       >
         <input
           type="checkbox"
           checked={isSelected}
-          onChange={(e) => handleSelectRow(rowId, e.target.checked)}
-          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => {
+            e.stopPropagation();
+            // 드래그 중이 아닐 때만 처리
+            if (!isDragging) {
+              handleSelectRow(rowId, e.target.checked);
+            }
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            // 드래그 중이 아닐 때만 처리
+            if (!isDragging) {
+              handleSelectRow(rowId, !isSelected);
+            }
+          }}
           className="cursor-pointer"
         />
       </td>
@@ -1867,6 +2059,10 @@ const SavedDataTable = memo(function SavedDataTable({
                               filteredHeaders={filteredHeaders}
                               selectedRows={selectedRows}
                               handleSelectRow={handleSelectRow}
+                              handleDragStart={handleDragStart}
+                              handleDragOver={handleDragOver}
+                              handleDragEnd={handleDragEnd}
+                              isDragging={isDragging}
                               handleDetailClick={handleDetailClick}
                               handleEditClick={handleEditClick}
                               getCombinedCellValue={getCombinedCellValue}
