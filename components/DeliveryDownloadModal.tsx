@@ -35,6 +35,7 @@ export default function DeliveryDownloadModal({
     string | null
   >(null);
   const [downloadingAllSabangnet, setDownloadingAllSabangnet] = useState(false);
+  const [dateFilter, setDateFilter] = useState<"yesterday" | "today" | "all">("all");
 
   // 업체 리스트 조회
   useEffect(() => {
@@ -224,6 +225,7 @@ export default function DeliveryDownloadModal({
         body: JSON.stringify({
           allVendors: true,
           activeVendorNames: activeVendorNames,
+          dateFilter: dateFilter,
         }),
       });
 

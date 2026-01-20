@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const {vendorName, allVendors, activeVendorNames} = body;
+    const {vendorName, allVendors, activeVendorNames, dateFilter = "all"} = body;
 
     // user_id 추출 및 권한 확인
     const userId = await getUserIdFromRequest(request);
@@ -86,8 +86,8 @@ export async function POST(request: NextRequest) {
             FROM upload_rows ur
             INNER JOIN uploads u ON ur.upload_id = u.id
             WHERE u.company_id = ${companyId}
-              AND u.created_at >= ${yesterdayStartUTC.toISOString()}
-              AND u.created_at <= ${todayEndUTC.toISOString()}
+              AND u.created_at >= ${dateFromUTC.toISOString()}
+              AND u.created_at <= ${dateToUTC.toISOString()}
               AND ur.row_data->>'업체명' IS NOT NULL
               AND ur.row_data->>'업체명' != ''
             ORDER BY vendor_name
@@ -166,7 +166,7 @@ export async function POST(request: NextRequest) {
     let allRowsResult;
     
     if (allVendors) {
-      // 전체 업체 다운로드: 어제~오늘 업로드된 모든 데이터
+      // 전체 업체 다운로드: 선택한 날짜 범위의 데이터
       allRowsResult = await sql`
         SELECT 
           ur.row_data, 
@@ -175,8 +175,8 @@ export async function POST(request: NextRequest) {
         FROM upload_rows ur
         INNER JOIN uploads u ON ur.upload_id = u.id
         WHERE u.company_id = ${companyId}
-          AND u.created_at >= ${yesterdayStartUTC.toISOString()}
-          AND u.created_at <= ${todayEndUTC.toISOString()}
+          AND u.created_at >= ${dateFromUTC.toISOString()}
+          AND u.created_at <= ${dateToUTC.toISOString()}
           AND ur.row_data->>'업체명' = ANY(${targetVendorNames})
           AND ur.row_data->>'sabang_code' IS NOT NULL
           AND ur.row_data->>'sabang_code' != ''
@@ -184,7 +184,7 @@ export async function POST(request: NextRequest) {
           AND ur.row_data->>'운송장번호' != ''
       `;
     } else {
-      // 특정 업체만: 어제~오늘 업로드된 모든 데이터
+      // 특정 업체만: 선택한 날짜 범위의 데이터
       allRowsResult = await sql`
         SELECT 
           ur.row_data, 
@@ -193,8 +193,8 @@ export async function POST(request: NextRequest) {
         FROM upload_rows ur
         INNER JOIN uploads u ON ur.upload_id = u.id
         WHERE u.company_id = ${companyId}
-          AND u.created_at >= ${yesterdayStartUTC.toISOString()}
-          AND u.created_at <= ${todayEndUTC.toISOString()}
+          AND u.created_at >= ${dateFromUTC.toISOString()}
+          AND u.created_at <= ${dateToUTC.toISOString()}
           AND ur.row_data->>'업체명' = ANY(${targetVendorNames})
           AND ur.row_data->>'sabang_code' IS NOT NULL
           AND ur.row_data->>'sabang_code' != ''
