@@ -1320,6 +1320,25 @@ export async function POST(request: NextRequest) {
                 }
               }
 
+              // 배송메시지 처리: grade가 "온라인"인 경우 맨 앞에 #수취인명 추가
+              if (
+                isOnlineUser &&
+                (header.column_key === "deliveryMessage" ||
+                  header.display_name.includes("배송") ||
+                  header.display_name.includes("메시지") ||
+                  header.display_name.includes("배메"))
+              ) {
+                const receiverName =
+                  row["수취인명"] || row["받는사람"] || row["수령인명"] || "";
+                if (receiverName) {
+                  const prefix = `#${receiverName}`;
+                  // 기존 배송메시지가 있으면 앞에 추가, 없으면 prefix만 사용
+                  stringValue = stringValue
+                    ? `${prefix} ${stringValue}`
+                    : prefix;
+                }
+              }
+
               return stringValue;
             });
           });
@@ -1454,6 +1473,26 @@ export async function POST(request: NextRequest) {
                 const numOnly = stringValue.replace(/\D/g, "");
                 if (numOnly.length >= 4 && numOnly.length <= 5) {
                   stringValue = numOnly.padStart(5, "0");
+                }
+              }
+
+              // 배송메시지 처리: grade가 "온라인"인 경우 맨 앞에 #수취인명 추가
+              if (
+                isOnlineUser &&
+                (headerStr.includes("배송") ||
+                  headerStr.includes("메시지") ||
+                  headerStr.includes("배메") ||
+                  headerStr === "배송메시지" ||
+                  headerStr === "배송 메시지")
+              ) {
+                const receiverName =
+                  row["수취인명"] || row["받는사람"] || row["수령인명"] || "";
+                if (receiverName) {
+                  const prefix = `#${receiverName}`;
+                  // 기존 배송메시지가 있으면 앞에 추가, 없으면 prefix만 사용
+                  stringValue = stringValue
+                    ? `${prefix} ${stringValue}`
+                    : prefix;
                 }
               }
 
