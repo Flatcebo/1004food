@@ -1404,14 +1404,27 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             }
           }
 
+          // 원본 순서 인덱스 추가 (빈 행 필터링 전에 부여하여 원본 순서 보존)
+          // 헤더에 _originalRowIndex 컬럼 추가
+          if (jsonData.length > 0) {
+            const headerRow = jsonData[0] as any[];
+            headerRow.push("_originalRowIndex");
+            
+            // 각 데이터 행에 원본 인덱스 추가 (1부터 시작, 문자열로 저장)
+            for (let i = 1; i < jsonData.length; i++) {
+              (jsonData[i] as any[]).push(String(i)); // 원본 순서 인덱스 (1-based, string)
+            }
+          }
+
           // 빈 행 필터링: 헤더가 13개일 때 11칸 이상 공란인 row 삭제
           if (jsonData.length > 1) {
             const headerRow = jsonData[0] as any[];
-            const totalColumns = headerRow.length;
+            // _originalRowIndex 컬럼을 제외한 컬럼 수로 빈 셀 개수 계산
+            const totalColumns = headerRow.length - 1; // _originalRowIndex 제외
 
             // 헤더를 제외한 데이터 행만 필터링
             const filteredRows = jsonData.slice(1).filter((row) => {
-              // 빈 셀 개수 카운트
+              // 빈 셀 개수 카운트 (_originalRowIndex 컬럼 제외)
               let emptyCount = 0;
               for (let i = 0; i < totalColumns; i++) {
                 const value = row[i];

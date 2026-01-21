@@ -1044,7 +1044,14 @@ function OrderPageContent() {
           if (modalMode === "excel") {
             const success = await handleSaveWithConfirmedFiles();
             if (success) {
-              handleCloseModal();
+              // 저장 성공 시: handleCloseModal 대신 직접 상태 초기화 및 모달 닫기
+              // (handleSaveWithConfirmedFiles에서 이미 resetData()와 sessionStorage 정리가 완료됨)
+              // loadFilesFromServer()를 호출하지 않아 불필요한 서버 요청과 상태 덮어쓰기 방지
+              setUploadedFiles([]);
+              Array.from(confirmedFiles).forEach((fileId) => {
+                unconfirmFile(fileId);
+              });
+              setModalMode(null);
             }
           }
         }}

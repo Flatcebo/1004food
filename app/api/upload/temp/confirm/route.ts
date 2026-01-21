@@ -323,28 +323,16 @@ export async function POST(request: NextRequest) {
       // 헤더와 데이터 행 분리
       // 기존 방식대로 tableData[0] 사용 (canonicalHeader)
       const headerRow = tableData[0];
-      const dataRows = tableData.slice(1);
-
-      // 원본 데이터 가져오기 (original_table_data가 있으면 사용, 없으면 table_data 사용)
-      // 원본 순서를 유지하기 위해 original_table_data 사용
-      const originalTableDataForOrder =
-        file.original_table_data &&
-        Array.isArray(file.original_table_data) &&
-        file.original_table_data.length > 0
-          ? file.original_table_data
-          : tableData; // 하위 호환성을 위해 table_data 사용
 
       // 상품명 인덱스 찾기
       const nameIdx = headerRow.findIndex(
         (h: any) => h && typeof h === "string" && h.includes("상품명")
       );
 
-      // 원본 데이터에서 상품명 인덱스 찾기 (순서 매칭용)
-      const originalHeaderRow = originalTableDataForOrder[0] || headerRow;
-      const originalNameIdx = originalHeaderRow.findIndex(
-        (h: any) => h && typeof h === "string" && h.includes("상품명")
+      // 원본 순서 인덱스 컬럼 찾기 (_originalRowIndex)
+      const originalRowIndexIdx = headerRow.findIndex(
+        (h: any) => h && typeof h === "string" && h === "_originalRowIndex"
       );
-      const originalDataRows = originalTableDataForOrder.slice(1);
 
       // user grade가 "온라인"인 경우 "주문번호(사방넷)" 헤더 찾기
       const isOnlineUser =
@@ -539,125 +527,26 @@ export async function POST(request: NextRequest) {
         globalCodeIndex++;
 
         // 업로드 시 부여된 row 순서 번호 추가 (1부터 시작)
-        // 중요: 정렬된 순서가 아니라 원본 순서를 사용해야 함
-        // original_table_data가 있으면 원본 순서를 사용하고, 없으면 현재 순서 사용
-        let originalRowIndex = rowIndex; // 기본값은 현재 인덱스
-
-        // original_table_data가 있고, 현재 tableData와 다르면 원본 순서 찾기
-        if (
-          originalDataRows.length > 0 &&
-          originalDataRows.length === updatedDataRows.length
-        ) {
-          // 현재 행의 데이터로 원본 데이터에서 매칭
-          // 상품명과 수취인명을 조합하여 더 정확한 매칭 시도
-          if (nameIdx !== -1 && originalNameIdx !== -1) {
-            const currentProductName = String(row[nameIdx] || "").trim();
-
-            // 수취인명 인덱스 찾기
-            const receiverIdx = headerRow.findIndex(
-              (h: any) =>
-                h &&
-                typeof h === "string" &&
-                (h.includes("수취인명") || h.includes("이름"))
-            );
-            const originalReceiverIdx = originalHeaderRow.findIndex(
-              (h: any) =>
-                h &&
-                typeof h === "string" &&
-                (h.includes("수취인명") || h.includes("이름"))
-            );
-
-            const currentReceiverName =
-              receiverIdx !== -1 ? String(row[receiverIdx] || "").trim() : "";
-
-            // 원본 데이터에서 매칭되는 행 찾기
-            // 같은 상품명+수취인명 조합을 가진 행을 순서대로 매칭
-            const matchedIndices = new Set<number>(); // 이미 매칭된 원본 인덱스
-
-            for (
-              let origIdx = 0;
-              origIdx < originalDataRows.length;
-              origIdx++
-            ) {
-              if (matchedIndices.has(origIdx)) continue;
-
-              const originalProductName = String(
-                originalDataRows[origIdx]?.[originalNameIdx] || ""
-              ).trim();
-
-              if (originalProductName === currentProductName) {
-                // 수취인명도 비교 (있는 경우)
-                if (receiverIdx !== -1 && originalReceiverIdx !== -1) {
-                  const originalReceiverName = String(
-                    originalDataRows[origIdx]?.[originalReceiverIdx] || ""
-                  ).trim();
-                  if (originalReceiverName !== currentReceiverName) {
-                    continue;
-                  }
-                }
-
-                // 현재 행 이전에 같은 조합이 몇 개나 있었는지 확인
-                let sameCombinationCount = 0;
-                for (let prevIdx = 0; prevIdx < rowIndex; prevIdx++) {
-                  const prevProductName = String(
-                    updatedDataRows[prevIdx]?.[nameIdx] || ""
-                  ).trim();
-                  const prevReceiverName =
-                    receiverIdx !== -1
-                      ? String(
-                          updatedDataRows[prevIdx]?.[receiverIdx] || ""
-                        ).trim()
-                      : "";
-
-                  if (
-                    prevProductName === currentProductName &&
-                    prevReceiverName === currentReceiverName
-                  ) {
-                    sameCombinationCount++;
-                  }
-                }
-
-                // 원본 데이터에서 같은 조합을 순서대로 찾아서 sameCombinationCount번째 것 사용
-                let foundCount = 0;
-                for (
-                  let origIdx2 = 0;
-                  origIdx2 < originalDataRows.length;
-                  origIdx2++
-                ) {
-                  if (matchedIndices.has(origIdx2)) continue;
-
-                  const origProdName = String(
-                    originalDataRows[origIdx2]?.[originalNameIdx] || ""
-                  ).trim();
-                  const origRecName =
-                    originalReceiverIdx !== -1
-                      ? String(
-                          originalDataRows[origIdx2]?.[originalReceiverIdx] ||
-                            ""
-                        ).trim()
-                      : "";
-
-                  if (
-                    origProdName === currentProductName &&
-                    origRecName === currentReceiverName
-                  ) {
-                    if (foundCount === sameCombinationCount) {
-                      originalRowIndex = origIdx2;
-                      matchedIndices.add(origIdx2);
-                      break;
-                    }
-                    foundCount++;
-                  }
-                }
-                break;
-              }
+        // _originalRowIndex 컬럼에서 원본 순서를 가져옴 (정렬이 발생해도 원본 순서 유지)
+        // _originalRowIndex가 없으면 rowIndex + 1 사용 (하위 호환성)
+        let originalRowOrder = rowIndex + 1;
+        if (originalRowIndexIdx !== -1) {
+          const originalRowIndexValue = row[originalRowIndexIdx];
+          if (
+            originalRowIndexValue !== undefined &&
+            originalRowIndexValue !== null
+          ) {
+            const parsedValue = parseInt(String(originalRowIndexValue), 10);
+            if (!isNaN(parsedValue) && parsedValue > 0) {
+              originalRowOrder = parsedValue;
             }
           }
         }
+        rowObj["순서번호"] = originalRowOrder;
+        rowObj["rowOrder"] = originalRowOrder;
 
-        // 업로드 당시 원본 순서 사용 (1부터 시작)
-        rowObj["순서번호"] = originalRowIndex + 1;
-        rowObj["rowOrder"] = originalRowIndex + 1;
+        // _originalRowIndex 컬럼은 row_data에 저장하지 않음 (내부용)
+        delete rowObj["_originalRowIndex"];
 
         return rowObj;
       });

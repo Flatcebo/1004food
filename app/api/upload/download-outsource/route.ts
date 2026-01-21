@@ -1511,8 +1511,94 @@ export async function POST(request: NextRequest) {
           originalData: vendorRows,
         });
 
+        // 받는사람, 전화번호1, 주소 필드 인덱스 찾기
+        const receiverNameIndex = finalHeaders.findIndex(
+          (h: string) =>
+            h.includes("수취인명") ||
+            h === "수취인명" ||
+            h === "수취인" ||
+            h === "받는사람" ||
+            h.includes("받는사람")
+        );
+        const phone1Index = finalHeaders.findIndex(
+          (h: string) =>
+            h === "전화번호1" ||
+            h.includes("전화번호1") ||
+            (h.includes("전화") && h.includes("1"))
+        );
+        const addressIndex = finalHeaders.findIndex(
+          (h: string) =>
+            h.includes("주소") ||
+            h === "주소" ||
+            h.includes("수취인주소") ||
+            h.includes("받는사람주소")
+        );
+
+        // 중복값 찾기: 각 필드별로 값과 행 인덱스 매핑
+        const receiverNameMap = new Map<string, number[]>();
+        const phone1Map = new Map<string, number[]>();
+        const addressMap = new Map<string, number[]>();
+
+        excelData.forEach((rowData: any[], rowIndex: number) => {
+          // 받는사람 중복 체크
+          if (receiverNameIndex >= 0 && rowData[receiverNameIndex]) {
+            const value = String(rowData[receiverNameIndex])
+              .replace(/^★/, "")
+              .trim();
+            if (value) {
+              if (!receiverNameMap.has(value)) {
+                receiverNameMap.set(value, []);
+              }
+              receiverNameMap.get(value)!.push(rowIndex);
+            }
+          }
+
+          // 전화번호1 중복 체크
+          if (phone1Index >= 0 && rowData[phone1Index]) {
+            const value = String(rowData[phone1Index]).trim();
+            if (value) {
+              if (!phone1Map.has(value)) {
+                phone1Map.set(value, []);
+              }
+              phone1Map.get(value)!.push(rowIndex);
+            }
+          }
+
+          // 주소 중복 체크
+          if (addressIndex >= 0 && rowData[addressIndex]) {
+            const value = String(rowData[addressIndex]).trim();
+            if (value) {
+              if (!addressMap.has(value)) {
+                addressMap.set(value, []);
+              }
+              addressMap.get(value)!.push(rowIndex);
+            }
+          }
+        });
+
+        // 중복된 셀 인덱스 집합 생성 (필드별로)
+        const duplicateReceiverNameCells = new Set<number>();
+        const duplicatePhone1Cells = new Set<number>();
+        const duplicateAddressCells = new Set<number>();
+
+        receiverNameMap.forEach((indices) => {
+          if (indices.length > 1) {
+            indices.forEach((idx) => duplicateReceiverNameCells.add(idx));
+          }
+        });
+        phone1Map.forEach((indices) => {
+          if (indices.length > 1) {
+            indices.forEach((idx) => duplicatePhone1Cells.add(idx));
+          }
+        });
+        addressMap.forEach((indices) => {
+          if (indices.length > 1) {
+            indices.forEach((idx) => duplicateAddressCells.add(idx));
+          }
+        });
+
         // 데이터 추가
-        excelData.forEach((rowDatas) => {
+        excelData.forEach((rowDatas, rowIndex) => {
           const appendRow = sheet.addRow(rowDatas);
 
           appendRow.eachCell((cell: any, colNum: any) => {
@@ -1534,6 +1620,25 @@ export async function POST(request: NextRequest) {
 
             if (isTextColumn) {
               cell.numFmt = "@";
+            }
+
+            // 중복값 배경색 처리 (연한 빨강: FFE6E6)
+            const isReceiverNameCol =
+              colNum - 1 === receiverNameIndex && receiverNameIndex >= 0;
+            const isPhone1Col = colNum - 1 === phone1Index && phone1Index >= 0;
+            const isAddressCol =
+              colNum - 1 === addressIndex && addressIndex >= 0;
+
+            if (
+              (isReceiverNameCol && duplicateReceiverNameCells.has(rowIndex)) ||
+              (isPhone1Col && duplicatePhone1Cells.has(rowIndex)) ||
+              (isAddressCol && duplicateAddressCells.has(rowIndex))
+            ) {
+              cell.fill = {
+                type: "pattern",
+                pattern: "solid",
+                fgColor: {argb: "FFE6E6"}, // 연한 빨강
+              };
             }
           });
         });
