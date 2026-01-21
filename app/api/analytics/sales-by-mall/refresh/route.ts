@@ -51,53 +51,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 먼저 기간 내 전체 주문 데이터 확인 (디버깅용)
-    const debugOrders = await sql`
-      SELECT 
-        ur.id,
-        ur.shop_name,
-        ur.mall_id,
-        m.name as mall_name,
-        DATE(ur.created_at) as row_date_only,
-        ur.created_at as row_created_at
-      FROM upload_rows ur
-      LEFT JOIN mall m ON ur.mall_id = m.id
-      WHERE ur.company_id = ${companyId}
-        AND DATE(ur.created_at) >= ${startDate}::date
-        AND DATE(ur.created_at) < (${endDate}::date + INTERVAL '1 day')
-      ORDER BY ur.created_at DESC
-      LIMIT 10
-    `;
-    console.log(`[디버깅] 기간 내 전체 주문 샘플 (${startDate} ~ ${endDate}):`, debugOrders.map(o => ({
-      id: o.id,
-      shop_name: o.shop_name,
-      mall_id: o.mall_id,
-      mall_name: o.mall_name,
-      row_date_only: o.row_date_only,
-      row_created_at: o.row_created_at
-    })));
-    
-    // 기간 내 전체 주문 건수 확인
-    const totalOrdersInPeriod = await sql`
-      SELECT COUNT(*) as count
-      FROM upload_rows ur
-      WHERE ur.company_id = ${companyId}
-        AND DATE(ur.created_at) >= ${startDate}::date
-        AND DATE(ur.created_at) < (${endDate}::date + INTERVAL '1 day')
-    `;
-    console.log(`[디버깅] 기간 내 전체 주문 건수: ${totalOrdersInPeriod[0]?.count || 0}`);
-    
-    // mall_id가 NULL인 주문 건수 확인
-    const nullMallIdCount = await sql`
-      SELECT COUNT(*) as count
-      FROM upload_rows ur
-      WHERE ur.company_id = ${companyId}
-        AND ur.mall_id IS NULL
-        AND DATE(ur.created_at) >= ${startDate}::date
-        AND DATE(ur.created_at) < (${endDate}::date + INTERVAL '1 day')
-    `;
-    console.log(`[디버깅] mall_id가 NULL인 주문 건수: ${nullMallIdCount[0]?.count || 0}`);
-
     // 트랜잭션 시작
     await sql`BEGIN`;
 
@@ -126,8 +79,6 @@ export async function POST(request: NextRequest) {
       for (const mall of malls) {
         const mallId = mall.id;
         const mallName = mall.name;
-
-        console.log(`[${mallName}] 정산 계산 시작... (mall_id: ${mallId})`);
 
         // 해당 쇼핑몰의 주문 데이터 조회 (기간 필터링)
         // mall_id FK를 직접 사용하여 조회
@@ -171,50 +122,6 @@ export async function POST(request: NextRequest) {
           ORDER BY ur.id
         `;
 
-        console.log(`[${mallName}] 조회된 주문 건수: ${orders.length} (기간: ${startDate} ~ ${endDate})`);
-        if (orders.length > 0) {
-          // 날짜 범위 확인
-          const dates = orders
-            .map(o => o.row_created_at ? new Date(o.row_created_at).toISOString().split('T')[0] : null)
-            .filter((d): d is string => d !== null);
-          const minDate = dates.length > 0 ? Math.min(...dates.map(d => new Date(d).getTime())) : null;
-          const maxDate = dates.length > 0 ? Math.max(...dates.map(d => new Date(d).getTime())) : null;
-          
-          // 모든 주문의 상세 정보 출력 (최대 10개)
-          const orderDetails = orders.slice(0, 10).map(o => ({
-            id: o.id,
-            row_created_at: o.row_created_at ? new Date(o.row_created_at).toISOString().split('T')[0] : null,
-            주문번호: o.row_data?.["주문번호"] || o.row_data?.["주문번호(사방넷)"] || o.row_data?.["주문번호(쇼핑몰)"] || null,
-            내부코드: o.row_data?.["내부코드"] || null,
-            수량: o.row_data?.["수량"] || o.row_data?.["주문수량"] || 1
-          }));
-          console.log(`[${mallName}] 조회된 주문 상세 (최대 10개):`, orderDetails);
-          
-          console.log(`[${mallName}] 샘플 주문:`, {
-            id: orders[0].id,
-            mall_id: orders[0].mall_id,
-            shop_name: orders[0].shop_name,
-            row_created_at: orders[0].row_created_at,
-            row_created_at_only: orders[0].row_created_at ? new Date(orders[0].row_created_at).toISOString().split('T')[0] : null,
-            date_range: minDate && maxDate ? {
-              min: new Date(minDate).toISOString().split('T')[0],
-              max: new Date(maxDate).toISOString().split('T')[0]
-            } : null
-          });
-          
-          // 기간 밖의 데이터가 있는지 확인
-          const outOfRange = orders.filter(o => {
-            if (!o.row_created_at) return false;
-            const date = new Date(o.row_created_at).toISOString().split('T')[0];
-            return date < startDate || date > endDate;
-          });
-          if (outOfRange.length > 0) {
-            console.error(`[${mallName}] ⚠️ 기간 밖의 주문 발견: ${outOfRange.length}건`, outOfRange.map(o => ({
-              id: o.id,
-              date: o.row_created_at ? new Date(o.row_created_at).toISOString().split('T')[0] : null
-            })));
-          }
-        }
         totalOrdersCount += orders.length;
 
         // 주문 통계 계산
@@ -294,11 +201,8 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        console.log(`[${mallName}] 계산 결과 - 주문: ${orderQuantity}건/${orderAmount}원, 취소: ${cancelQuantity}건/${cancelAmount}원`);
-
         // 주문 건이 0이면 저장하지 않음
         if (orderQuantity === 0 && cancelQuantity === 0) {
-          console.log(`[${mallName}] 주문 건이 0이므로 저장하지 않음`);
           continue;
         }
 
@@ -358,12 +262,7 @@ export async function POST(request: NextRequest) {
             existingData.total_profit_amount === totalProfitAmount &&
             existingData.net_profit_amount === netProfitAmount;
 
-          if (isIdentical) {
-            console.log(`[${mallName}] 기존 데이터와 동일하므로 업데이트하지 않음 (settlement_id: ${settlementId})`);
-            // 기존 데이터와 동일하더라도 주문 ID는 갱신해야 함 (주문 연결 데이터 업데이트)
-            // settlements 배열에는 추가하지 않음 (이미 존재하는 데이터)
-            // continue하지 않고 주문 ID 저장 로직으로 진행
-          } else {
+          if (!isIdentical) {
             // 값이 다르면 업데이트
             await sql`
               UPDATE mall_sales_settlements
@@ -389,8 +288,6 @@ export async function POST(request: NextRequest) {
               DELETE FROM mall_sales_settlement_orders
               WHERE settlement_id = ${settlementId}
             `;
-            
-            console.log(`[${mallName}] 기존 데이터 업데이트 완료`);
           }
 
           // 기존 데이터가 있고 주문 건이 0이면 삭제
@@ -404,7 +301,6 @@ export async function POST(request: NextRequest) {
               DELETE FROM mall_sales_settlements
               WHERE id = ${settlementId}
             `;
-            console.log(`[${mallName}] 기존 데이터 삭제 (주문 건 0)`);
             continue;
           }
 
@@ -456,9 +352,6 @@ export async function POST(request: NextRequest) {
 
         // 정산에 사용된 주문 데이터 전체를 중간 테이블에 저장 (기존 데이터와 동일하더라도 갱신)
         if (settlementId && orders.length > 0) {
-          console.log(`[${mallName}] 정산에 연결할 주문 개수: ${orders.length}, settlement_id: ${settlementId}`);
-          console.log(`[${mallName}] 주문 ID 샘플 (최대 10개):`, orders.slice(0, 10).map(o => o.id));
-          
           // 기존 주문 연결 데이터 삭제 (갱신을 위해)
           await sql`
             DELETE FROM mall_sales_settlement_orders
@@ -560,8 +453,6 @@ export async function POST(request: NextRequest) {
       }
 
       await sql`COMMIT`;
-
-      console.log(`총 ${totalOrdersCount}건의 주문 데이터로 ${settlements.length}개 쇼핑몰 정산 완료`);
 
       return NextResponse.json({
         success: true,

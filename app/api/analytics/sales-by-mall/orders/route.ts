@@ -117,15 +117,6 @@ export async function GET(request: NextRequest) {
       }
 
       mallIdInt = parseInt(mallId!, 10);
-
-      console.log(`[주문 목록 조회] 원본 파라미터:`, {
-        mallId,
-        startDate_원본: searchParams.get("startDate"),
-        endDate_원본: searchParams.get("endDate"),
-      });
-      console.log(
-        `[주문 목록 조회] 처리 후: company_id: ${companyId}, mall_id: ${mallIdInt}, 기간: ${startDate} ~ ${endDate}`
-      );
     }
 
     // settlementId가 있으면 해당 정산에 연결된 주문들만 조회
@@ -191,57 +182,9 @@ export async function GET(request: NextRequest) {
             product_sale_price: productData.sale_price || null, // 저장된 상품 정보 사용
           };
         });
-
-        console.log(
-          `[주문 목록 조회] 저장된 주문 데이터와 상품 정보로 구성된 주문 건수: ${orders.length}`
-        );
       }
     } else {
       // 기존 방식: 기간 필터링으로 주문 조회
-      // 정산 데이터 확인 (디버깅용) - 실제로 정산된 데이터가 있는지 확인
-      const settlementCheck = await sql`
-        SELECT 
-          period_start_date,
-          period_end_date,
-          order_quantity,
-          order_amount
-        FROM mall_sales_settlements
-        WHERE company_id = ${companyId}
-          AND mall_id = ${mallIdInt}
-          AND period_start_date = ${startDate}::date
-          AND period_end_date = ${endDate}::date
-        LIMIT 1
-      `;
-      console.log(
-        `[주문 목록 조회] 정산 데이터 확인:`,
-        settlementCheck.length > 0 ? settlementCheck[0] : "없음"
-      );
-
-      // 먼저 해당 mall_id와 company_id로 전체 주문 건수 확인 (디버깅용)
-      const totalCountCheck = await sql`
-        SELECT COUNT(*) as count
-        FROM upload_rows ur
-        WHERE ur.company_id = ${companyId}
-          AND ur.mall_id = ${mallIdInt}
-      `;
-      console.log(
-        `[주문 목록 조회] 해당 쇼핑몰 전체 주문 건수 (mall_id=${mallIdInt}):`,
-        totalCountCheck[0]?.count || 0
-      );
-
-      // 기간 내 전체 주문 건수 확인 (디버깅용)
-      const periodCountCheck = await sql`
-        SELECT COUNT(*) as count
-        FROM upload_rows ur
-        WHERE ur.company_id = ${companyId}
-          AND DATE(ur.created_at) >= ${startDate}::date
-          AND DATE(ur.created_at) < (${endDate}::date + INTERVAL '1 day')
-      `;
-      console.log(
-        `[주문 목록 조회] 기간 내 전체 주문 건수 (${startDate} ~ ${endDate}):`,
-        periodCountCheck[0]?.count || 0
-      );
-
       // 해당 쇼핑몰의 주문 데이터 조회 (refresh/route.ts와 동일한 로직 사용)
       orders = await sql`
         SELECT DISTINCT ON (ur.id)
@@ -401,10 +344,6 @@ export async function GET(request: NextRequest) {
         ...rowData, // 나머지 모든 필드 포함
       };
     });
-
-    console.log(
-      `[주문 목록 조회] 포맷팅된 주문 건수: ${formattedOrders.length}`
-    );
 
     return NextResponse.json({
       success: true,

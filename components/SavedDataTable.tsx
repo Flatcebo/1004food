@@ -41,6 +41,10 @@ interface SavedDataTableProps {
   onRemoveFilter?: (filterType: string) => void;
   // 운송장 입력 모드
   isDeliveryInputMode?: boolean;
+  // 체크박스 선택 제어 (외부에서 제어할 경우)
+  selectedRows?: Set<number>;
+  onSelectedRowsChange?: (selectedRows: Set<number>) => void;
+  onSelectAll?: () => void;
 }
 
 const SavedDataTable = memo(function SavedDataTable({
@@ -71,6 +75,9 @@ const SavedDataTable = memo(function SavedDataTable({
   uploadTimeTo = "",
   onRemoveFilter,
   isDeliveryInputMode = false,
+  selectedRows: externalSelectedRows,
+  onSelectedRowsChange,
+  onSelectAll: externalOnSelectAll,
 }: SavedDataTableProps) {
   // 숨길 헤더 목록 (기본 숨김 헤더)
   const hiddenHeaders = useMemo(() => {
@@ -82,6 +89,7 @@ const SavedDataTable = memo(function SavedDataTable({
       "택배비",
       "합포수량",
       "upload_time",
+      "공급단가", // 공급단가 헤더 숨김
       // 주문자 관련 정보도 표시하도록 숨김 해제
       "주문자명",
       "주문자 전화번호",
@@ -271,7 +279,34 @@ const SavedDataTable = memo(function SavedDataTable({
     rowData: any;
   } | null>(null);
   const [detailRow, setDetailRow] = useState<any>(null);
-  const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
+  // 외부에서 제어하는 경우 외부 상태 사용, 아니면 내부 상태 사용
+  const [internalSelectedRows, setInternalSelectedRows] = useState<Set<number>>(
+    new Set()
+  );
+  const selectedRows = externalSelectedRows ?? internalSelectedRows;
+
+  // setSelectedRows 함수: 외부 제어와 내부 제어 모두 지원
+  const setSelectedRows = useCallback(
+    (newSelectedRows: Set<number> | ((prev: Set<number>) => Set<number>)) => {
+      if (onSelectedRowsChange) {
+        // 외부 제어인 경우: 외부 상태를 직접 업데이트
+        const currentRows = externalSelectedRows ?? new Set<number>();
+        const updated =
+          typeof newSelectedRows === "function"
+            ? newSelectedRows(currentRows)
+            : newSelectedRows;
+        onSelectedRowsChange(updated);
+      } else {
+        // 내부 제어인 경우: 내부 상태 업데이트
+        if (typeof newSelectedRows === "function") {
+          setInternalSelectedRows(newSelectedRows);
+        } else {
+          setInternalSelectedRows(newSelectedRows);
+        }
+      }
+    },
+    [externalSelectedRows, onSelectedRowsChange]
+  );
   // 드래그 선택 상태
   const [dragStartRow, setDragStartRow] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -737,14 +772,20 @@ const SavedDataTable = memo(function SavedDataTable({
   // 전체 선택/해제
   const handleSelectAll = useCallback(
     (checked: boolean) => {
-      if (checked) {
-        const allIds = new Set(paginatedRows.map((row: any) => row.id));
-        setSelectedRows(allIds);
+      if (externalOnSelectAll && checked) {
+        // 외부에서 제어하는 경우 외부 함수 호출
+        externalOnSelectAll();
       } else {
-        setSelectedRows(new Set());
+        // 내부 제어인 경우
+        if (checked) {
+          const allIds = new Set(paginatedRows.map((row: any) => row.id));
+          setSelectedRows(allIds);
+        } else {
+          setSelectedRows(new Set());
+        }
       }
     },
-    [paginatedRows]
+    [paginatedRows, externalOnSelectAll, setSelectedRows]
   );
 
   // 개별 선택/해제 - 메모이제이션 강화

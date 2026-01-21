@@ -323,7 +323,7 @@ export default function OrderModalContent({
                 )}
 
                 {/* 실시간 통계 표시 */}
-                <div className="mt-4 grid grid-cols-3 gap-4">
+                <div className="mt-4 grid grid-cols-4 gap-4">
                   <div className="text-center">
                     <div className="text-lg font-bold text-blue-600">
                       {finalResult
@@ -347,6 +347,12 @@ export default function OrderModalContent({
                         : deliveryStats.failCount}
                     </div>
                     <div className="text-xs text-gray-600">실패</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-yellow-600">
+                      {finalResult ? finalResult.duplicateCount || 0 : 0}
+                    </div>
+                    <div className="text-xs text-gray-600">중복</div>
                   </div>
                 </div>
 

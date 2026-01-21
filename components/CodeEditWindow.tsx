@@ -60,12 +60,13 @@ export default function CodeEditWindow({
   }, [currentCode, currentProductId]);
 
   useEffect(() => {
-    // 검색어가 있을 때만 필터링 적용
-    const hasCodeSearch = codeSearch.trim().length > 0;
-    const hasNameSearch = nameSearch.trim().length > 0;
+    // 검색어가 최소 길이 이상일 때만 필터링 적용
+    // 매핑코드: 4자 이상, 상품명: 2자 이상
+    const hasCodeSearch = codeSearch.trim().length >= 4;
+    const hasNameSearch = nameSearch.trim().length >= 2;
 
     if (!hasCodeSearch && !hasNameSearch) {
-      // 검색어가 없으면 빈 배열 유지
+      // 검색어가 최소 길이 미만이면 빈 배열 유지
       setFilteredCodes([]);
       return;
     }
@@ -302,7 +303,17 @@ export default function CodeEditWindow({
             </div>
           </div>
           <div className="mt-2 text-sm text-gray-600">
-            검색 결과: {filteredCodes.length}건
+            {codeSearch.trim().length > 0 && codeSearch.trim().length < 4 ? (
+              <span className="text-orange-600">
+                매핑코드는 4자 이상 입력해주세요.
+              </span>
+            ) : nameSearch.trim().length > 0 && nameSearch.trim().length < 2 ? (
+              <span className="text-orange-600">
+                상품명은 2자 이상 입력해주세요.
+              </span>
+            ) : (
+              `검색 결과: ${filteredCodes.length}건`
+            )}
           </div>
         </div>
 
@@ -349,9 +360,13 @@ export default function CodeEditWindow({
                       colSpan={9}
                       className="border border-gray-300 px-4 py-8 text-center text-gray-500"
                     >
-                      {codeSearch.trim() || nameSearch.trim()
+                      {codeSearch.trim().length > 0 && codeSearch.trim().length < 4
+                        ? "매핑코드는 4자 이상 입력해주세요."
+                        : nameSearch.trim().length > 0 && nameSearch.trim().length < 2
+                        ? "상품명은 2자 이상 입력해주세요."
+                        : codeSearch.trim().length >= 4 || nameSearch.trim().length >= 2
                         ? "검색 결과가 없습니다."
-                        : "매핑코드 또는 상품명을 검색해주세요."}
+                        : "매핑코드(4자 이상) 또는 상품명(2자 이상)을 검색해주세요."}
                     </td>
                   </tr>
                 ) : (

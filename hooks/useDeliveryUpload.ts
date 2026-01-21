@@ -19,6 +19,7 @@ export interface DeliveryFinalResult {
   totalCount: number;
   successCount: number;
   failCount: number;
+  duplicateCount: number;
   message: string;
 }
 
@@ -150,6 +151,7 @@ export const useDeliveryUpload = () => {
         totalCount: data.totalCount,
         successCount: data.successCount,
         failCount: data.failCount,
+        duplicateCount: data.duplicateCount || 0,
         message: data.message,
       });
 

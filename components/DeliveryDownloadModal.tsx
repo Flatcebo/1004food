@@ -35,7 +35,9 @@ export default function DeliveryDownloadModal({
     string | null
   >(null);
   const [downloadingAllSabangnet, setDownloadingAllSabangnet] = useState(false);
-  const [dateFilter, setDateFilter] = useState<"yesterday" | "today" | "all">("all");
+  const [dateFilter, setDateFilter] = useState<"yesterday" | "today" | "all">(
+    "all"
+  );
 
   // 업체 리스트 조회
   useEffect(() => {
@@ -125,7 +127,10 @@ export default function DeliveryDownloadModal({
     }
   };
 
-  const handleDownloadSabangnetAB = async (vendorName: string) => {
+  const handleDownloadSabangnetAB = async (
+    vendorName: string,
+    currentDateFilter: "yesterday" | "today" | "all"
+  ) => {
     const downloadKey = `sabangnet_${vendorName}`;
     setDownloadingSabangnet(downloadKey);
     try {
@@ -135,7 +140,11 @@ export default function DeliveryDownloadModal({
       const checkResponse = await fetch("/api/upload/check-sabangnet-ab", {
         method: "POST",
         headers,
-        body: JSON.stringify({vendorName, allVendors: false}),
+        body: JSON.stringify({
+          vendorName,
+          allVendors: false,
+          dateFilter: currentDateFilter,
+        }),
       });
 
       if (!checkResponse.ok) {
@@ -145,7 +154,13 @@ export default function DeliveryDownloadModal({
       const checkResult = await checkResponse.json();
 
       if (!checkResult.hasData) {
-        alert("다운로드할 데이터가 없습니다.");
+        const dateFilterLabel =
+          currentDateFilter === "yesterday"
+            ? "어제"
+            : currentDateFilter === "today"
+            ? "오늘"
+            : "전체";
+        alert(`${dateFilterLabel} 기간에 다운로드할 데이터가 없습니다.`);
         return;
       }
 
@@ -153,7 +168,11 @@ export default function DeliveryDownloadModal({
       const response = await fetch("/api/upload/download-sabangnet-ab", {
         method: "POST",
         headers,
-        body: JSON.stringify({vendorName, allVendors: false}),
+        body: JSON.stringify({
+          vendorName,
+          allVendors: false,
+          dateFilter: currentDateFilter,
+        }),
       });
 
       if (!response.ok) {
@@ -323,7 +342,9 @@ export default function DeliveryDownloadModal({
                 </select>
                 <button
                   onClick={handleDownloadAllSabangnetAB}
-                  disabled={downloadingAllSabangnet || !hasActiveSabangnetButton}
+                  disabled={
+                    downloadingAllSabangnet || !hasActiveSabangnetButton
+                  }
                   className={`px-6 py-2 rounded-md text-sm font-semibold transition-colors flex items-center gap-2 ${
                     downloadingAllSabangnet || !hasActiveSabangnetButton
                       ? "bg-gray-400 cursor-not-allowed text-white"
@@ -388,7 +409,10 @@ export default function DeliveryDownloadModal({
                     return (
                       <button
                         onClick={() =>
-                          handleDownloadSabangnetAB(vendor.vendorName)
+                          handleDownloadSabangnetAB(
+                            vendor.vendorName,
+                            dateFilter
+                          )
                         }
                         disabled={
                           downloadingSabangnet === sabangDownloadKey ||

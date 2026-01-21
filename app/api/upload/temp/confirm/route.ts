@@ -215,60 +215,157 @@ export async function POST(request: NextRequest) {
     // 한국 시간(KST) 생성
     const koreaTime = new Date(Date.now() + 9 * 60 * 60 * 1000);
 
-    // 사용자가 드롭다운에서 선택한 업체명을 기반으로 내부코드 일괄 생성
-    // 각 파일의 모든 행에 대해 동일한 업체명(file.vendor_name) 사용
-    const allVendorNames: string[] = [];
-    confirmedFiles.forEach((file) => {
+    // 각 행의 mall_id를 찾아서 내부코드 생성에 사용
+    // 온라인 유저의 경우: 각 행의 업체명/쇼핑몰명 컬럼 값을 사용하여 mall_id 찾기
+    // 일반 유저의 경우: 파일 레벨의 vendor_name을 사용하여 mall_id 찾기
+    const allMallIds: (number | null)[] = [];
+    const isOnlineUserForInternalCode =
+      userGrade === "온라인" || String(userGrade || "").trim() === "온라인";
+
+    // mall 조회를 위한 캐시 (성능 최적화)
+    const mallCache: {[key: string]: number | null} = {};
+
+    // 각 행의 mall_id를 찾는 헬퍼 함수
+    const findMallIdForRow = async (
+      vendorName: string,
+      fileMallId: number | null
+    ): Promise<number | null> => {
+      if (!vendorName || vendorName.trim() === "") {
+        return fileMallId;
+      }
+
+      const trimmedVendorName = vendorName.trim();
+
+      // 캐시에서 먼저 확인
+      if (mallCache.hasOwnProperty(trimmedVendorName)) {
+        return mallCache[trimmedVendorName];
+      }
+
+      // 파일 레벨 mall_id가 있으면 우선 사용
+      if (fileMallId) {
+        mallCache[trimmedVendorName] = fileMallId;
+        return fileMallId;
+      }
+
+      // DB에서 조회
+      try {
+        // 정확한 매칭 시도
+        let mallResult = await sql`
+          SELECT id, name FROM mall 
+          WHERE name = ${trimmedVendorName}
+          LIMIT 1
+        `;
+
+        if (mallResult.length > 0) {
+          const foundMallId = mallResult[0].id;
+          mallCache[trimmedVendorName] = foundMallId;
+          return foundMallId;
+        }
+
+        // 대소문자 구분 없이 매칭 시도
+        mallResult = await sql`
+          SELECT id, name FROM mall 
+          WHERE LOWER(TRIM(name)) = LOWER(${trimmedVendorName})
+          LIMIT 1
+        `;
+
+        if (mallResult.length > 0) {
+          const foundMallId = mallResult[0].id;
+          mallCache[trimmedVendorName] = foundMallId;
+          return foundMallId;
+        }
+
+        // 찾지 못한 경우 null 저장
+        mallCache[trimmedVendorName] = null;
+        return null;
+      } catch (error) {
+        console.error("mall 조회 실패:", error);
+        mallCache[trimmedVendorName] = null;
+        return null;
+      }
+    };
+
+    // 각 파일의 행별로 mall_id 찾기
+    for (const file of confirmedFiles) {
       const tableData = file.table_data;
       if (!tableData || !Array.isArray(tableData) || tableData.length < 2) {
-        return;
+        continue;
       }
 
-      // 사용자가 드롭다운에서 선택한 업체명 사용 (DB에 저장된 vendor_name)
-      let vendorName = file.vendor_name || "";
+      const headerRow = tableData[0];
+      const fileVendorName = file.vendor_name || null;
+      const fileMallId = file.mall_id || null;
 
-      // vendor_name이 비어있으면 테이블 데이터에서 업체명 찾기 (하위 호환성)
-      if (!vendorName || vendorName.trim() === "") {
-        const headerRow = tableData[0];
+      // 파일 레벨 mall_id가 없으면 vendor_name으로 찾기
+      let resolvedFileMallId = fileMallId;
+      if (!resolvedFileMallId && fileVendorName) {
+        resolvedFileMallId = await findMallIdForRow(fileVendorName, null);
+      }
+
+      // 온라인 유저인 경우: 각 행의 업체명/쇼핑몰명을 사용
+      if (isOnlineUserForInternalCode) {
+        // 업체명 또는 쇼핑몰명 컬럼 인덱스 찾기
         const vendorIdx = headerRow.findIndex(
           (h: any) =>
-            h && typeof h === "string" && (h === "업체명" || h === "업체")
+            h &&
+            typeof h === "string" &&
+            (h === "업체명" || h === "업체" || h.includes("업체명"))
         );
 
-        if (vendorIdx !== -1 && tableData.length > 1) {
-          // 첫 번째 데이터 행에서 업체명 찾기
-          const firstDataRow = tableData[1];
-          const vendorFromTable = firstDataRow[vendorIdx];
-          if (vendorFromTable && typeof vendorFromTable === "string") {
-            vendorName = String(vendorFromTable).trim();
-            // console.warn(
-            //   `⚠️ 파일 "${file.file_name}": DB의 vendor_name이 비어있어 테이블 데이터에서 업체명을 찾았습니다: "${vendorName}"`
-            // );
-          }
-        }
+        const shopNameIdx = headerRow.findIndex(
+          (h: any) =>
+            h &&
+            typeof h === "string" &&
+            (h === "쇼핑몰명" ||
+              h === "쇼핑몰명(1)" ||
+              h === "쇼핑몰" ||
+              h.includes("쇼핑몰명"))
+        );
 
-        // 여전히 비어있으면 경고 로그
-        if (!vendorName || vendorName.trim() === "") {
-          console.error(
-            `❌ 파일 "${file.file_name}": 업체명을 찾을 수 없습니다. DB의 vendor_name도 비어있고 테이블 데이터에도 업체명 컬럼이 없습니다.`
+        // 데이터 행 순회하면서 각 행의 업체명으로 mall_id 찾기
+        for (let i = 1; i < tableData.length; i++) {
+          const dataRow = tableData[i];
+          let rowVendorName = "";
+
+          // 1순위: 업체명 컬럼
+          if (vendorIdx !== -1 && dataRow[vendorIdx]) {
+            rowVendorName = String(dataRow[vendorIdx]).trim();
+          }
+          // 2순위: 쇼핑몰명 컬럼 (업체명이 없는 경우)
+          if (!rowVendorName && shopNameIdx !== -1 && dataRow[shopNameIdx]) {
+            rowVendorName = String(dataRow[shopNameIdx]).trim();
+          }
+          // 3순위: 파일 레벨 vendor_name (fallback)
+          if (!rowVendorName && fileVendorName) {
+            rowVendorName = String(fileVendorName).trim();
+          }
+
+          // 해당 행의 mall_id 찾기
+          const rowMallId = await findMallIdForRow(
+            rowVendorName || "",
+            resolvedFileMallId
           );
+          allMallIds.push(rowMallId);
         }
       } else {
-      }
+        // 일반 유저: 파일 레벨 vendor_name 사용
+        const rowCount = tableData.length - 1; // 헤더 제외한 데이터 행 개수
 
-      const rowCount = tableData.length - 1; // 헤더 제외한 데이터 행 개수
-
-      // 각 행에 대해 동일한 업체명 사용
-      for (let i = 0; i < rowCount; i++) {
-        allVendorNames.push(vendorName || ""); // 빈 문자열이면 "미지정"이 됨
+        // 각 행에 대해 동일한 mall_id 사용
+        for (let i = 0; i < rowCount; i++) {
+          allMallIds.push(resolvedFileMallId);
+        }
       }
-    });
+    }
 
     // 내부코드 일괄 생성
     let internalCodes: string[] = [];
-    if (allVendorNames.length > 0) {
+    if (allMallIds.length > 0) {
       try {
-        internalCodes = await generateUniqueCodesForVendors(allVendorNames);
+        internalCodes = await generateUniqueCodesForVendors(
+          companyId,
+          allMallIds
+        );
       } catch (error) {
         console.error("내부코드 생성 실패:", error);
         return NextResponse.json(
@@ -867,6 +964,21 @@ export async function POST(request: NextRequest) {
       const vendorHeaderKey =
         vendorHeaderIdx !== -1 ? headerRow[vendorHeaderIdx] : null;
 
+      // 온라인 유저의 경우 쇼핑몰명 컬럼 인덱스도 찾기
+      const shopNameHeaderIdx = isOnlineUser
+        ? headerRow.findIndex(
+            (h: any) =>
+              h &&
+              typeof h === "string" &&
+              (h === "쇼핑몰명" ||
+                h === "쇼핑몰명(1)" ||
+                h === "쇼핑몰" ||
+                h.includes("쇼핑몰명"))
+          )
+        : -1;
+      const shopNameHeaderKey =
+        shopNameHeaderIdx !== -1 ? headerRow[shopNameHeaderIdx] : null;
+
       // 각 행을 upload_rows에 저장 (객체 형태로, row_order 포함)
       const insertPromises = rowObjects.map(
         async (rowObj: any, index: number) => {
@@ -878,13 +990,14 @@ export async function POST(request: NextRequest) {
             "";
 
           // 각 행의 업체명 추출 (헤더 키 사용 또는 여러 가능한 키 시도)
+          // 온라인 유저의 경우 쇼핑몰명도 고려
           let rowVendorName = "";
 
-          // 1순위: 헤더에서 찾은 키 사용
+          // 1순위: 헤더에서 찾은 업체명 키 사용
           if (vendorHeaderKey && rowObj[vendorHeaderKey]) {
             rowVendorName = String(rowObj[vendorHeaderKey]).trim();
           }
-          // 2순위: 원본 데이터 행에서 직접 추출 (vendorHeaderIdx 사용)
+          // 2순위: 원본 데이터 행에서 업체명 직접 추출 (vendorHeaderIdx 사용)
           else if (
             vendorHeaderIdx !== -1 &&
             updatedDataRows[index] &&
@@ -894,11 +1007,38 @@ export async function POST(request: NextRequest) {
               updatedDataRows[index][vendorHeaderIdx]
             ).trim();
           }
-          // 3순위: 일반적인 키 이름 시도
+          // 3순위: 일반적인 업체명 키 이름 시도
           else {
             rowVendorName = String(
-              rowObj["업체명"] || rowObj["업체"] || vendorName || ""
+              rowObj["업체명"] || rowObj["업체"] || ""
             ).trim();
+          }
+
+          // 온라인 유저의 경우: 업체명이 없으면 쇼핑몰명 사용
+          if (isOnlineUser && !rowVendorName) {
+            if (shopNameHeaderKey && rowObj[shopNameHeaderKey]) {
+              rowVendorName = String(rowObj[shopNameHeaderKey]).trim();
+            } else if (
+              shopNameHeaderIdx !== -1 &&
+              updatedDataRows[index] &&
+              updatedDataRows[index][shopNameHeaderIdx]
+            ) {
+              rowVendorName = String(
+                updatedDataRows[index][shopNameHeaderIdx]
+              ).trim();
+            } else {
+              rowVendorName = String(
+                rowObj["쇼핑몰명"] ||
+                  rowObj["쇼핑몰명(1)"] ||
+                  rowObj["쇼핑몰"] ||
+                  ""
+              ).trim();
+            }
+          }
+
+          // 여전히 없으면 파일 레벨 vendor_name 사용 (fallback)
+          if (!rowVendorName && vendorName) {
+            rowVendorName = String(vendorName).trim();
           }
 
           const trimmedRowVendorName = rowVendorName;
@@ -969,9 +1109,7 @@ export async function POST(request: NextRequest) {
           let sabangCode: string | null = null;
 
           // userGrade 확인 로그 (모든 행에 대해 첫 번째 행만 출력)
-          const isOnlineUser =
-            userGrade === "온라인" ||
-            String(userGrade || "").trim() === "온라인";
+          // isOnlineUser는 이미 파일 처리 루프 상단(398줄)에서 선언됨
           if (index === 0) {
             console.log(`🔍 [sabang_code 디버깅] userGrade 확인:`, {
               userGrade,

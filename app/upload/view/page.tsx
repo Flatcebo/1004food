@@ -68,7 +68,9 @@ function FileViewContent() {
   // 순수 원본 배송메시지 저장 (rowIdx -> 순수 원본 메시지, 업체명 제거된 메시지)
   const pureOriginalMessagesRef = useRef<{[rowIdx: number]: string}>({});
   // 원본 상품명 및 수량 저장 (rowIdx -> {productName, quantity})
-  const originalProductDataRef = useRef<{[rowIdx: number]: {productName: string; quantity: string}}>({});
+  const originalProductDataRef = useRef<{
+    [rowIdx: number]: {productName: string; quantity: string};
+  }>({});
   // 수량 변환 상태 (변환되었는지 여부)
   const [isQuantityConverted, setIsQuantityConverted] = useState(false);
   // 드래그 시작 시점의 선택 상태 저장
@@ -97,7 +99,10 @@ function FileViewContent() {
   // 드래그 선택 상태
   const [dragStartRow, setDragStartRow] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [dragStartPos, setDragStartPos] = useState<{x: number; y: number} | null>(null);
+  const [dragStartPos, setDragStartPos] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   // 일괄 적용 인풋 상태
   const [bulkProductName, setBulkProductName] = useState("");
   const [bulkQuantity, setBulkQuantity] = useState("");
@@ -269,22 +274,25 @@ function FileViewContent() {
   const handleDragStart = (rowIndex: number, e: React.MouseEvent) => {
     // 체크박스 클릭이 아닌 드래그인 경우에만 처리
     if (e.button !== 0) return; // 왼쪽 마우스 버튼만
-    
+
     // 체크박스 직접 클릭이 아닌 경우에만 드래그 시작
     const target = e.target as HTMLElement;
-    if (target.tagName === 'INPUT' && target.getAttribute('type') === 'checkbox') {
+    if (
+      target.tagName === "INPUT" &&
+      target.getAttribute("type") === "checkbox"
+    ) {
       // 체크박스 직접 클릭은 일반 클릭으로 처리
       return;
     }
-    
+
     // 드래그 시작 위치 저장
     setDragStartPos({x: e.clientX, y: e.clientY});
     setIsDragging(true);
     setDragStartRow(rowIndex);
-    
+
     // 드래그 시작 시점의 선택 상태 저장 (토글 전 상태)
     dragStartSelectionRef.current = selectedRows.has(rowIndex);
-    
+
     // 현재 행 선택 상태 토글
     const newSelectedRows = new Set(selectedRows);
     if (newSelectedRows.has(rowIndex)) {
@@ -293,28 +301,28 @@ function FileViewContent() {
       newSelectedRows.add(rowIndex);
     }
     setSelectedRows(newSelectedRows);
-    
+
     e.preventDefault();
   };
 
   // 드래그 중
   const handleDragOver = (rowIndex: number, e: React.MouseEvent) => {
     if (!isDragging || dragStartRow === null || !dragStartPos) return;
-    
+
     // 드래그 거리 확인 (너무 작은 이동은 무시)
     const dragDistance = Math.abs(e.clientY - dragStartPos.y);
     if (dragDistance < 5) return; // 5px 미만은 클릭으로 간주
-    
+
     e.preventDefault();
-    
+
     // 시작 행부터 현재 행까지 범위 선택
     const start = Math.min(dragStartRow, rowIndex);
     const end = Math.max(dragStartRow, rowIndex);
-    
+
     const newSelectedRows = new Set(selectedRows);
     // 드래그 시작 시점의 선택 상태를 기준으로 범위 선택/해제
     const startWasSelected = dragStartSelectionRef.current;
-    
+
     for (let i = start; i <= end; i++) {
       if (startWasSelected) {
         // 시작 행이 선택되어 있었으면 범위 선택
@@ -324,7 +332,7 @@ function FileViewContent() {
         newSelectedRows.delete(i);
       }
     }
-    
+
     setSelectedRows(newSelectedRows);
   };
 
@@ -351,12 +359,12 @@ function FileViewContent() {
     };
 
     if (isDragging) {
-      document.addEventListener('mouseup', handleMouseUp);
-      document.addEventListener('mouseleave', handleMouseLeave);
-      
+      document.addEventListener("mouseup", handleMouseUp);
+      document.addEventListener("mouseleave", handleMouseLeave);
+
       return () => {
-        document.removeEventListener('mouseup', handleMouseUp);
-        document.removeEventListener('mouseleave', handleMouseLeave);
+        document.removeEventListener("mouseup", handleMouseUp);
+        document.removeEventListener("mouseleave", handleMouseLeave);
       };
     }
   }, [isDragging]);
@@ -1258,9 +1266,10 @@ function FileViewContent() {
     }
 
     // 변환할 행 선택 (체크박스가 있으면 선택된 행, 없으면 전체)
-    const rowsToConvert = selectedRows.size > 0
-      ? Array.from(selectedRows)
-      : Array.from({length: tableData.length - 1}, (_, i) => i + 1);
+    const rowsToConvert =
+      selectedRows.size > 0
+        ? Array.from(selectedRows)
+        : Array.from({length: tableData.length - 1}, (_, i) => i + 1);
 
     if (rowsToConvert.length === 0) {
       alert("변환할 행을 선택해주세요.");
@@ -1397,7 +1406,7 @@ function FileViewContent() {
 
     // 사방넷명으로 복사할지 확인
     const useSabangName = confirm("사방넷명으로 복사하시겠습니까?");
-    
+
     const headerRow = tableData[0];
     const productNameIdx = headerIndex.nameIdx;
     const qtyIdx = headerRow.findIndex((h: any) => h === "수량");
@@ -1415,42 +1424,46 @@ function FileViewContent() {
 
       if (productName) {
         let displayName = productName;
-        
+
         // 사방넷명으로 복사하는 경우
         if (useSabangName) {
           // 매핑코드로 상품 찾기
-          const mappingCode = mappingIdx !== -1 ? String(row[mappingIdx] || "").trim() : "";
-          
+          const mappingCode =
+            mappingIdx !== -1 ? String(row[mappingIdx] || "").trim() : "";
+
           // productIdMap에서 상품 ID 찾기
           const productId = productIdMap[productName];
-          
+
           let matchedProduct = null;
-          
+
           // 1순위: productIdMap으로 찾기
           if (productId !== undefined && productId !== null) {
             matchedProduct = codes.find((c: any) => c.id === productId);
           }
-          
+
           // 2순위: 상품명으로 찾기
           if (!matchedProduct) {
             matchedProduct = codes.find(
               (c: any) => c.name && String(c.name).trim() === productName
             );
           }
-          
+
           // 3순위: 매핑코드로 찾기
           if (!matchedProduct && mappingCode) {
             matchedProduct = codes.find(
               (c: any) => c.code && String(c.code).trim() === mappingCode
             );
           }
-          
+
           // 사방넷명이 있으면 사용, 없으면 상품명 사용
-          if (matchedProduct?.sabangName && String(matchedProduct.sabangName).trim()) {
+          if (
+            matchedProduct?.sabangName &&
+            String(matchedProduct.sabangName).trim()
+          ) {
             displayName = String(matchedProduct.sabangName).trim();
           }
         }
-        
+
         if (displayName) {
           productCounts[displayName] =
             (productCounts[displayName] || 0) + quantity;
@@ -2297,7 +2310,7 @@ function FileViewContent() {
               <thead>
                 <tr>
                   {isEditMode && (
-                    <th 
+                    <th
                       className="border bg-gray-100 px-2 py-1 text-xs text-center cursor-pointer"
                       onClick={handleSelectAll}
                     >
@@ -2347,7 +2360,8 @@ function FileViewContent() {
                           <span>택배사</span>
                         </div>
                       </th>
-                    ) : header === "택배사" ? null : ( // 택배사 칼럼 숨기기
+                    ) : header === "택배사" ||
+                      header === "_originalRowIndex" ? null : ( // 택배사, _originalRowIndex 칼럼 숨기기
                       <th
                         key={hidx}
                         className="border bg-gray-100 px-2 py-1 text-xs"
@@ -2416,6 +2430,9 @@ function FileViewContent() {
                   );
                   const postTypeIdx = headerRow.findIndex(
                     (h: any) => h === "택배사"
+                  );
+                  const originalRowIndexIdx = headerRow.findIndex(
+                    (h: any) => h === "_originalRowIndex"
                   );
                   const vendorIdx = headerRow.findIndex(
                     (h: any) => h === "업체명" || h === "업체"
@@ -2541,12 +2558,12 @@ function FileViewContent() {
                         className={isRowSelected ? "bg-blue-100" : ""}
                       >
                         {isEditMode && (
-                          <td 
+                          <td
                             className="border px-2 py-1 border-gray-300 text-xs text-center cursor-pointer select-none"
                             onMouseDown={(e) => {
                               // 체크박스가 아닌 셀 영역에서만 드래그 시작
                               const target = e.target as HTMLElement;
-                              if (target.tagName !== 'INPUT') {
+                              if (target.tagName !== "INPUT") {
                                 handleDragStart(actualRowIndex, e);
                               }
                             }}
@@ -2585,8 +2602,8 @@ function FileViewContent() {
                           </td>
                         )}
                         {tableData[0].map((_, j) => {
-                          // 택배사 칼럼은 숨기기
-                          if (j === postTypeIdx) {
+                          // 택배사, _originalRowIndex 칼럼은 숨기기
+                          if (j === postTypeIdx || j === originalRowIndexIdx) {
                             return null;
                           }
 

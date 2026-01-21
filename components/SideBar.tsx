@@ -42,8 +42,12 @@ const menuConfigs: AccordionMenuConfig[] = [
         path: "/order",
         name: "주문 리스트",
       },
+      {
+        path: "/order/edit",
+        name: "주문 수정",
+      },
     ],
-    autoOpenPaths: ["/order", "/order/upload"],
+    autoOpenPaths: ["/order", "/order/upload","/order/edit"],
   },
   {
     id: "products",

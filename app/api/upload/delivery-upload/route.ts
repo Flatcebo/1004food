@@ -493,12 +493,34 @@ export async function POST(request: NextRequest) {
       // 실제 처리할 항목 수 (필수 값이 모두 있는 행만 포함)
       const totalCount = deliveryUpdates.length;
 
+      // 중복 수량 계산: 파일 내에서 같은 운송장 번호의 총합
+      // 예: 00000 운송장이 5개면 5, 2개면 2, 1개면 0
+      const trackingNumberCounts = new Map<string, number>();
+      deliveryUpdates.forEach((update) => {
+        const trackingNumber = update.trackingNumber.trim();
+        if (trackingNumber) {
+          trackingNumberCounts.set(
+            trackingNumber,
+            (trackingNumberCounts.get(trackingNumber) || 0) + 1
+          );
+        }
+      });
+
+      // 2개 이상인 운송장들의 총합 계산
+      let duplicateCount = 0;
+      trackingNumberCounts.forEach((count) => {
+        if (count >= 2) {
+          duplicateCount += count;
+        }
+      });
+
       return NextResponse.json({
         success: true,
         message: `총 ${totalCount}건 중 ${successCount}건 성공, ${failCount}건 실패`,
         totalCount, // 실제 처리할 항목 수
         successCount,
         failCount,
+        duplicateCount, // 중복 수량
         results,
         errors: errors.length > 0 ? errors : undefined,
       });

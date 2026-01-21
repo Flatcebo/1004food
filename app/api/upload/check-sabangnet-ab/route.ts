@@ -38,7 +38,9 @@ export async function POST(request: NextRequest) {
 
           if (userResult[0].assigned_vendor_ids) {
             try {
-              assignedVendorIds = Array.isArray(userResult[0].assigned_vendor_ids)
+              assignedVendorIds = Array.isArray(
+                userResult[0].assigned_vendor_ids
+              )
                 ? userResult[0].assigned_vendor_ids
                 : JSON.parse(userResult[0].assigned_vendor_ids || "[]");
             } catch (e) {
@@ -52,52 +54,100 @@ export async function POST(request: NextRequest) {
     }
 
     // 날짜 계산 (한국 서울 시간 기준)
-    // 현재 시간을 한국 시간으로 변환
+    // 한국 시간대로 현재 날짜 가져오기
     const now = new Date();
-    const koreaOffset = 9 * 60 * 60 * 1000; // UTC+9 (한국 시간)
-    const utcTime = now.getTime() + (now.getTimezoneOffset() * 60 * 1000);
-    const koreaTime = new Date(utcTime + koreaOffset);
-    
+    const koreaFormatter = new Intl.DateTimeFormat("ko-KR", {
+      timeZone: "Asia/Seoul",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    const koreaParts = koreaFormatter.formatToParts(now);
+    const koreaYear = parseInt(
+      koreaParts.find((p) => p.type === "year")?.value || "2024"
+    );
+    const koreaMonth =
+      parseInt(koreaParts.find((p) => p.type === "month")?.value || "1") - 1; // 0-based
+    const koreaDay = parseInt(
+      koreaParts.find((p) => p.type === "day")?.value || "1"
+    );
+
     let dateFromUTC: Date;
     let dateToUTC: Date;
-    
+
+    // 한국 시간을 UTC로 변환하는 함수 (서버 타임존과 무관하게 정확하게 계산)
+    // 한국 시간 2026-01-21 00:00:00 = UTC 2026-01-20 15:00:00
+    // 한국 시간 2026-01-21 23:59:59.999 = UTC 2026-01-21 14:59:59.999
+    const koreaToUTC = (
+      year: number,
+      month: number,
+      day: number,
+      hour: number,
+      minute: number,
+      second: number,
+      ms: number
+    ) => {
+      // 한국 시간을 UTC로 변환
+      // 한국은 UTC+9이므로 한국 시간에서 9시간을 빼면 UTC 시간이 됨
+      // hour가 9보다 작으면 전날로 넘어감
+      let utcHour = hour - 9;
+      let utcDay = day;
+      let utcMonth = month;
+      let utcYear = year;
+
+      if (utcHour < 0) {
+        utcHour += 24;
+        utcDay -= 1;
+        if (utcDay < 1) {
+          utcMonth -= 1;
+          if (utcMonth < 0) {
+            utcMonth = 11;
+            utcYear -= 1;
+          }
+          // 해당 월의 마지막 날 계산
+          utcDay = new Date(utcYear, utcMonth + 1, 0).getDate();
+        }
+      }
+
+      return new Date(
+        Date.UTC(utcYear, utcMonth, utcDay, utcHour, minute, second, ms)
+      );
+    };
+
     if (dateFilter === "yesterday") {
       // 어제만 (한국 시간 기준)
-      const yesterdayStart = new Date(koreaTime);
-      yesterdayStart.setDate(yesterdayStart.getDate() - 1);
-      yesterdayStart.setHours(0, 0, 0, 0);
-      
-      const yesterdayEnd = new Date(koreaTime);
-      yesterdayEnd.setDate(yesterdayEnd.getDate() - 1);
-      yesterdayEnd.setHours(23, 59, 59, 999);
-      
-      // 한국 시간을 UTC로 변환 (데이터베이스는 UTC로 저장되어 있음)
-      dateFromUTC = new Date(yesterdayStart.getTime() - koreaOffset);
-      dateToUTC = new Date(yesterdayEnd.getTime() - koreaOffset);
+      // 한국 어제 00:00:00.000 ~ 23:59:59.999
+      dateFromUTC = koreaToUTC(koreaYear, koreaMonth, koreaDay - 1, 0, 0, 0, 0);
+      dateToUTC = koreaToUTC(
+        koreaYear,
+        koreaMonth,
+        koreaDay - 1,
+        23,
+        59,
+        59,
+        999
+      );
     } else if (dateFilter === "today") {
       // 오늘만 (한국 시간 기준)
-      const todayStart = new Date(koreaTime);
-      todayStart.setHours(0, 0, 0, 0);
-      
-      const todayEnd = new Date(koreaTime);
-      todayEnd.setHours(23, 59, 59, 999);
-      
-      // 한국 시간을 UTC로 변환
-      dateFromUTC = new Date(todayStart.getTime() - koreaOffset);
-      dateToUTC = new Date(todayEnd.getTime() - koreaOffset);
+      // 한국 오늘 00:00:00.000 ~ 23:59:59.999
+      dateFromUTC = koreaToUTC(koreaYear, koreaMonth, koreaDay, 0, 0, 0, 0);
+      dateToUTC = koreaToUTC(koreaYear, koreaMonth, koreaDay, 23, 59, 59, 999);
     } else {
       // 전체 (어제~오늘, 한국 시간 기준)
-      const yesterdayStart = new Date(koreaTime);
-      yesterdayStart.setDate(yesterdayStart.getDate() - 1);
-      yesterdayStart.setHours(0, 0, 0, 0);
-      
-      const todayEnd = new Date(koreaTime);
-      todayEnd.setHours(23, 59, 59, 999);
-      
-      // 한국 시간을 UTC로 변환
-      dateFromUTC = new Date(yesterdayStart.getTime() - koreaOffset);
-      dateToUTC = new Date(todayEnd.getTime() - koreaOffset);
+      dateFromUTC = koreaToUTC(koreaYear, koreaMonth, koreaDay - 1, 0, 0, 0, 0);
+      dateToUTC = koreaToUTC(koreaYear, koreaMonth, koreaDay, 23, 59, 59, 999);
     }
+
+    // 디버깅 로그
+    console.log(`🔍 [AB 체크 API] dateFilter: ${dateFilter}`);
+    console.log(
+      `🔍 [AB 체크 API] 한국 오늘: ${koreaYear}-${String(
+        koreaMonth + 1
+      ).padStart(2, "0")}-${String(koreaDay).padStart(2, "0")}`
+    );
+    console.log(
+      `🔍 [AB 체크 API] 조회 범위 (UTC): ${dateFromUTC.toISOString()} ~ ${dateToUTC.toISOString()}`
+    );
 
     // 조회할 업체 목록 결정
     let targetVendorNames: string[] = [];
@@ -131,9 +181,9 @@ export async function POST(request: NextRequest) {
           FROM mall
           WHERE id = ANY(${assignedVendorIds})
         `;
-        
+
         const allowedVendorNames = vendorNamesResult.map((v: any) => v.name);
-        
+
         const vendorsResult = await sql`
           SELECT DISTINCT ur.row_data->>'업체명' as vendor_name
           FROM upload_rows ur
@@ -187,7 +237,7 @@ export async function POST(request: NextRequest) {
 
     // 데이터 존재 여부 확인 (COUNT만 조회)
     let countResult;
-    
+
     if (allVendors) {
       countResult = await sql`
         SELECT COUNT(*) as count
