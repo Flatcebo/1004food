@@ -10,6 +10,7 @@ import {
 } from "react";
 import {useSearchParams} from "next/navigation";
 import {useUploadStore} from "@/stores/uploadStore";
+import {useAuthStore} from "@/stores/authStore";
 import RecommendModal from "@/components/RecommendModal";
 import DirectInputModal from "@/components/DirectInputModal";
 import CodeEditWindow from "@/components/CodeEditWindow";
@@ -48,6 +49,9 @@ function FileViewContent() {
     unconfirmFile,
     confirmedFiles,
   } = useUploadStore();
+
+  // 사용자 정보 (grade 확인용)
+  const user = useAuthStore((state) => state.user);
 
   const [file, setFile] = useState<any>(null);
   const [tableData, setTableData] = useState<any[][]>([]);
@@ -1712,10 +1716,11 @@ function FileViewContent() {
             });
           }
 
-          // 배송메시지 자동 생성 적용
+          // 배송메시지 자동 생성 적용 (온라인 유저만 ★주문번호 추가)
           let updatedTableData = generateAutoDeliveryMessage(
             parsedFile.tableData,
-            originalMessagesRef.current
+            originalMessagesRef.current,
+            user?.grade
           );
 
           // productCodeMap에 있는 매핑코드를 tableData의 매핑코드 컬럼에 반영

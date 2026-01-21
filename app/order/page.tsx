@@ -118,6 +118,9 @@ function OrderPageContent() {
   const {isLoading, title, message, subMessage, startLoading, stopLoading} =
     useLoadingStore();
 
+  // 사용자 정보 (grade 확인용)
+  const user = useAuthStore((state) => state.user);
+
   // 저장된 데이터 관련 훅
   const {
     filters,
@@ -513,11 +516,12 @@ function OrderPageContent() {
       if (fileChanged) {
         hasChanges = true;
 
-        // 배송메시지 자동 생성 적용
+        // 배송메시지 자동 생성 적용 (온라인 유저만 ★주문번호 추가)
         const originalMessagesRef: {[rowIdx: number]: string} = {};
         const autoMessageTableData = generateAutoDeliveryMessage(
           updatedTableData,
-          originalMessagesRef
+          originalMessagesRef,
+          user?.grade
         );
 
         const updatedFile = {

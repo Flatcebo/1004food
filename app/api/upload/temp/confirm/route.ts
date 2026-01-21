@@ -540,8 +540,14 @@ export async function POST(request: NextRequest) {
         }
         globalCodeIndex++;
 
-        // 배송메시지에 ★내부코드 추가
-        if (messageIdx !== -1 && currentInternalCode) {
+        // 배송메시지에 ★내부코드 추가 (온라인 유저 제외)
+        // - 온라인 유저: 업로드 시 이미 ★주문번호가 추가되어 있으므로 배송메시지 처리 스킵
+        // - 일반 유저: confirm 시 ★내부코드 추가
+        if (
+          messageIdx !== -1 &&
+          userGrade !== "온라인" &&
+          currentInternalCode
+        ) {
           const currentMessage =
             rowObj["배송메시지"] ||
             rowObj["배송메세지"] ||
@@ -549,30 +555,32 @@ export async function POST(request: NextRequest) {
             rowObj["요청사항"] ||
             rowObj["배송요청사항"] ||
             "";
-          const messageStr = String(currentMessage).trim();
+          let messageStr = String(currentMessage).trim();
 
-          // 이미 ★로 끝나는 내부코드가 있으면 스킵 (중복 방지)
-          if (!messageStr.includes(`★${currentInternalCode}`)) {
-            // 배송메시지 끝에 ★내부코드 추가
-            const newMessage = messageStr
-              ? `${messageStr}★${currentInternalCode}`
-              : `★${currentInternalCode}`;
+          // 기존 ★ 이후 부분 제거 (이전에 추가된 ★ 코드 모두 제거)
+          if (messageStr.includes("★")) {
+            messageStr = messageStr.split("★")[0].trim();
+          }
 
-            // 해당하는 컬럼명에 저장
-            if (rowObj["배송메시지"] !== undefined) {
-              rowObj["배송메시지"] = newMessage;
-            } else if (rowObj["배송메세지"] !== undefined) {
-              rowObj["배송메세지"] = newMessage;
-            } else if (rowObj["배송요청"] !== undefined) {
-              rowObj["배송요청"] = newMessage;
-            } else if (rowObj["요청사항"] !== undefined) {
-              rowObj["요청사항"] = newMessage;
-            } else if (rowObj["배송요청사항"] !== undefined) {
-              rowObj["배송요청사항"] = newMessage;
-            } else {
-              // 컬럼이 없으면 "배송메시지"로 새로 추가
-              rowObj["배송메시지"] = newMessage;
-            }
+          // ★내부코드 추가
+          const newMessage = messageStr
+            ? `${messageStr}★${currentInternalCode}`
+            : `★${currentInternalCode}`;
+
+          // 해당하는 컬럼명에 저장
+          if (rowObj["배송메시지"] !== undefined) {
+            rowObj["배송메시지"] = newMessage;
+          } else if (rowObj["배송메세지"] !== undefined) {
+            rowObj["배송메세지"] = newMessage;
+          } else if (rowObj["배송요청"] !== undefined) {
+            rowObj["배송요청"] = newMessage;
+          } else if (rowObj["요청사항"] !== undefined) {
+            rowObj["요청사항"] = newMessage;
+          } else if (rowObj["배송요청사항"] !== undefined) {
+            rowObj["배송요청사항"] = newMessage;
+          } else {
+            // 컬럼이 없으면 "배송메시지"로 새로 추가
+            rowObj["배송메시지"] = newMessage;
           }
         }
 

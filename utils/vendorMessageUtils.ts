@@ -95,15 +95,18 @@ export function updateVendorAndMessage(
 
 /**
  * 배송메시지를 자동으로 처리하는 함수
- * 주문번호는 추가하지 않음 (내부코드는 DB 저장 시 별도로 추가됨)
+ * - 온라인 유저 (userGrade === "온라인"): 배송메시지에 ★주문번호 추가
+ * - 그 외 유저: 배송메시지 그대로 유지 (내부코드는 DB 저장 시 추가됨)
  * 
  * @param tableData - 테이블 데이터 (헤더 포함)
  * @param originalMessagesRef - 원본 배송메시지 저장 ref (rowIdx -> 원본 메시지)
- * @returns 업데이트된 테이블 데이터 (원본 그대로 반환)
+ * @param userGrade - 사용자 등급 (optional, "온라인"일 때만 주문번호 추가)
+ * @returns 업데이트된 테이블 데이터
  */
 export function generateAutoDeliveryMessage(
   tableData: any[][],
-  originalMessagesRef: {[rowIdx: number]: string}
+  originalMessagesRef: {[rowIdx: number]: string},
+  userGrade?: string | null
 ): any[][] {
   const headerRow = tableData[0];
   
@@ -122,6 +125,22 @@ export function generateAutoDeliveryMessage(
   // 필수 컬럼이 없으면 원본 테이블 반환
   if (messageIdx === -1) return tableData;
 
+  // 온라인 유저일 때만 주문번호 컬럼 인덱스 찾기
+  let orderCodeIdx = -1;
+  if (userGrade === "온라인") {
+    orderCodeIdx = headerRow.findIndex(
+      (h: any) =>
+        h &&
+        typeof h === "string" &&
+        (h === "주문번호" ||
+          h === "주문번호(사방넷)" ||
+          h === "주문번호(쇼핑몰)" ||
+          h === "주문 번호" ||
+          h === "order_code" ||
+          h === "orderCode")
+    );
+  }
+
   const updatedTable = tableData.map((row, idx) => {
     if (idx === 0) return row; // 헤더 행은 그대로 반환
     
@@ -133,13 +152,33 @@ export function generateAutoDeliveryMessage(
       ? String(currentMessage).trim()
       : "";
     
-    // 원본 배송메시지 저장 (나중에 내부코드 추가 시 참조용)
+    // 원본 배송메시지 저장 (나중에 참조용)
     if (originalMessagesRef[idx] === undefined) {
       originalMessagesRef[idx] = currentMessageStr;
     }
     
-    // 배송메시지는 그대로 유지 (주문번호 추가하지 않음)
-    // 내부코드는 DB 저장 시 temp/confirm/route.ts에서 추가됨
+    // 온라인 유저일 때만 ★주문번호 추가
+    if (userGrade === "온라인" && orderCodeIdx !== -1) {
+      // 이미 ★가 포함되어 있으면 스킵
+      if (currentMessageStr.includes("★")) {
+        return newRow;
+      }
+      
+      // 주문번호 가져오기
+      const orderValue = row[orderCodeIdx];
+      const orderCode = orderValue !== null && orderValue !== undefined
+        ? String(orderValue).trim()
+        : "";
+      
+      // 주문번호가 있으면 배송메시지에 추가
+      if (orderCode) {
+        const newMessage = currentMessageStr
+          ? `${currentMessageStr}★${orderCode}`
+          : `★${orderCode}`;
+        newRow[messageIdx] = newMessage;
+      }
+    }
+    // 그 외 유저는 배송메시지 그대로 유지 (내부코드는 DB 저장 시 추가됨)
     
     return newRow;
   });
