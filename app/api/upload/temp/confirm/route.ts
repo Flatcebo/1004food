@@ -334,6 +334,18 @@ export async function POST(request: NextRequest) {
         (h: any) => h && typeof h === "string" && h === "_originalRowIndex"
       );
 
+      // 배송메시지 인덱스 찾기 (내부코드 추가용)
+      const messageIdx = headerRow.findIndex(
+        (h: any) =>
+          h &&
+          typeof h === "string" &&
+          (h === "배송메시지" ||
+            h === "배송메세지" ||
+            h === "배송요청" ||
+            h === "요청사항" ||
+            h === "배송요청사항")
+      );
+
       // user grade가 "온라인"인 경우 "주문번호(사방넷)" 헤더 찾기
       const isOnlineUser =
         userGrade === "온라인" || String(userGrade || "").trim() === "온라인";
@@ -521,10 +533,48 @@ export async function POST(request: NextRequest) {
         }
 
         // 내부코드 추가
+        let currentInternalCode = "";
         if (internalCodes.length > globalCodeIndex) {
-          rowObj["내부코드"] = internalCodes[globalCodeIndex];
+          currentInternalCode = internalCodes[globalCodeIndex];
+          rowObj["내부코드"] = currentInternalCode;
         }
         globalCodeIndex++;
+
+        // 배송메시지에 ★내부코드 추가
+        if (messageIdx !== -1 && currentInternalCode) {
+          const currentMessage =
+            rowObj["배송메시지"] ||
+            rowObj["배송메세지"] ||
+            rowObj["배송요청"] ||
+            rowObj["요청사항"] ||
+            rowObj["배송요청사항"] ||
+            "";
+          const messageStr = String(currentMessage).trim();
+
+          // 이미 ★로 끝나는 내부코드가 있으면 스킵 (중복 방지)
+          if (!messageStr.includes(`★${currentInternalCode}`)) {
+            // 배송메시지 끝에 ★내부코드 추가
+            const newMessage = messageStr
+              ? `${messageStr}★${currentInternalCode}`
+              : `★${currentInternalCode}`;
+
+            // 해당하는 컬럼명에 저장
+            if (rowObj["배송메시지"] !== undefined) {
+              rowObj["배송메시지"] = newMessage;
+            } else if (rowObj["배송메세지"] !== undefined) {
+              rowObj["배송메세지"] = newMessage;
+            } else if (rowObj["배송요청"] !== undefined) {
+              rowObj["배송요청"] = newMessage;
+            } else if (rowObj["요청사항"] !== undefined) {
+              rowObj["요청사항"] = newMessage;
+            } else if (rowObj["배송요청사항"] !== undefined) {
+              rowObj["배송요청사항"] = newMessage;
+            } else {
+              // 컬럼이 없으면 "배송메시지"로 새로 추가
+              rowObj["배송메시지"] = newMessage;
+            }
+          }
+        }
 
         // 업로드 시 부여된 row 순서 번호 추가 (1부터 시작)
         // _originalRowIndex 컬럼에서 원본 순서를 가져옴 (정렬이 발생해도 원본 순서 유지)

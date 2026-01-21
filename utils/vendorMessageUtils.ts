@@ -94,12 +94,12 @@ export function updateVendorAndMessage(
 }
 
 /**
- * 배송메시지를 자동으로 생성하는 함수
- * 형식: {기존 배송메시지}★{주문번호}
+ * 배송메시지를 자동으로 처리하는 함수
+ * 주문번호는 추가하지 않음 (내부코드는 DB 저장 시 별도로 추가됨)
  * 
  * @param tableData - 테이블 데이터 (헤더 포함)
  * @param originalMessagesRef - 원본 배송메시지 저장 ref (rowIdx -> 원본 메시지)
- * @returns 업데이트된 테이블 데이터
+ * @returns 업데이트된 테이블 데이터 (원본 그대로 반환)
  */
 export function generateAutoDeliveryMessage(
   tableData: any[][],
@@ -118,25 +118,6 @@ export function generateAutoDeliveryMessage(
         h === "요청사항" ||
         h === "배송요청사항")
   );
-  
-  const ordererNameIdx = headerRow.findIndex(
-    (h: any) =>
-      h &&
-      typeof h === "string" &&
-      (h === "주문자명" || h === "주문자" || h === "주문자 이름")
-  );
-  
-  const orderCodeIdx = headerRow.findIndex(
-    (h: any) =>
-      h &&
-      typeof h === "string" &&
-      (h === "주문번호" ||
-        h === "주문번호(사방넷)" ||
-        h === "주문번호(쇼핑몰)" ||
-        h === "주문 번호" ||
-        h === "order_code" ||
-        h === "orderCode")
-  );
 
   // 필수 컬럼이 없으면 원본 테이블 반환
   if (messageIdx === -1) return tableData;
@@ -146,59 +127,19 @@ export function generateAutoDeliveryMessage(
     
     const newRow = [...row];
     
-    // 현재 메시지 확인 - 이미 자동 생성된 형식인지 체크
+    // 현재 메시지 확인
     const currentMessage = row[messageIdx];
     const currentMessageStr = currentMessage !== null && currentMessage !== undefined
       ? String(currentMessage).trim()
       : "";
     
-    // 이미 자동 생성된 메시지 형식인지 확인 (★로 끝나면 스킵)
-    if (currentMessageStr.includes('★')) {
-      return newRow; // 이미 처리된 메시지는 그대로 유지
+    // 원본 배송메시지 저장 (나중에 내부코드 추가 시 참조용)
+    if (originalMessagesRef[idx] === undefined) {
+      originalMessagesRef[idx] = currentMessageStr;
     }
     
-    // 원본 배송메시지 가져오기
-    let originalMessage = originalMessagesRef[idx];
-    if (originalMessage === undefined) {
-      originalMessage = currentMessageStr;
-      originalMessagesRef[idx] = originalMessage;
-    }
-    
-    // 주문자명 가져오기
-    let ordererName = "";
-    if (ordererNameIdx !== -1) {
-      const ordererValue = row[ordererNameIdx];
-      ordererName = ordererValue !== null && ordererValue !== undefined
-        ? String(ordererValue).trim()
-        : "";
-    }
-    
-    // 주문번호 가져오기
-    let orderCode = "";
-    if (orderCodeIdx !== -1) {
-      const orderValue = row[orderCodeIdx];
-      orderCode = orderValue !== null && orderValue !== undefined
-        ? String(orderValue).trim()
-        : "";
-    }
-    
-    // 배송메시지 자동 생성: {기존 배송메시지}★{주문번호}
-    let autoMessage = "";
-    
-    // 기존 배송메시지 추가 (있는 경우에만)
-    if (originalMessage) {
-      autoMessage += originalMessage;
-    }
-    
-    // 주문번호 추가 (있는 경우에만)
-    if (orderCode) {
-      autoMessage += `★${orderCode}`;
-    }
-    
-    // 생성된 메시지가 있으면 적용, 없으면 원본 메시지 유지
-    if (autoMessage) {
-      newRow[messageIdx] = autoMessage;
-    }
+    // 배송메시지는 그대로 유지 (주문번호 추가하지 않음)
+    // 내부코드는 DB 저장 시 temp/confirm/route.ts에서 추가됨
     
     return newRow;
   });
