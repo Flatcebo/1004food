@@ -17,12 +17,14 @@ interface BaseFilterProps {
     categories?: string[];
     companies?: string[];
     vendors?: string[];
+    purchases?: string[];
   };
   selectedType: string;
   selectedPostType: string;
   selectedCategory?: string;
   selectedCompany?: string[];
   selectedVendor?: string[];
+  selectedPurchase?: string;
   selectedOrderStatus?: string;
   searchField: string;
   searchValue: string;
@@ -35,6 +37,7 @@ interface BaseFilterProps {
   onCategoryChange?: (category: string) => void;
   onCompanyChange?: (companies: string[]) => void;
   onVendorChange?: (vendors: string[]) => void;
+  onPurchaseChange?: (purchase: string) => void;
   onOrderStatusChange?: (status: string) => void;
   onSearchFieldChange: (field: string) => void;
   onSearchValueChange: (value: string) => void;
@@ -46,6 +49,7 @@ interface BaseFilterProps {
   showCategory?: boolean;
   showCompany?: boolean;
   showVendor?: boolean;
+  showPurchase?: boolean;
   showOrderStatus?: boolean;
   showDateRange?: boolean;
   showItemsPerPage?: boolean;
@@ -58,6 +62,7 @@ export default function BaseFilter({
   selectedCategory = "",
   selectedCompany = [],
   selectedVendor = [],
+  selectedPurchase = "",
   selectedOrderStatus = "",
   searchField,
   searchValue,
@@ -74,6 +79,7 @@ export default function BaseFilter({
   onCategoryChange,
   onCompanyChange,
   onVendorChange,
+  onPurchaseChange,
   onOrderStatusChange,
   onSearchFieldChange,
   onSearchValueChange,
@@ -85,6 +91,7 @@ export default function BaseFilter({
   showCategory = false,
   showCompany = false,
   showVendor = false,
+  showPurchase = false,
   showOrderStatus = false,
   showDateRange = false,
   showItemsPerPage = false,

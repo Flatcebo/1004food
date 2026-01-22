@@ -6,6 +6,7 @@ interface Filters {
   types: string[];
   postTypes: string[];
   categories: string[];
+  purchases: string[];
 }
 
 export function useProducts() {
@@ -14,10 +15,12 @@ export function useProducts() {
     types: [],
     postTypes: [],
     categories: [],
+    purchases: [],
   });
   const [selectedType, setSelectedType] = useState<string>("");
   const [selectedPostType, setSelectedPostType] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<string>("");
+  const [selectedPurchase, setSelectedPurchase] = useState<string[]>([]);
   const [searchField, setSearchField] = useState<string>("상품명");
   const [searchValue, setSearchValue] = useState<string>("");
   const [appliedSearchField, setAppliedSearchField] = useState<string>("");
@@ -30,10 +33,10 @@ export function useProducts() {
   const loadProducts = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await fetchProducts();
+      const result: any = await fetchProducts();
 
       if (result.success) {
-        const data = (result.data || []).map((product) => ({
+        const data = (result.data || []).map((product: any) => ({
           ...product,
           supplyPrice: product.supplyPrice ?? null,
         }));
@@ -50,10 +53,12 @@ export function useProducts() {
           if (p.category) categorySet.add(p.category);
         }
 
+        // purchase 목록은 API에서 받아온 filters 사용
         setFilters({
           types: Array.from(typeSet).sort(),
           postTypes: Array.from(postTypeSet).sort(),
           categories: Array.from(categorySet).sort(),
+          purchases: result.filters?.purchases || [],
         });
       } else {
         console.error("상품 목록 조회 실패:", result.error);
@@ -82,6 +87,10 @@ export function useProducts() {
       }
       // 카테고리 필터
       if (selectedCategory && product.category !== selectedCategory) {
+        return false;
+      }
+      // 매입처 필터 (배열 기반)
+      if (selectedPurchase.length > 0 && !selectedPurchase.includes(product.purchase || "")) {
         return false;
       }
       // 검색 필터
@@ -147,6 +156,7 @@ export function useProducts() {
     setSelectedType("");
     setSelectedPostType("");
     setSelectedCategory("");
+    setSelectedPurchase([]);
     setSearchField("상품명");
     setSearchValue("");
     setAppliedSearchField("");
@@ -164,6 +174,8 @@ export function useProducts() {
     setSelectedPostType,
     selectedCategory,
     setSelectedCategory,
+    selectedPurchase,
+    setSelectedPurchase,
     searchField,
     setSearchField,
     searchValue,

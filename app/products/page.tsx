@@ -14,6 +14,8 @@ export default function ProductsPage() {
     setSelectedPostType,
     selectedCategory,
     setSelectedCategory,
+    selectedPurchase,
+    setSelectedPurchase,
     searchField,
     setSearchField,
     searchValue,
@@ -44,6 +46,9 @@ export default function ProductsPage() {
       case "category":
         setSelectedCategory("");
         break;
+      case "purchase":
+        setSelectedPurchase([]);
+        break;
       case "search":
         setSearchField("상품명");
         setSearchValue("");
@@ -73,6 +78,13 @@ export default function ProductsPage() {
       type: "category",
       label: "카테고리",
       value: selectedCategory,
+    });
+  }
+  if (selectedPurchase.length > 0) {
+    activeFilters.push({
+      type: "purchase",
+      label: "매입처",
+      value: selectedPurchase.join(", "),
     });
   }
   if (appliedSearchField && appliedSearchValue) {
@@ -107,12 +119,14 @@ export default function ProductsPage() {
             selectedType={selectedType}
             selectedPostType={selectedPostType}
             selectedCategory={selectedCategory}
+            selectedPurchase={selectedPurchase}
             searchField={searchField}
             searchValue={searchValue}
             itemsPerPage={itemsPerPage}
             onTypeChange={setSelectedType}
             onPostTypeChange={setSelectedPostType}
             onCategoryChange={setSelectedCategory}
+            onPurchaseChange={setSelectedPurchase}
             onSearchFieldChange={setSearchField}
             onSearchValueChange={setSearchValue}
             onItemsPerPageChange={setItemsPerPage}

@@ -7,16 +7,19 @@ interface ProductFiltersProps {
     types: string[];
     postTypes: string[];
     categories: string[];
+    purchases: string[];
   };
   selectedType: string;
   selectedPostType: string;
   selectedCategory: string;
+  selectedPurchase: string[];
   searchField: string;
   searchValue: string;
   itemsPerPage: number;
   onTypeChange: (type: string) => void;
   onPostTypeChange: (postType: string) => void;
   onCategoryChange: (category: string) => void;
+  onPurchaseChange: (purchase: string[]) => void;
   onSearchFieldChange: (field: string) => void;
   onSearchValueChange: (value: string) => void;
   onItemsPerPageChange: (value: number) => void;
@@ -25,10 +28,23 @@ interface ProductFiltersProps {
 }
 
 export default function ProductFilters(props: ProductFiltersProps) {
+  const {
+    selectedPurchase,
+    onPurchaseChange,
+    ...restProps
+  } = props;
+
   return (
     <BaseFilter
-      {...props}
+      {...restProps}
+      filters={{
+        ...restProps.filters,
+        vendors: restProps.filters.purchases,
+      }}
+      selectedVendor={selectedPurchase}
+      onVendorChange={onPurchaseChange}
       showCategory={true}
+      showVendor={true}
       showItemsPerPage={true}
       searchFieldOptions={[
         {label: "상품명", value: "상품명"},

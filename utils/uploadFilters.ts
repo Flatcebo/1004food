@@ -63,11 +63,11 @@ export function buildFilterConditions(
   const dbField = searchField ? fieldMap[searchField] : null;
   const searchPattern = searchValue ? `%${searchValue}%` : null;
 
-  // 내외주 필터
+  // 내외주 필터 (공백 처리를 위해 TRIM 적용)
   if (type) {
-    conditions.push(sql`ur.row_data->>'내외주' = ${type}`);
+    conditions.push(sql`TRIM(COALESCE(ur.row_data->>'내외주', '')) = ${type}`);
     if (options?.includeUpdateConditions) {
-      updateConditions.push(sql`upload_rows.row_data->>'내외주' = ${type}`);
+      updateConditions.push(sql`TRIM(COALESCE(upload_rows.row_data->>'내외주', '')) = ${type}`);
     }
   }
 

@@ -697,7 +697,7 @@ export async function POST(request: NextRequest) {
             FROM upload_rows ur
             INNER JOIN uploads u ON ur.upload_id = u.id
             WHERE u.company_id = ${companyId}
-              AND ur.row_data->>'내외주' = '외주'
+              AND TRIM(COALESCE(ur.row_data->>'내외주', '')) = '외주'
               AND ur.row_data->>'매핑코드' IN ('106464', '108640', '108788', '108879', '108221')
           `;
 
@@ -718,15 +718,14 @@ export async function POST(request: NextRequest) {
           }));
           dataRows = dataRowsWithIds.map((r: any) => r.row_data);
         } else {
-          // 일반 외주 발주서: CJ 제외
+          // 일반 외주 발주서: CJ 외주 매핑코드 제외 (업체명으로 구분하면 "CJ제일제당" 등이 잘못 제외됨)
           let query = sql`
             SELECT ur.id, ur.row_data
             FROM upload_rows ur
             INNER JOIN uploads u ON ur.upload_id = u.id
             WHERE u.company_id = ${companyId}
-              AND ur.row_data->>'내외주' = '외주'
-              AND (ur.row_data->>'매핑코드' IS NULL OR ur.row_data->>'매핑코드' != '106464')
-              AND (ur.row_data->>'업체명' IS NULL OR ur.row_data->>'업체명' NOT LIKE '%CJ%')
+              AND TRIM(COALESCE(ur.row_data->>'내외주', '')) = '외주'
+              AND (ur.row_data->>'매핑코드' IS NULL OR ur.row_data->>'매핑코드' NOT IN ('106464', '108640', '108788', '108879', '108221'))
           `;
 
           // 일자 필터링 추가 (빈 문자열 체크)
@@ -796,6 +795,15 @@ export async function POST(request: NextRequest) {
           dataRowsCount: dataRowsWithIds.length,
         });
 
+        // CJ 외주 매핑코드 목록 (CJ 외주 발주서에서만 다운로드됨)
+        const CJ_OUTSOURCE_CODES = [
+          "106464",
+          "108640",
+          "108788",
+          "108879",
+          "108221",
+        ];
+
         let filteredRowsWithIds;
         if (hadFilters) {
           // 필터가 있을 때는 이미 필터링된 데이터 사용 (추가 필터링 불필요)
@@ -806,12 +814,13 @@ export async function POST(request: NextRequest) {
           );
         } else {
           // 필터가 없을 때만 "외주" 조건으로 필터링
-          filteredRowsWithIds = dataRowsWithIds.filter(
-            (item: any) =>
-              item.row_data.내외주 === "외주" &&
-              item.row_data.매핑코드 !== "106464" &&
-              !item.row_data.업체명?.includes("CJ")
-          );
+          // 내외주 필드에 공백이 있을 수 있으므로 trim() 처리
+          // CJ 외주는 매핑코드로만 구분 (업체명으로 구분하면 "CJ제일제당" 등이 잘못 제외됨)
+          filteredRowsWithIds = dataRowsWithIds.filter((item: any) => {
+            const type = String(item.row_data.내외주 || "").trim();
+            const mappingCode = String(item.row_data.매핑코드 || "");
+            return type === "외주" && !CJ_OUTSOURCE_CODES.includes(mappingCode);
+          });
           console.log(
             "🔍 필터가 없어서 외주 조건으로 필터링:",
             filteredRowsWithIds.length
@@ -868,12 +877,23 @@ export async function POST(request: NextRequest) {
         downloadedRowIds = processedRowsWithIds.map((item: any) => item.id);
       } else {
         // rows가 직접 전달된 경우
-        dataRows = dataRows.filter(
-          (row: any) =>
-            row.내외주 === "외주" &&
-            row.매핑코드 !== "106464" &&
-            !row.업체명?.includes("CJ")
-        );
+        // CJ 외주 매핑코드 목록 (CJ 외주 발주서에서만 다운로드됨)
+        const CJ_OUTSOURCE_CODES_ELSE = [
+          "106464",
+          "108640",
+          "108788",
+          "108879",
+          "108221",
+        ];
+        // 내외주 필드에 공백이 있을 수 있으므로 trim() 처리
+        // CJ 외주는 매핑코드로만 구분 (업체명으로 구분하면 "CJ제일제당" 등이 잘못 제외됨)
+        dataRows = dataRows.filter((row: any) => {
+          const type = String(row.내외주 || "").trim();
+          const mappingCode = String(row.매핑코드 || "");
+          return (
+            type === "외주" && !CJ_OUTSOURCE_CODES_ELSE.includes(mappingCode)
+          );
+        });
 
         // 전화번호 필드들에 하이픈 추가 가공
         dataRows = dataRows.map((row: any) => {
@@ -969,7 +989,9 @@ export async function POST(request: NextRequest) {
       // 먼저 모든 행에 매핑코드 정보 주입 (사방넷명, 공급가, 매입처명)
       dataRows.forEach((row: any) => {
         // 내주는 제외 (외주만 처리)
-        if (row.내외주 !== "외주") {
+        // 내외주 필드에 공백이 있을 수 있으므로 trim() 처리
+        const rowType = String(row.내외주 || "").trim();
+        if (rowType !== "외주") {
           return;
         }
 
@@ -1013,7 +1035,9 @@ export async function POST(request: NextRequest) {
 
       dataRows.forEach((row: any) => {
         // 내주는 제외 (외주만 처리)
-        if (row.내외주 !== "외주") {
+        // 내외주 필드에 공백이 있을 수 있으므로 trim() 처리
+        const rowType = String(row.내외주 || "").trim();
+        if (rowType !== "외주") {
           return;
         }
 
@@ -1160,51 +1184,81 @@ export async function POST(request: NextRequest) {
 
         // 헤더 스타일
         headerRow.eachCell((cell, colNum) => {
-          let bgColor = "ffffffff";
-          if (
-            [
-              1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-              24, 25, 26,
-            ].includes(colNum)
-          ) {
-            bgColor = "ffdaeef3"; // #daeef3
-          } else if (colNum === 10 || colNum === 11) {
-            bgColor = "ffffff00"; // #ffff00 (노란색)
+          // 업체 템플릿이 있을 때는 모든 배경색을 흰색으로, 폰트를 검정색으로 설정
+          if (purchaseTemplateHeaders) {
+            cell.fill = {
+              type: "pattern",
+              pattern: "solid",
+              fgColor: {argb: "ffffffff"}, // 흰색
+            };
+
+            cell.border = {
+              top: {style: "thin", color: {argb: "ff000000"}},
+              left: {style: "thin", color: {argb: "ff000000"}},
+              bottom: {style: "thin", color: {argb: "ff000000"}},
+              right: {style: "thin", color: {argb: "ff000000"}},
+            };
+
+            cell.font = {
+              name: "Arial",
+              size: 12,
+              bold: true,
+              color: {argb: "ff000000"}, // 검정색
+            };
+
+            cell.alignment = {
+              vertical: "middle",
+              horizontal: "center",
+              wrapText: true,
+            };
+          } else {
+            // 기존 방식 (템플릿이 없을 때)
+            let bgColor = "ffffffff";
+            if (
+              [
+                1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 15, 16, 17, 18, 19, 20, 21, 22,
+                23, 24, 25, 26,
+              ].includes(colNum)
+            ) {
+              bgColor = "ffdaeef3"; // #daeef3
+            } else if (colNum === 10 || colNum === 11) {
+              bgColor = "ffffff00"; // #ffff00 (노란색)
+            }
+
+            let fontColor = "ff000000";
+
+            if ([9, 11].includes(colNum)) {
+              fontColor = "ffff0000"; // 빨간색
+            } else if (colNum === 10) {
+              fontColor = "ff0070c0"; // 파란색
+            }
+
+            cell.fill = {
+              type: "pattern",
+              pattern: "solid",
+              fgColor: {argb: bgColor},
+            };
+
+            cell.border = {
+              top: {style: "thin", color: {argb: "ff000000"}},
+              left: {style: "thin", color: {argb: "ff000000"}},
+              bottom: {style: "thin", color: {argb: "ff000000"}},
+              right: {style: "thin", color: {argb: "ff000000"}},
+            };
+
+            cell.font = {
+              name: "Arial",
+              size: 12,
+              bold: true,
+              color: {argb: fontColor},
+            };
+
+            cell.alignment = {
+              vertical: "middle",
+              horizontal: "center",
+              wrapText: true,
+            };
           }
-
-          let fontColor = "ff000000";
-
-          if ([9, 11].includes(colNum)) {
-            fontColor = "ffff0000"; // 빨간색
-          } else if (colNum === 10) {
-            fontColor = "ff0070c0"; // 파란색
-          }
-
-          cell.fill = {
-            type: "pattern",
-            pattern: "solid",
-            fgColor: {argb: bgColor},
-          };
-
-          cell.border = {
-            top: {style: "thin", color: {argb: "ff000000"}},
-            left: {style: "thin", color: {argb: "ff000000"}},
-            bottom: {style: "thin", color: {argb: "ff000000"}},
-            right: {style: "thin", color: {argb: "ff000000"}},
-          };
-
-          cell.font = {
-            name: "Arial",
-            size: 12,
-            bold: true,
-            color: {argb: fontColor},
-          };
-
-          cell.alignment = {
-            vertical: "middle",
-            horizontal: "center",
-            wrapText: true,
-          };
         });
 
         // 열 너비 설정
@@ -1623,35 +1677,61 @@ export async function POST(request: NextRequest) {
             }
 
             // 중복값 배경색 처리 (연한 빨강: FFE6E6)
-            const isReceiverNameCol =
-              colNum - 1 === receiverNameIndex && receiverNameIndex >= 0;
-            const isPhone1Col = colNum - 1 === phone1Index && phone1Index >= 0;
-            const isAddressCol =
-              colNum - 1 === addressIndex && addressIndex >= 0;
+            // 업체 템플릿이 있을 때는 배경색 제거
+            if (!purchaseTemplateHeaders) {
+              const isReceiverNameCol =
+                colNum - 1 === receiverNameIndex && receiverNameIndex >= 0;
+              const isPhone1Col =
+                colNum - 1 === phone1Index && phone1Index >= 0;
+              const isAddressCol =
+                colNum - 1 === addressIndex && addressIndex >= 0;
 
-            if (
-              (isReceiverNameCol && duplicateReceiverNameCells.has(rowIndex)) ||
-              (isPhone1Col && duplicatePhone1Cells.has(rowIndex)) ||
-              (isAddressCol && duplicateAddressCells.has(rowIndex))
-            ) {
-              cell.fill = {
-                type: "pattern",
-                pattern: "solid",
-                fgColor: {argb: "FFE6E6"}, // 연한 빨강
-              };
+              if (
+                (isReceiverNameCol &&
+                  duplicateReceiverNameCells.has(rowIndex)) ||
+                (isPhone1Col && duplicatePhone1Cells.has(rowIndex)) ||
+                (isAddressCol && duplicateAddressCells.has(rowIndex))
+              ) {
+                cell.fill = {
+                  type: "pattern",
+                  pattern: "solid",
+                  fgColor: {argb: "FFE6E6"}, // 연한 빨강
+                };
+              }
             }
           });
         });
 
         // I1 셀에 총 row 수 작성 (I열은 9번째 열)
-        const totalRowCount = excelData.length;
-        const i1Cell = sheet.getCell("I1");
-        i1Cell.value = totalRowCount;
+        // 업체 템플릿이 있을 때는 I열을 숨김 처리
+        if (!purchaseTemplateHeaders) {
+          const totalRowCount = excelData.length;
+          const i1Cell = sheet.getCell("I1");
+          i1Cell.value = totalRowCount;
 
-        // I열의 데이터 행들(2행부터)을 공란 처리
-        for (let rowNum = 2; rowNum <= sheet.rowCount; rowNum++) {
-          const iCell = sheet.getCell(`I${rowNum}`);
-          iCell.value = "";
+          // I열의 데이터 행들(2행부터)을 공란 처리
+          for (let rowNum = 2; rowNum <= sheet.rowCount; rowNum++) {
+            const iCell = sheet.getCell(`I${rowNum}`);
+            iCell.value = "";
+          }
+        } else {
+          // 업체 템플릿이 있을 때: I열(9번째 열) 찾아서 숨김 처리
+          // I열이 템플릿에 포함되어 있는지 확인
+          const iColumnIndex = finalHeaders.findIndex(
+            (h: string, idx: number) => {
+              // I열은 9번째 열 (인덱스 8, 0-based)
+              return idx === 8;
+            }
+          );
+
+          if (iColumnIndex >= 0) {
+            // I열이 템플릿에 포함되어 있으면 해당 열을 숨김
+            const actualColumnNumber = iColumnIndex + 1; // 1-based
+            sheet.getColumn(actualColumnNumber).hidden = true;
+          } else {
+            // I열이 템플릿에 포함되어 있지 않으면 기본 I열(9번째) 숨김
+            sheet.getColumn(9).hidden = true;
+          }
         }
 
         // 엑셀 버퍼 생성

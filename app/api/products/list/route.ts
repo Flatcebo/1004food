@@ -29,34 +29,44 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const products = await sql`
-      SELECT
-        id,
-        type,
-        post_type as "postType",
-        name,
-        code,
-        pkg,
-        price,
-        sale_price as "salePrice",
-        supply_price as "supplyPrice",
-        post_fee as "postFee",
-        purchase,
-        bill_type as "billType",
-        category,
-        product_type as "productType",
-        sabang_name as "sabangName",
-        etc,
-        created_at as "createdAt",
-        updated_at as "updatedAt"
-      FROM products
-      WHERE company_id = ${companyId}
-      ORDER BY created_at DESC, id DESC
-    `;
+    const [products, purchaseList] = await Promise.all([
+      sql`
+        SELECT
+          id,
+          type,
+          post_type as "postType",
+          name,
+          code,
+          pkg,
+          price,
+          sale_price as "salePrice",
+          supply_price as "supplyPrice",
+          post_fee as "postFee",
+          purchase,
+          bill_type as "billType",
+          category,
+          product_type as "productType",
+          sabang_name as "sabangName",
+          etc,
+          created_at as "createdAt",
+          updated_at as "updatedAt"
+        FROM products
+        WHERE company_id = ${companyId}
+        ORDER BY created_at DESC, id DESC
+      `,
+      sql`
+        SELECT DISTINCT name as purchase FROM purchase 
+        WHERE company_id = ${companyId} AND name IS NOT NULL 
+        ORDER BY name
+      `,
+    ]);
 
     return NextResponse.json({
       success: true,
       data: products,
+      filters: {
+        purchases: purchaseList.map((p: any) => p.purchase).filter(Boolean),
+      },
     });
   } catch (error: any) {
     console.error("상품 목록 조회 실패:", error);
