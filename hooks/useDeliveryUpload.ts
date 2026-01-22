@@ -23,19 +23,58 @@ export interface DeliveryFinalResult {
   message: string;
 }
 
+export interface FileDeliveryResult {
+  fileName: string;
+  isUploading: boolean;
+  uploadProgress: number;
+  currentOrderNumber: string;
+  results: DeliveryResult[];
+  finalResult: DeliveryFinalResult | null;
+  error: string;
+}
+
 export const useDeliveryUpload = () => {
-  // 운송장 업로드 관련 상태
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [currentOrderNumber, setCurrentOrderNumber] = useState<string>("");
-  const [deliveryResults, setDeliveryResults] = useState<DeliveryResult[]>([]);
-  const [finalResult, setFinalResult] = useState<DeliveryFinalResult | null>(
-    null
-  );
-  const [deliveryError, setDeliveryError] = useState<string>("");
+  // 파일별 결과 관리 (파일명을 키로 사용)
+  const [fileResults, setFileResults] = useState<
+    Map<string, FileDeliveryResult>
+  >(new Map());
+  const [currentUploadingFile, setCurrentUploadingFile] = useState<string | null>(null);
 
   // 운송장 업로드 파일 입력 ref
   const deliveryFileInputRef = useRef<HTMLInputElement>(null);
+
+  // 파일별 결과 초기화
+  const initializeFileResult = useCallback((fileName: string) => {
+    setFileResults((prev) => {
+      const newMap = new Map(prev);
+      newMap.set(fileName, {
+        fileName,
+        isUploading: true,
+        uploadProgress: 0,
+        currentOrderNumber: "",
+        results: [],
+        finalResult: null,
+        error: "",
+      });
+      return newMap;
+    });
+    setCurrentUploadingFile(fileName);
+  }, []);
+
+  // 파일별 결과 업데이트
+  const updateFileResult = useCallback(
+    (fileName: string, updates: Partial<FileDeliveryResult>) => {
+      setFileResults((prev) => {
+        const newMap = new Map(prev);
+        const current = newMap.get(fileName);
+        if (current) {
+          newMap.set(fileName, {...current, ...updates});
+        }
+        return newMap;
+      });
+    },
+    []
+  );
 
   // 운송장 업로드 파일 처리 핸들러
   const handleDeliveryFileUpload = useCallback(async (file: File) => {
@@ -48,12 +87,34 @@ export const useDeliveryUpload = () => {
       .substring(file.name.lastIndexOf("."));
 
     if (!allowedExtensions.includes(fileExtension)) {
-      setDeliveryError("엑셀 파일(.xlsx, .xls)만 업로드 가능합니다.");
+      // 파일별 에러 설정
+      setFileResults((prev) => {
+        const newMap = new Map(prev);
+        const existing = newMap.get(file.name);
+        if (existing) {
+          newMap.set(file.name, {
+            ...existing,
+            error: "엑셀 파일(.xlsx, .xls)만 업로드 가능합니다.",
+            isUploading: false,
+          });
+        } else {
+          newMap.set(file.name, {
+            fileName: file.name,
+            isUploading: false,
+            uploadProgress: 0,
+            currentOrderNumber: "",
+            results: [],
+            finalResult: null,
+            error: "엑셀 파일(.xlsx, .xls)만 업로드 가능합니다.",
+          });
+        }
+        return newMap;
+      });
       return;
     }
 
-    setIsUploading(true);
-    setDeliveryError("");
+    // 파일별 결과 초기화
+    initializeFileResult(file.name);
 
     try {
       const formData = new FormData();
@@ -95,19 +156,11 @@ export const useDeliveryUpload = () => {
         throw new Error(data.error || "업로드 실패");
       }
 
-      // 결과를 실시간으로 표시하기 위해 하나씩 추가
-      setDeliveryResults([
-        {
-          type: "init",
-          message: `총 ${data.totalCount}건의 운송장 정보를 처리합니다.`,
-        },
-      ]);
-
-      // 결과를 빠르게 표시 (지연 제거로 성능 개선)
+      // 결과를 빠르게 표시
       let currentSuccessCount = 0;
       let currentFailCount = 0;
 
-      // 모든 결과를 한 번에 표시 (성능 개선)
+      // 모든 결과를 한 번에 표시
       const allResults: DeliveryResult[] = [
         {
           type: "init",
@@ -139,50 +192,68 @@ export const useDeliveryUpload = () => {
         });
       }
 
-      // 진행률 업데이트
-      setUploadProgress(100);
-      setCurrentOrderNumber("");
-
-      // 모든 결과 한 번에 설정
-      setDeliveryResults(allResults);
-
-      // 최종 결과 설정
-      setFinalResult({
-        totalCount: data.totalCount,
-        successCount: data.successCount,
-        failCount: data.failCount,
-        duplicateCount: data.duplicateCount || 0,
-        message: data.message,
+      // 파일별 결과 업데이트
+      updateFileResult(file.name, {
+        isUploading: false,
+        uploadProgress: 100,
+        currentOrderNumber: "",
+        results: allResults,
+        finalResult: {
+          totalCount: data.totalCount,
+          successCount: data.successCount,
+          failCount: data.failCount,
+          duplicateCount: data.duplicateCount || 0,
+          message: data.message,
+        },
+        error: "",
       });
 
-      setIsUploading(false);
+      setCurrentUploadingFile(null);
     } catch (error: any) {
-      setDeliveryError(error.message || "업로드 중 오류가 발생했습니다.");
-      setIsUploading(false);
+      updateFileResult(file.name, {
+        isUploading: false,
+        error: error.message || "업로드 중 오류가 발생했습니다.",
+      });
+      setCurrentUploadingFile(null);
     }
-  }, []);
+  }, [initializeFileResult, updateFileResult]);
 
-  // 운송장 파일 변경 핸들러
-  const handleDeliveryFileChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      if (file) {
-        handleDeliveryFileUpload(file);
+  // 여러 파일 업로드 처리
+  const handleMultipleFilesUpload = useCallback(
+    async (files: FileList | File[]) => {
+      const fileArray = Array.from(files);
+      for (const file of fileArray) {
+        await handleDeliveryFileUpload(file);
       }
     },
     [handleDeliveryFileUpload]
   );
 
-  // 운송장 드래그 앤 드롭 핸들러
+  // 운송장 파일 변경 핸들러 (여러 파일 지원)
+  const handleDeliveryFileChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const files = event.target.files;
+      if (files && files.length > 0) {
+        handleMultipleFilesUpload(files);
+        // input 초기화하여 같은 파일도 다시 선택 가능하도록
+        if (event.target) {
+          event.target.value = "";
+        }
+      }
+    },
+    [handleMultipleFilesUpload]
+  );
+
+  // 운송장 드래그 앤 드롭 핸들러 (여러 파일 지원)
   const handleDeliveryDrop = useCallback(
     (event: React.DragEvent<HTMLDivElement>) => {
       event.preventDefault();
-      const file = event.dataTransfer.files?.[0];
-      if (file) {
-        handleDeliveryFileUpload(file);
+      const files = event.dataTransfer.files;
+      if (files && files.length > 0) {
+        handleMultipleFilesUpload(files);
       }
     },
-    [handleDeliveryFileUpload]
+    [handleMultipleFilesUpload]
   );
 
   const handleDeliveryDragOver = useCallback(
@@ -192,31 +263,47 @@ export const useDeliveryUpload = () => {
     []
   );
 
+  // 특정 파일 결과 제거
+  const removeFileResult = useCallback((fileName: string) => {
+    setFileResults((prev) => {
+      const newMap = new Map(prev);
+      newMap.delete(fileName);
+      return newMap;
+    });
+  }, []);
+
   // 상태 초기화 함수
   const resetDeliveryUploadState = () => {
-    setIsUploading(false);
-    setUploadProgress(0);
-    setCurrentOrderNumber("");
-    setDeliveryResults([]);
-    setFinalResult(null);
-    setDeliveryError("");
+    setFileResults(new Map());
+    setCurrentUploadingFile(null);
   };
+
+  // 전체 업로드 중 여부 (하나라도 업로드 중이면 true)
+  const isUploading = Array.from(fileResults.values()).some(
+    (result) => result.isUploading
+  );
+
+  // 전체 진행률 계산 (평균)
+  const uploadProgress = Array.from(fileResults.values()).reduce(
+    (acc, result) => acc + result.uploadProgress,
+    0
+  ) / Math.max(fileResults.size, 1);
 
   return {
     // 상태
     isUploading,
     uploadProgress,
-    currentOrderNumber,
-    deliveryResults,
-    finalResult,
-    deliveryError,
+    currentUploadingFile,
+    fileResults: Array.from(fileResults.values()),
     deliveryFileInputRef,
 
     // 핸들러
     handleDeliveryFileUpload,
+    handleMultipleFilesUpload,
     handleDeliveryFileChange,
     handleDeliveryDrop,
     handleDeliveryDragOver,
+    removeFileResult,
 
     // 초기화
     resetDeliveryUploadState,

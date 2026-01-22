@@ -63,14 +63,13 @@ function OrderPageContent() {
   const {
     isUploading,
     uploadProgress,
-    currentOrderNumber,
-    deliveryResults,
-    finalResult,
-    deliveryError,
+    currentUploadingFile,
+    fileResults,
     deliveryFileInputRef,
     handleDeliveryFileChange,
     handleDeliveryDrop,
     handleDeliveryDragOver,
+    removeFileResult,
     resetDeliveryUploadState,
   } = useDeliveryUpload();
 
@@ -1097,10 +1096,9 @@ function OrderPageContent() {
           onCloseRecommend={() => setRecommendIdx(null)}
           isUploading={isUploading}
           uploadProgress={uploadProgress}
-          currentOrderNumber={currentOrderNumber}
-          deliveryResults={deliveryResults}
-          finalResult={finalResult}
-          deliveryError={deliveryError}
+          currentUploadingFile={currentUploadingFile}
+          fileResults={fileResults}
+          removeFileResult={removeFileResult}
         />
       </ModalTable>
 
