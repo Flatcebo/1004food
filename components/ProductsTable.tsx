@@ -6,7 +6,7 @@ import DirectInputModal from "./DirectInputModal";
 import CodeEditWindow from "./CodeEditWindow";
 import {fieldNameMap} from "@/constants/fieldMappings";
 import {PRODUCT_FIELD_ORDER} from "@/constants/productFields";
-import {getColumnWidth} from "@/utils/table";
+import {getProductsColumnWidth} from "@/utils/table";
 import type {Product} from "@/types/api";
 
 interface ProductsTableProps {
@@ -306,24 +306,24 @@ const ProductsTable = memo(function ProductsTable({
   }, [selectedRows.size, products.length]);
 
   const headers = [
-    "ID",
+    // "ID",
+    "매입처",
     "내외주",
     "택배사",
-    "상품명",
     "매핑코드",
+    "상품명",
     "사방넷명",
     "원가",
     "판매가",
-    "공급단가",
+    // "공급단가",
     "택배비",
-    "매입처",
     "세금구분",
     "카테고리",
     "상품구분",
-    "기타",
+    // "기타",
   ];
 
-  console.log(products);
+  // console.log(products);
 
   if (loading) {
     return (
@@ -381,7 +381,7 @@ const ProductsTable = memo(function ProductsTable({
                 <th
                   key={header}
                   className="border bg-gray-100 px-2 py-1 text-xs font-semibold"
-                  style={{width: getColumnWidth(header)}}
+                  style={{width: getProductsColumnWidth(header)}}
                 >
                   {header}
                 </th>
@@ -412,8 +412,11 @@ const ProductsTable = memo(function ProductsTable({
                       className="cursor-pointer"
                     />
                   </td>
-                  <td className="border px-2 py-1 border-gray-300 text-xs text-center">
+                  {/* <td className="border px-2 py-1 border-gray-300 text-xs text-center">
                     {product.id}
+                  </td> */}
+                  <td className="border px-2 py-1 border-gray-300 text-xs">
+                    {product.purchase || ""}
                   </td>
                   <td className="border px-2 py-1 border-gray-300 text-xs">
                     {product.type || ""}
@@ -421,12 +424,13 @@ const ProductsTable = memo(function ProductsTable({
                   <td className="border px-2 py-1 border-gray-300 text-xs">
                     {product.postType || ""}
                   </td>
-                  <td className="border px-2 py-1 border-gray-300 text-xs">
-                    {product.name}
-                  </td>
                   <td className="border px-2 py-1 border-gray-300 text-xs text-center">
                     {product.code}
                   </td>
+                  <td className="border px-2 py-1 border-gray-300 text-xs">
+                    {product.name}
+                  </td>
+
                   <td className="border px-2 py-1 border-gray-300 text-xs">
                     {product.sabangName || ""}
                   </td>
@@ -440,19 +444,17 @@ const ProductsTable = memo(function ProductsTable({
                       ? product.salePrice.toLocaleString()
                       : ""}
                   </td>
-                  <td className="border px-2 py-1 border-gray-300 text-xs text-right">
+                  {/* <td className="border px-2 py-1 border-gray-300 text-xs text-right">
                     {typeof product.supplyPrice === "number"
                       ? product.supplyPrice.toLocaleString()
                       : ""}
-                  </td>
+                  </td> */}
                   <td className="border px-2 py-1 border-gray-300 text-xs text-right">
                     {typeof product.postFee === "number"
                       ? product.postFee.toLocaleString()
                       : ""}
                   </td>
-                  <td className="border px-2 py-1 border-gray-300 text-xs">
-                    {product.purchase || ""}
-                  </td>
+
                   <td className="border px-2 py-1 border-gray-300 text-xs">
                     {product.billType || ""}
                   </td>
@@ -462,9 +464,9 @@ const ProductsTable = memo(function ProductsTable({
                   <td className="border px-2 py-1 border-gray-300 text-xs">
                     {product.productType || ""}
                   </td>
-                  <td className="border px-2 py-1 border-gray-300 text-xs">
+                  {/* <td className="border px-2 py-1 border-gray-300 text-xs">
                     {product.etc || ""}
-                  </td>
+                  </td> */}
                   <td className="border px-2 py-1 border-gray-300 text-xs text-center">
                     <div className="flex gap-1 justify-center">
                       <button

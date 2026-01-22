@@ -1150,6 +1150,7 @@ export async function POST(request: NextRequest) {
             purchaseResult[0].template_headers.length > 0
           ) {
             purchaseTemplateHeaders = purchaseResult[0].template_headers;
+            console.log("로드된 템플릿 헤더:", purchaseTemplateHeaders);
           }
         } catch (error) {
           console.error(`매입처 "${vendor}" 템플릿 조회 실패:`, error);
@@ -1264,30 +1265,79 @@ export async function POST(request: NextRequest) {
         // 열 너비 설정
         finalHeaders.forEach((headerName: string, index: number) => {
           const colNum = index + 1;
-          const width =
+          let width =
             typeof columnWidths === "object" && columnWidths[headerName]
               ? columnWidths[headerName]
               : 15;
-          sheet.getColumn(colNum).width = width;
+
+          // 너비가 0이거나 너무 작은 경우 기본값으로 설정
+          if (width <= 0 || width < 5) {
+            width = 15;
+          }
+
+          const column = sheet.getColumn(colNum);
+          column.width = width;
+          // I열이 숨겨져 있지 않도록 명시적으로 설정
+          column.hidden = false;
         });
 
         // 데이터를 2차원 배열로 변환
         let excelData: any[][];
 
         if (purchaseTemplateHeaders) {
+          // 배송희망일 헤더에 오늘 날짜가 설정되어 있는지 확인하고 강제로 설정
+          const updatedTemplateHeaders = purchaseTemplateHeaders.map(
+            (header: any) => {
+              if (
+                header.column_key === "__delivery_date__" &&
+                (!header.default_value || header.default_value === "")
+              ) {
+                const today = new Date().toISOString().split("T")[0];
+                return {
+                  ...header,
+                  default_value: today,
+                };
+              }
+              return header;
+            }
+          );
+
           // purchase 템플릿 사용
           excelData = vendorRows.map((row: any) => {
             // purchase 템플릿으로 매핑 (헤더 Alias 사용)
             const mappedRow = mapRowToTemplateFormat(
               row,
-              purchaseTemplateHeaders,
+              updatedTemplateHeaders,
               headerAliases
             );
 
+            // 배송희망일 값이 빈 값인 경우 오늘 날짜로 강제 설정
+            const deliveryDateIndex = updatedTemplateHeaders.findIndex(
+              (h) => h.column_key === "__delivery_date__"
+            );
+            if (
+              deliveryDateIndex !== -1 &&
+              (!mappedRow[deliveryDateIndex] ||
+                mappedRow[deliveryDateIndex] === "")
+            ) {
+              const today = new Date().toISOString().split("T")[0];
+              mappedRow[deliveryDateIndex] = today;
+              console.log(`배송희망일 값이 비어 있어 강제 설정: ${today}`);
+            }
+
             // 추가 처리 (전화번호, 수취인명 등)
             return mappedRow.map((value: any, idx: number) => {
-              const header = purchaseTemplateHeaders[idx];
+              // updatedTemplateHeaders를 사용하여 복사된 헤더의 original_column_key 정보 유지
+              const header = updatedTemplateHeaders[idx];
               let stringValue = value != null ? String(value) : "";
+
+              // 배송희망일 헤더의 경우 날짜 형식을 유지
+              if (header.column_key === "__delivery_date__" && value) {
+                // 이미 YYYY-MM-DD 형식이라면 그대로 사용
+                if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+                  stringValue = value;
+                }
+              }
 
               // 수취인명인 경우 앞에 ★ 붙이기
               if (
@@ -1386,10 +1436,19 @@ export async function POST(request: NextRequest) {
                   row["수취인명"] || row["받는사람"] || row["수령인명"] || "";
                 if (receiverName) {
                   const prefix = `#${receiverName}`;
+                  const trimmedValue = stringValue.trim();
                   // 기존 배송메시지가 있으면 앞에 추가, 없으면 prefix만 사용
-                  stringValue = stringValue
-                    ? `${prefix} ${stringValue}`
-                    : prefix;
+                  // 단, 기존 메시지가 공란이거나 ★로 시작하는 경우 공백 없이 연결
+                  if (!trimmedValue) {
+                    // 기존 메시지가 공란인 경우
+                    stringValue = prefix;
+                  } else if (trimmedValue.startsWith("★")) {
+                    // ★로 시작하는 경우 공백 없이 연결
+                    stringValue = prefix + trimmedValue;
+                  } else {
+                    // 일반 메시지인 경우 공백 포함하여 연결
+                    stringValue = `${prefix} ${trimmedValue}`;
+                  }
                 }
               }
 
@@ -1543,10 +1602,19 @@ export async function POST(request: NextRequest) {
                   row["수취인명"] || row["받는사람"] || row["수령인명"] || "";
                 if (receiverName) {
                   const prefix = `#${receiverName}`;
+                  const trimmedValue = stringValue.trim();
                   // 기존 배송메시지가 있으면 앞에 추가, 없으면 prefix만 사용
-                  stringValue = stringValue
-                    ? `${prefix} ${stringValue}`
-                    : prefix;
+                  // 단, 기존 메시지가 공란이거나 ★로 시작하는 경우 공백 없이 연결
+                  if (!trimmedValue) {
+                    // 기존 메시지가 공란인 경우
+                    stringValue = prefix;
+                  } else if (trimmedValue.startsWith("★")) {
+                    // ★로 시작하는 경우 공백 없이 연결
+                    stringValue = prefix + trimmedValue;
+                  } else {
+                    // 일반 메시지인 경우 공백 포함하여 연결
+                    stringValue = `${prefix}${trimmedValue}`;
+                  }
                 }
               }
 
@@ -1703,7 +1771,7 @@ export async function POST(request: NextRequest) {
         });
 
         // I1 셀에 총 row 수 작성 (I열은 9번째 열)
-        // 업체 템플릿이 있을 때는 I열을 숨김 처리
+        // 업체 템플릿이 없을 때만 I1에 총 row 수 작성
         if (!purchaseTemplateHeaders) {
           const totalRowCount = excelData.length;
           const i1Cell = sheet.getCell("I1");
@@ -1714,25 +1782,8 @@ export async function POST(request: NextRequest) {
             const iCell = sheet.getCell(`I${rowNum}`);
             iCell.value = "";
           }
-        } else {
-          // 업체 템플릿이 있을 때: I열(9번째 열) 찾아서 숨김 처리
-          // I열이 템플릿에 포함되어 있는지 확인
-          const iColumnIndex = finalHeaders.findIndex(
-            (h: string, idx: number) => {
-              // I열은 9번째 열 (인덱스 8, 0-based)
-              return idx === 8;
-            }
-          );
-
-          if (iColumnIndex >= 0) {
-            // I열이 템플릿에 포함되어 있으면 해당 열을 숨김
-            const actualColumnNumber = iColumnIndex + 1; // 1-based
-            sheet.getColumn(actualColumnNumber).hidden = true;
-          } else {
-            // I열이 템플릿에 포함되어 있지 않으면 기본 I열(9번째) 숨김
-            sheet.getColumn(9).hidden = true;
-          }
         }
+        // 업체 템플릿이 있을 때는 I열을 숨김 처리하지 않음 (정상적으로 표시)
 
         // 엑셀 버퍼 생성
         const buffer = await wb.xlsx.writeBuffer();

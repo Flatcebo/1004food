@@ -2,7 +2,7 @@
 
 import {useState, useMemo, useCallback, memo} from "react";
 import Pagination from "./Pagination";
-import {getColumnWidth} from "@/utils/table";
+import {getProductsColumnWidth} from "@/utils/table";
 import type {Product} from "@/types/api";
 import {
   POST_TYPE_OPTIONS,
@@ -163,21 +163,21 @@ const ProductsBatchEditTable = memo(function ProductsBatchEditTable({
   }, [selectedRows.size, products.length]);
 
   const headers = [
-    "ID",
+    // "ID",
+    "매입처",
     "내외주",
     "택배사",
-    "상품명",
     "매핑코드",
+    "상품명",
     "사방넷명",
-    "합포수량",
     "원가",
-    "공급단가",
+    "판매가",
+    // "공급단가",
     "택배비",
-    "매입처",
     "세금구분",
     "카테고리",
     "상품구분",
-    "기타",
+    // "기타",
   ];
 
   if (loading) {
@@ -413,7 +413,7 @@ const ProductsBatchEditTable = memo(function ProductsBatchEditTable({
                 <th
                   key={header}
                   className="border bg-gray-100 px-2 py-1 text-xs font-semibold"
-                  style={{width: getColumnWidth(header)}}
+                  style={{width: getProductsColumnWidth(header)}}
                 >
                   {header}
                 </th>
@@ -441,8 +441,11 @@ const ProductsBatchEditTable = memo(function ProductsBatchEditTable({
                       className="cursor-pointer"
                     />
                   </td>
-                  <td className="border px-2 py-1 border-gray-300 text-xs text-center">
+                  {/* <td className="border px-2 py-1 border-gray-300 text-xs text-center">
                     {product.id}
+                  </td> */}
+                  <td className="border px-2 py-1 border-gray-300 text-xs">
+                    {product.purchase || ""}
                   </td>
                   <td className="border px-2 py-1 border-gray-300 text-xs">
                     {product.type || ""}
@@ -450,18 +453,19 @@ const ProductsBatchEditTable = memo(function ProductsBatchEditTable({
                   <td className="border px-2 py-1 border-gray-300 text-xs">
                     {product.postType || ""}
                   </td>
-                  <td className="border px-2 py-1 border-gray-300 text-xs">
-                    {product.name}
-                  </td>
                   <td className="border px-2 py-1 border-gray-300 text-xs text-center">
                     {product.code}
                   </td>
                   <td className="border px-2 py-1 border-gray-300 text-xs">
+                    {product.name}
+                  </td>
+
+                  <td className="border px-2 py-1 border-gray-300 text-xs">
                     {product.sabangName || ""}
                   </td>
-                  <td className="border px-2 py-1 border-gray-300 text-xs text-right">
+                  {/* <td className="border px-2 py-1 border-gray-300 text-xs text-right">
                     {product.pkg || ""}
-                  </td>
+                  </td> */}
                   <td className="border px-2 py-1 border-gray-300 text-xs text-right">
                     {typeof product.price === "number"
                       ? product.price.toLocaleString()
@@ -477,9 +481,7 @@ const ProductsBatchEditTable = memo(function ProductsBatchEditTable({
                       ? product.postFee.toLocaleString()
                       : ""}
                   </td>
-                  <td className="border px-2 py-1 border-gray-300 text-xs">
-                    {product.purchase || ""}
-                  </td>
+
                   <td className="border px-2 py-1 border-gray-300 text-xs">
                     {product.billType || ""}
                   </td>
@@ -489,9 +491,9 @@ const ProductsBatchEditTable = memo(function ProductsBatchEditTable({
                   <td className="border px-2 py-1 border-gray-300 text-xs">
                     {product.productType || ""}
                   </td>
-                  <td className="border px-2 py-1 border-gray-300 text-xs">
+                  {/* <td className="border px-2 py-1 border-gray-300 text-xs">
                     {product.etc || ""}
-                  </td>
+                  </td> */}
                 </tr>
               ))
             )}

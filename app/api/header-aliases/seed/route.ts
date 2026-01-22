@@ -138,7 +138,26 @@ const DEFAULT_HEADER_ALIASES = [
   {
     column_key: "supplyPrice",
     column_label: "공급단가",
-    aliases: ["공급단가", "공급가", "공급가격", "상품공급가", "supply_price", "supplyPrice"],
+    aliases: [
+      "공급단가",
+      "공급가",
+      "공급가격",
+      "상품공급가",
+      "supply_price",
+      "supplyPrice",
+    ],
+  },
+  {
+    column_key: "deliveryDate",
+    column_label: "배송희망일",
+    aliases: [
+      "배송희망일",
+      "배송희망날짜",
+      "희망배송일",
+      "희망배송날짜",
+      "배송예정일",
+      "배송예정날짜",
+    ],
   },
 ];
 

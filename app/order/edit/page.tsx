@@ -15,10 +15,7 @@ import DataFilters from "@/components/DataFilters";
 import LoadingOverlay from "@/components/LoadingOverlay";
 import CodeEditWindow from "@/components/CodeEditWindow";
 import {useUploadData} from "@/hooks/useUploadData";
-import {
-  IoReloadCircle,
-  IoCheckmarkCircle,
-} from "react-icons/io5";
+import {IoReloadCircle, IoCheckmarkCircle} from "react-icons/io5";
 
 export default function Page() {
   return (
@@ -235,10 +232,11 @@ function OrderEditPageContent() {
   const handleSelectAll = useCallback(() => {
     // 현재 페이지의 모든 행 ID 수집
     const allIds = new Set(paginatedRows.map((row: any) => row.id));
-    
+
     // 현재 선택된 행이 모두 선택되어 있으면 해제, 아니면 전체 선택
-    const isAllSelected = allIds.size > 0 && Array.from(allIds).every(id => selectedRows.has(id));
-    
+    const isAllSelected =
+      allIds.size > 0 && Array.from(allIds).every((id) => selectedRows.has(id));
+
     if (isAllSelected) {
       setSelectedRows(new Set());
     } else {
@@ -251,8 +249,11 @@ function OrderEditPageContent() {
     if (selectedRows.size === 0) {
       // 선택된 행이 없으면 필터링된 전체 데이터의 ID를 API에서 가져오기
       try {
-        startLoading("데이터 조회 중...", "필터링된 데이터를 가져오고 있습니다.");
-        
+        startLoading(
+          "데이터 조회 중...",
+          "필터링된 데이터를 가져오고 있습니다."
+        );
+
         const params = new URLSearchParams();
         if (appliedType) params.append("type", appliedType);
         if (appliedPostType) params.append("postType", appliedPostType);
@@ -262,13 +263,16 @@ function OrderEditPageContent() {
         if (appliedVendor && appliedVendor.length > 0) {
           appliedVendor.forEach((v) => params.append("vendor", v));
         }
-        if (appliedOrderStatus) params.append("orderStatus", appliedOrderStatus);
+        if (appliedOrderStatus)
+          params.append("orderStatus", appliedOrderStatus);
         if (appliedSearchField && appliedSearchValue) {
           params.append("searchField", appliedSearchField);
           params.append("searchValue", appliedSearchValue);
         }
-        if (appliedUploadTimeFrom) params.append("uploadTimeFrom", appliedUploadTimeFrom);
-        if (appliedUploadTimeTo) params.append("uploadTimeTo", appliedUploadTimeTo);
+        if (appliedUploadTimeFrom)
+          params.append("uploadTimeFrom", appliedUploadTimeFrom);
+        if (appliedUploadTimeTo)
+          params.append("uploadTimeTo", appliedUploadTimeTo);
 
         // 필터링된 전체 데이터를 한 번에 가져오기
         const limit = totalCount > 0 ? Math.min(totalCount, 10000) : 1000;
@@ -291,12 +295,19 @@ function OrderEditPageContent() {
           }
         }
 
-        const listResponse = await fetch(`/api/upload/list?${params.toString()}`, {
-          headers,
-        });
+        const listResponse = await fetch(
+          `/api/upload/list?${params.toString()}`,
+          {
+            headers,
+          }
+        );
         const listResult = await listResponse.json();
 
-        if (listResult.success && listResult.data && listResult.data.length > 0) {
+        if (
+          listResult.success &&
+          listResult.data &&
+          listResult.data.length > 0
+        ) {
           // 첫 번째 행의 데이터로 CodeEditWindow 열기
           const firstRow = listResult.data[0];
           const allRowIds = listResult.data
@@ -323,7 +334,9 @@ function OrderEditPageContent() {
     } else {
       // 선택된 첫 번째 행의 데이터로 CodeEditWindow 열기
       const firstSelectedId = Array.from(selectedRows)[0];
-      const selectedRow = tableRows.find((row: any) => row.id === firstSelectedId);
+      const selectedRow = tableRows.find(
+        (row: any) => row.id === firstSelectedId
+      );
       if (selectedRow) {
         setCodeEditWindow({
           open: true,
@@ -333,7 +346,22 @@ function OrderEditPageContent() {
         });
       }
     }
-  }, [selectedRows, tableRows, appliedType, appliedPostType, appliedCompany, appliedVendor, appliedOrderStatus, appliedSearchField, appliedSearchValue, appliedUploadTimeFrom, appliedUploadTimeTo, totalCount, startLoading, stopLoading]);
+  }, [
+    selectedRows,
+    tableRows,
+    appliedType,
+    appliedPostType,
+    appliedCompany,
+    appliedVendor,
+    appliedOrderStatus,
+    appliedSearchField,
+    appliedSearchValue,
+    appliedUploadTimeFrom,
+    appliedUploadTimeTo,
+    totalCount,
+    startLoading,
+    stopLoading,
+  ]);
 
   // CodeEditWindow에서 코드 업데이트 핸들러
   const handleCodeUpdate = useCallback(
@@ -652,7 +680,7 @@ function OrderStatusModal({
   return (
     <div className="fixed inset-0 bg-[#00000084] bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl w-[500px] p-6">
-        <div className="flex items-center justify-between mb-4">
+        {/* <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold">주문 상태 변경</h2>
           <button
             onClick={onClose}
@@ -660,7 +688,7 @@ function OrderStatusModal({
           >
             닫기
           </button>
-        </div>
+        </div> */}
 
         <div className="mb-4">
           <p className="text-sm text-gray-600 mb-4">

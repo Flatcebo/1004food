@@ -21,6 +21,8 @@ export interface TemplateHeader {
   column_key: string;
   column_label: string;
   display_name: string;
+  default_value?: string;
+  original_column_key?: string; // 복사된 헤더의 경우 원본 column_key
 }
 
 /**
@@ -35,14 +37,42 @@ export interface TemplateHeader {
 export function mapDataByColumnKey(
   row: any,
   columnKey: string,
-  headerAliases?: Array<{column_key: string; aliases: string[]}>
+  headerAliases?: Array<{column_key: string; aliases: string[]}>,
+  originalColumnKey?: string // 복사된 헤더의 경우 원본 column_key
 ): any {
+  // 특수 헤더 처리
+  if (columnKey === "__auto_increment__") {
+    return ""; // 자동 번호는 빈 값으로 반환 (엑셀 생성 시 번호를 매김)
+  }
+
+  if (columnKey === "__delivery_date__") {
+    return ""; // 배송희망일은 빈 값으로 반환 (default_value 사용)
+  }
+
+  if (columnKey.startsWith("__custom__")) {
+    return ""; // 커스텀 헤더는 빈 값으로 반환 (default_value 사용)
+  }
+
+  if (columnKey.startsWith("__copy__")) {
+    // 복사된 헤더의 경우 originalColumnKey를 사용해서 실제 데이터 찾기
+    if (originalColumnKey) {
+      const mappedValue = mapDataByColumnKey(row, originalColumnKey, headerAliases);
+      // 디버깅: 복사된 헤더의 데이터 매핑 확인
+      if (mappedValue === "" || mappedValue === null || mappedValue === undefined) {
+        console.log(`복사된 헤더 매핑 실패: columnKey=${columnKey}, originalColumnKey=${originalColumnKey}, row keys=${Object.keys(row).join(", ")}`);
+      }
+      return mappedValue;
+    }
+    console.log(`복사된 헤더에 originalColumnKey 없음: columnKey=${columnKey}`);
+    return ""; // originalColumnKey가 없는 경우 빈 값
+  }
+
   // 헤더 Alias가 제공된 경우 사용
   if (headerAliases && headerAliases.length > 0) {
     const aliasData = headerAliases.find(
       (alias) => alias.column_key === columnKey
     );
-    
+
     if (aliasData && aliasData.aliases && aliasData.aliases.length > 0) {
       // aliases 배열의 모든 항목을 시도
       for (const alias of aliasData.aliases) {
@@ -50,7 +80,7 @@ export function mapDataByColumnKey(
         if (row[alias] !== undefined && row[alias] !== null && row[alias] !== "") {
           return row[alias];
         }
-        
+
         // 대소문자 구분 없이 확인 (공백 제거 후 비교)
         const normalizedAlias = alias.replace(/\s+/g, "").toLowerCase();
         for (const key in row) {
@@ -128,6 +158,24 @@ export function mapRowToTemplateFormat(
   headerAliases?: Array<{column_key: string; aliases: string[]}>
 ): any[] {
   return templateHeaders.map((header) => {
+    // 커스텀 헤더나 특수 헤더의 경우
+    if (header.column_key.startsWith("__custom__") ||
+        header.column_key.startsWith("__copy__") ||
+        header.column_key === "__delivery_date__" ||
+        header.column_key === "__auto_increment__") {
+      // 실제 데이터에서 값이 있는지 확인
+      const value = mapDataByColumnKey(row, header.column_key, headerAliases, header.original_column_key);
+      const defaultValue = header.default_value || "";
+
+      // 값이 없으면 기본값 사용 (단, 복사된 헤더는 기본값 사용하지 않음)
+      if (header.column_key.startsWith("__copy__")) {
+        return value; // 복사된 헤더는 원본 데이터 그대로 사용
+      }
+
+      return value !== "" ? value : defaultValue;
+    }
+
+    // 일반 헤더는 기존 로직대로
     return mapDataByColumnKey(row, header.column_key, headerAliases);
   });
 }

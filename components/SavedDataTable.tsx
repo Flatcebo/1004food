@@ -2159,6 +2159,11 @@ const SavedDataTable = memo(function SavedDataTable({
         <RowDetailWindow
           rowData={detailRow}
           onClose={() => setDetailRow(null)}
+          onDataUpdate={() => {
+            if (onDataUpdate) {
+              onDataUpdate();
+            }
+          }}
         />
       )}
 

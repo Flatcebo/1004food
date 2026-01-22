@@ -744,7 +744,7 @@ export function useFileSave({
             ...updatedProductIdMap,
           };
 
-          // company-id 헤더 포함
+          // company-id, user-id 헤더 포함
           const headers: HeadersInit = {
             "Content-Type": "application/json",
           };
@@ -757,6 +757,10 @@ export function useFileSave({
                 const user = parsed.state?.user;
                 if (user?.companyId) {
                   headers["company-id"] = user.companyId.toString();
+                }
+                // user-id도 헤더에 포함
+                if (user?.id) {
+                  headers["user-id"] = user.id.toString();
                 }
               }
             } catch (e) {
@@ -824,7 +828,7 @@ export function useFileSave({
           return false;
         }
 
-        // company-id 헤더 포함
+        // company-id, user-id 헤더 포함
         const confirmHeaders: HeadersInit = {
           "Content-Type": "application/json",
         };
@@ -837,6 +841,10 @@ export function useFileSave({
               const user = parsed.state?.user;
               if (user?.companyId) {
                 confirmHeaders["company-id"] = user.companyId.toString();
+              }
+              // user-id도 헤더에 포함 (중요: 다른 사용자 파일 저장 방지)
+              if (user?.id) {
+                confirmHeaders["user-id"] = user.id.toString();
               }
             }
           } catch (e) {

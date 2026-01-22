@@ -17,6 +17,7 @@ interface TemplateHeader {
   column_label: string; // 헤더 Alias의 기본 라벨
   display_name: string; // 사용자가 변경한 헤더명 (엑셀 다운로드 시 헤더로 사용)
   default_value?: string; // 커스텀 헤더의 기본값 (각 행에 채워넣을 값)
+  original_column_key?: string; // 복사된 헤더의 경우 원본 column_key
 }
 
 export default function PurchaseTemplatesPage() {
@@ -118,15 +119,42 @@ export default function PurchaseTemplatesPage() {
       );
     } else {
       // 추가
-      setSelectedHeaders([
-        ...selectedHeaders,
-        {
-          column_key: alias.column_key,
-          column_label: alias.column_label,
-          display_name: alias.column_label,
-        },
-      ]);
+      const isDeliveryDate = alias.column_key === "__delivery_date__";
+      const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD 형식
+
+      const newHeader = {
+        column_key: alias.column_key,
+        column_label: alias.column_label,
+        display_name: alias.column_label,
+        default_value: isDeliveryDate ? today : undefined,
+      };
+      console.log("배송희망일 헤더 추가:", newHeader);
+      setSelectedHeaders([...selectedHeaders, newHeader]);
     }
+  };
+
+  // 헤더 복사 (HeaderAlias 또는 TemplateHeader 모두 지원)
+  const copyHeader = (source: HeaderAlias | TemplateHeader) => {
+    // source가 HeaderAlias인지 TemplateHeader인지 확인
+    const columnKey = "id" in source ? source.column_key : source.column_key;
+    const columnLabel =
+      "id" in source ? source.column_label : source.column_label;
+
+    // 고유한 column_key 생성 (원본 column_key를 포함)
+    const copyColumnKey = `__copy__${columnKey}__${Date.now()}_${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
+
+    // 복사된 헤더 추가 (기본값 없이)
+    setSelectedHeaders([
+      ...selectedHeaders,
+      {
+        column_key: copyColumnKey,
+        column_label: columnLabel,
+        display_name: `${columnLabel} (복사)`, // 기본 표시 이름
+        original_column_key: columnKey, // 원본 column_key 저장
+      },
+    ]);
   };
 
   // 커스텀 헤더 추가
@@ -137,12 +165,7 @@ export default function PurchaseTemplatesPage() {
       return;
     }
 
-    // 이미 같은 이름의 헤더가 있는지 확인
-    const exists = selectedHeaders.some((h) => h.display_name === trimmedName);
-    if (exists) {
-      alert("이미 같은 이름의 헤더가 있습니다.");
-      return;
-    }
+    // 중복 허용: 같은 이름의 헤더도 여러 개 추가할 수 있음
 
     // 고유한 column_key 생성 (타임스탬프 기반)
     const customColumnKey = `__custom__${Date.now()}_${Math.random()
@@ -493,6 +516,10 @@ export default function PurchaseTemplatesPage() {
                         header.column_key === "__auto_increment__";
                       const isCustomHeader =
                         header.column_key.startsWith("__custom__");
+                      const isDeliveryDate =
+                        header.column_key === "__delivery_date__";
+                      const isCopiedHeader =
+                        header.column_key.startsWith("__copy__");
                       return (
                         <div
                           key={header.column_key}
@@ -541,27 +568,64 @@ export default function PurchaseTemplatesPage() {
                                   (커스텀)
                                 </span>
                               )}
+                              {isDeliveryDate && (
+                                <span className="text-xs text-green-600 ml-1">
+                                  (날짜 선택)
+                                </span>
+                              )}
+                              {isCopiedHeader && (
+                                <span className="text-xs text-blue-600 ml-1">
+                                  (복사본)
+                                </span>
+                              )}
                             </span>
                             <span className="text-sm text-gray-400">→</span>
-                            <input
-                              type="text"
-                              value={header.display_name}
-                              onChange={(e) =>
-                                updateHeaderName(
-                                  header.column_key,
-                                  e.target.value
-                                )
-                              }
-                              placeholder="헤더명 입력"
-                              className="flex-1 px-3 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                              onClick={(e) => e.stopPropagation()}
-                              disabled={isAutoIncrement}
-                              title={
-                                isAutoIncrement
-                                  ? "번호 헤더는 자동으로 1, 2, 3... 순서대로 번호가 매겨집니다."
-                                  : ""
-                              }
-                            />
+                            {isDeliveryDate ? (
+                              <>
+                                <input
+                                  type="text"
+                                  value={header.display_name}
+                                  onChange={(e) =>
+                                    updateHeaderName(
+                                      header.column_key,
+                                      e.target.value
+                                    )
+                                  }
+                                  placeholder="헤더명 입력"
+                                  className="flex-1 px-3 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                  onClick={(e) => e.stopPropagation()}
+                                  title="엑셀에 표시될 헤더명을 입력하세요"
+                                />
+                                <span className="text-sm text-gray-400">|</span>
+                                <span className="flex-1 px-3 py-1 bg-gray-50 border border-gray-200 rounded text-sm text-gray-600 text-center">
+                                  {header.default_value ||
+                                    new Date().toISOString().split("T")[0]}
+                                  <span className="text-xs text-green-600 ml-1">
+                                    (오늘 날짜)
+                                  </span>
+                                </span>
+                              </>
+                            ) : (
+                              <input
+                                type="text"
+                                value={header.display_name}
+                                onChange={(e) =>
+                                  updateHeaderName(
+                                    header.column_key,
+                                    e.target.value
+                                  )
+                                }
+                                placeholder="헤더명 입력"
+                                className="flex-1 px-3 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                onClick={(e) => e.stopPropagation()}
+                                disabled={isAutoIncrement}
+                                title={
+                                  isAutoIncrement
+                                    ? "번호 헤더는 자동으로 1, 2, 3... 순서대로 번호가 매겨집니다."
+                                    : ""
+                                }
+                              />
+                            )}
                             {isCustomHeader && (
                               <>
                                 <span className="text-sm text-gray-400">|</span>
@@ -582,19 +646,37 @@ export default function PurchaseTemplatesPage() {
                               </>
                             )}
                           </div>
-                          <button
-                            onClick={() => {
-                              setSelectedHeaders(
-                                selectedHeaders.filter(
-                                  (h) => h.column_key !== header.column_key
-                                )
-                              );
-                            }}
-                            className="text-red-500 hover:text-red-700 text-sm px-2"
-                            title="제거"
-                          >
-                            ×
-                          </button>
+                          <div className="flex items-center gap-2">
+                            {/* 복사 버튼: 일반 헤더나 복사된 헤더인 경우에만 표시 */}
+                            {!isAutoIncrement &&
+                              !isCustomHeader &&
+                              !isDeliveryDate &&
+                              alias && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    copyHeader(header);
+                                  }}
+                                  className="px-2 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
+                                  title="헤더 복사 (표시 이름 수정 가능)"
+                                >
+                                  복사
+                                </button>
+                              )}
+                            <button
+                              onClick={() => {
+                                setSelectedHeaders(
+                                  selectedHeaders.filter(
+                                    (h) => h.column_key !== header.column_key
+                                  )
+                                );
+                              }}
+                              className="text-red-500 hover:text-red-700 text-sm px-2"
+                              title="제거"
+                            >
+                              ×
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
@@ -701,6 +783,48 @@ export default function PurchaseTemplatesPage() {
                     );
                   })()}
 
+                  {/* 배송희망일 헤더 */}
+                  {(() => {
+                    const deliveryDateHeader = {
+                      column_key: "__delivery_date__",
+                      column_label: "배송희망일",
+                    };
+                    const isDeliveryDateSelected = selectedHeaders.some(
+                      (h) => h.column_key === deliveryDateHeader.column_key
+                    );
+                    return (
+                      <div
+                        key="__delivery_date__"
+                        className={`flex items-center gap-4 p-2 rounded ${
+                          isDeliveryDateSelected
+                            ? "bg-gray-100 opacity-60"
+                            : "hover:bg-gray-50"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isDeliveryDateSelected}
+                          onChange={() => toggleHeader(deliveryDateHeader)}
+                          className="w-4 h-4"
+                          disabled={isDeliveryDateSelected}
+                        />
+                        <div className="flex-1">
+                          <span className="text-sm font-medium">
+                            {deliveryDateHeader.column_label}
+                            <span className="text-xs text-green-600 ml-2">
+                              (날짜 선택)
+                            </span>
+                          </span>
+                          {isDeliveryDateSelected && (
+                            <span className="text-xs text-gray-500 ml-2">
+                              (이미 선택됨)
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   {/* 일반 헤더 목록 */}
                   {headerAliases.map((alias) => {
                     const isSelected = selectedHeaders.some(
@@ -733,6 +857,14 @@ export default function PurchaseTemplatesPage() {
                             </span>
                           )}
                         </div>
+                        {/* 선택 여부와 관계없이 항상 복사 버튼 표시 */}
+                        <button
+                          onClick={() => copyHeader(alias)}
+                          className="px-2 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded transition-colors"
+                          title="헤더 복사 (표시 이름 수정 가능)"
+                        >
+                          복사
+                        </button>
                       </div>
                     );
                   })}

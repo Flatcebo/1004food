@@ -5,6 +5,27 @@
 /**
  * 컬럼 너비 매핑
  */
+export function getProductsColumnWidth(header: string): string {
+  const widthMap: Record<string, string> = {
+    ID: "60px",
+    매핑코드: "60px",
+    내외주: "50px",
+    상품명: "280px",
+    가격: "100px",
+    판매가: "100px",
+    합포수량: "80px",
+    택배비: "80px",
+    사방넷명: "280px",
+    택배사: "100px",
+    매입처: "120px",
+    세금구분: "80px",
+    카테고리: "100px",
+    상품구분: "80px",
+    기타: "100px",
+  };
+  return widthMap[header] || "70px";
+}
+
 export function getColumnWidth(header: string): string {
   const widthMap: Record<string, string> = {
     id: "60px",
@@ -17,7 +38,7 @@ export function getColumnWidth(header: string): string {
     우편번호: "60px",
     내외주: "50px",
     주소: "70px",
-    상품명: "140px",
+    상품명: "280px",
     수량: "35px",
     가격: "100px",
     판매가: "100px",
@@ -32,7 +53,7 @@ export function getColumnWidth(header: string): string {
     주문자: "70px",
     전화번호: "120px",
     이름: "80px",
-    사방넷명: "150px",
+    사방넷명: "280px",
     택배사: "100px",
     매입처: "120px",
     세금구분: "80px",
