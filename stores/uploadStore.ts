@@ -608,6 +608,36 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
           };
         });
 
+        // 서버에 없는 파일은 sessionStorage에서 삭제 (이미 저장된 파일 정리)
+        const serverFileIds = new Set(updatedFiles.map((f: any) => f.id));
+        const existingFileIds = Array.from(existingFilesMap.keys());
+        existingFileIds.forEach((existingId) => {
+          if (!serverFileIds.has(existingId)) {
+            console.log(`🗑️ 서버에 없는 파일 sessionStorage에서 삭제: ${existingId}`);
+            sessionStorage.removeItem(`uploadedFile_${existingId}`);
+          }
+        });
+        
+        // sessionStorage의 모든 uploadedFile 키를 확인하고 서버에 없는 것들 삭제
+        try {
+          const keysToRemove: string[] = [];
+          for (let i = 0; i < sessionStorage.length; i++) {
+            const key = sessionStorage.key(i);
+            if (key && key.startsWith("uploadedFile_")) {
+              const fileId = key.replace("uploadedFile_", "");
+              if (!serverFileIds.has(fileId)) {
+                keysToRemove.push(key);
+              }
+            }
+          }
+          keysToRemove.forEach((key) => {
+            console.log(`🗑️ 오래된 sessionStorage 항목 삭제: ${key}`);
+            sessionStorage.removeItem(key);
+          });
+        } catch (error) {
+          console.error("sessionStorage 정리 실패:", error);
+        }
+
         setUploadedFiles(updatedFiles);
 
         // 확인된 파일들 상태 복원

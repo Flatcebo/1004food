@@ -6,6 +6,17 @@ import {getCompanyIdFromRequest, getUserIdFromRequest} from "@/lib/company";
 
 export async function POST(request: NextRequest) {
   try {
+    // 요청 body에서 fileIds 추출 (클라이언트에서 전달한 저장할 파일 ID 목록)
+    let requestFileIds: string[] = [];
+    try {
+      const body = await request.json();
+      if (body.fileIds && Array.isArray(body.fileIds)) {
+        requestFileIds = body.fileIds;
+      }
+    } catch (error) {
+      // body가 없거나 파싱 실패하면 빈 배열 사용
+    }
+
     // company_id 추출
     const companyId = await getCompanyIdFromRequest(request);
     if (!companyId) {
@@ -30,26 +41,20 @@ export async function POST(request: NextRequest) {
     // user_id 추출 (헤더에서 먼저 시도)
     let userId = await getUserIdFromRequest(request);
 
-    // temp_files에서 user_id를 가져와서 사용 (헤더에 없을 경우)
-    if (!userId && hasUserIdColumn && companyId) {
-      try {
-        const tempFilesUserId = await sql`
-          SELECT DISTINCT user_id
-          FROM temp_files
-          WHERE is_confirmed = true AND company_id = ${companyId} AND user_id IS NOT NULL
-          LIMIT 1
-        `;
-
-        if (tempFilesUserId.length > 0 && tempFilesUserId[0].user_id) {
-          userId = tempFilesUserId[0].user_id;
-          console.log(
-            `🔍 [userGrade 확인] temp_files에서 user_id 가져옴: userId=${userId}`
-          );
-        }
-      } catch (error) {
-        console.error("temp_files에서 user_id 조회 실패:", error);
-      }
+    // user_id가 없으면 에러 반환 (다른 사용자의 파일을 저장하지 않도록)
+    if (!userId && hasUserIdColumn) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "user_id가 필요합니다. 로그인 후 다시 시도해주세요.",
+        },
+        {status: 400}
+      );
     }
+
+    // temp_files에서 user_id를 가져와서 검증 (헤더의 user_id와 일치하는지 확인용)
+    // 주의: 다른 사용자의 user_id를 가져와서 사용하지 않도록 제거
+    // 기존 로직 제거: temp_files에서 임의의 user_id를 가져오는 것은 보안상 위험
 
     // user grade 확인 (온라인인지 확인)
     let userGrade: string | null = null;
@@ -163,9 +168,39 @@ export async function POST(request: NextRequest) {
       console.error("mall_id 컬럼 확인/추가 실패:", error);
     }
 
-    // 확인된 모든 임시 파일들을 조회 (세션 구분 없음, company_id, user_id 필터링)
+    // 확인된 임시 파일들을 조회 (세션 구분 없음, company_id, user_id 필터링)
+    // 중요: 클라이언트에서 전달한 fileIds가 있으면 해당 파일만 조회하고, 항상 user_id로 필터링
     let confirmedFiles;
-    if (userId && hasUserIdColumn) {
+
+    // fileIds가 전달되었고 user_id가 있는 경우: 해당 파일만 조회 (가장 안전한 방법)
+    if (requestFileIds.length > 0 && userId && hasUserIdColumn) {
+      console.log(
+        `📋 [confirm] 클라이언트에서 전달된 fileIds로 조회: ${requestFileIds.length}개, userId=${userId}`
+      );
+      confirmedFiles = await sql`
+        SELECT 
+          file_id,
+          file_name,
+          row_count,
+          table_data,
+          header_index,
+          product_code_map,
+          product_id_map,
+          vendor_name,
+          mall_id,
+          original_header,
+          original_table_data,
+          user_id
+        FROM temp_files
+        WHERE file_id = ANY(${requestFileIds}) 
+          AND is_confirmed = true 
+          AND company_id = ${companyId} 
+          AND user_id = ${userId}
+        ORDER BY created_at ASC
+      `;
+    } else if (userId && hasUserIdColumn) {
+      // fileIds가 없지만 user_id가 있는 경우: 해당 사용자의 모든 확인된 파일 조회
+      console.log(`📋 [confirm] user_id로 필터링하여 조회: userId=${userId}`);
       confirmedFiles = await sql`
         SELECT 
           file_id,
@@ -184,7 +219,11 @@ export async function POST(request: NextRequest) {
         WHERE is_confirmed = true AND company_id = ${companyId} AND user_id = ${userId}
         ORDER BY created_at ASC
       `;
-    } else {
+    } else if (requestFileIds.length > 0) {
+      // user_id 컬럼이 없지만 fileIds가 있는 경우: 해당 파일만 조회 (하위 호환성)
+      console.log(
+        `📋 [confirm] fileIds만으로 조회 (user_id 컬럼 없음): ${requestFileIds.length}개`
+      );
       confirmedFiles = await sql`
         SELECT 
           file_id,
@@ -198,11 +237,23 @@ export async function POST(request: NextRequest) {
           mall_id,
           original_header,
           original_table_data,
-          user_id
+          NULL as user_id
         FROM temp_files
-        WHERE is_confirmed = true AND company_id = ${companyId}
+        WHERE file_id = ANY(${requestFileIds}) 
+          AND is_confirmed = true 
+          AND company_id = ${companyId}
         ORDER BY created_at ASC
       `;
+    } else {
+      // user_id도 없고 fileIds도 없는 경우: 에러 반환 (다른 사용자 파일 저장 방지)
+      console.error(`❌ [confirm] user_id와 fileIds가 모두 없어 저장 불가`);
+      return NextResponse.json(
+        {
+          success: false,
+          error: "저장할 파일을 식별할 수 없습니다. 다시 시도해주세요.",
+        },
+        {status: 400}
+      );
     }
 
     if (confirmedFiles.length === 0) {

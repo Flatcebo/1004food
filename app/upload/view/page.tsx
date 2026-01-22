@@ -1196,6 +1196,31 @@ function FileViewContent() {
         const result = await response.json();
         if (!result.success) {
           console.error("❌ 서버 업데이트 실패:", result.error);
+
+          // 이미 저장된 파일인 경우 특별 처리
+          if (result.error === "ALREADY_SAVED") {
+            alert(
+              "이 파일은 이미 저장되었습니다.\n저장된 데이터 목록을 확인해주세요."
+            );
+            // sessionStorage에서 해당 파일 제거
+            sessionStorage.removeItem(`uploadedFile_${fileId}`);
+            // 창 닫기
+            window.close();
+            return;
+          }
+
+          // 파일을 찾을 수 없는 경우
+          if (response.status === 404) {
+            alert(
+              "파일을 찾을 수 없습니다.\n파일이 삭제되었거나 이미 저장되었을 수 있습니다.\n저장된 데이터 목록을 확인해주세요."
+            );
+            // sessionStorage에서 해당 파일 제거
+            sessionStorage.removeItem(`uploadedFile_${fileId}`);
+            // 창 닫기
+            window.close();
+            return;
+          }
+
           alert("서버 저장에 실패했습니다. 다시 시도해주세요.");
           return;
         }

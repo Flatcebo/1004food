@@ -782,11 +782,21 @@ export function useFileSave({
 
           const updateResult = await updateResponse.json();
           if (!updateResult.success) {
+            // 이미 저장된 파일인 경우
+            if (updateResult.error === "ALREADY_SAVED") {
+              console.warn(`파일이 이미 저장됨: ${fileData.fileName} (${fileId})`);
+              // 삭제된 파일을 confirmedFiles에서 제거하고 sessionStorage에서도 삭제
+              unconfirmFile(fileId);
+              sessionStorage.removeItem(`uploadedFile_${fileId}`);
+              return null;
+            }
+            
             // 파일을 찾을 수 없는 경우 (404 또는 파일이 삭제된 경우)
             if (updateResult.error?.includes("찾을 수 없") || updateResponse.status === 404) {
               console.warn(`파일이 서버에 존재하지 않음: ${fileData.fileName} (${fileId})`);
-              // 삭제된 파일을 confirmedFiles에서 제거
+              // 삭제된 파일을 confirmedFiles에서 제거하고 sessionStorage에서도 삭제
               unconfirmFile(fileId);
+              sessionStorage.removeItem(`uploadedFile_${fileId}`);
               return null;
             }
             console.error(
@@ -835,10 +845,13 @@ export function useFileSave({
         }
 
         // 확인된 파일들을 정식으로 저장
+        // 중요: 저장할 파일 ID 목록을 서버에 전달하여 해당 사용자의 파일만 저장
         const response = await fetch("/api/upload/temp/confirm", {
           method: "POST",
           headers: confirmHeaders,
-          body: JSON.stringify({}),
+          body: JSON.stringify({
+            fileIds: successfullyUpdatedFileIds, // 현재 사용자가 선택한 파일 ID만 전달
+          }),
         });
 
         const result = await response.json();

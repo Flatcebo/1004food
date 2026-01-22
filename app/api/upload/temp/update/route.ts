@@ -207,8 +207,42 @@ export async function PUT(request: NextRequest) {
 
     if (!result || result.length === 0) {
       console.error("❌ 파일을 찾을 수 없음. fileId:", fileId);
+      
+      // 이미 정식으로 저장된 파일인지 확인 (file_id 패턴으로 uploads 테이블 검색)
+      // file_id에서 파일명을 추출하기 어려우므로, 최근 저장된 파일이 있는지 확인
+      try {
+        // 최근 5분 이내에 저장된 파일이 있는지 확인 (같은 company_id)
+        const recentSaved = await sql`
+          SELECT id, file_name, created_at
+          FROM uploads
+          WHERE company_id = ${companyId}
+          AND created_at > NOW() - INTERVAL '5 minutes'
+          ORDER BY created_at DESC
+          LIMIT 5
+        `;
+        
+        if (recentSaved.length > 0) {
+          console.log("ℹ️ 최근 저장된 파일 발견:", recentSaved.map((f: any) => f.file_name));
+          return NextResponse.json(
+            {
+              success: false, 
+              error: "ALREADY_SAVED",
+              message: "이 파일은 이미 저장되었습니다. 페이지를 새로고침해주세요.",
+              recentFiles: recentSaved.map((f: any) => ({
+                id: f.id,
+                fileName: f.file_name,
+                createdAt: f.created_at
+              }))
+            },
+            {status: 409}
+          );
+        }
+      } catch (checkError) {
+        console.error("저장된 파일 확인 실패:", checkError);
+      }
+      
       return NextResponse.json(
-        {success: false, error: "파일을 찾을 수 없습니다."},
+        {success: false, error: "파일을 찾을 수 없습니다. 파일이 삭제되었거나 이미 저장되었을 수 있습니다."},
         {status: 404}
       );
     }
