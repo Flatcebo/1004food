@@ -297,6 +297,30 @@ export async function POST(request: NextRequest) {
     const encodedFileName = encodeURIComponent(fileName);
     const contentDisposition = `attachment; filename="${safeFileName}"; filename*=UTF-8''${encodedFileName}`;
 
+    // 히스토리 저장 (비동기로 처리하여 다운로드 응답을 지연시키지 않음)
+    if (userId) {
+      sql`
+        INSERT INTO download_history (
+          user_id,
+          company_id,
+          vendor_name,
+          file_name,
+          form_type,
+          upload_id
+        ) VALUES (
+          ${userId},
+          ${companyId},
+          ${vendorName},
+          ${fileName},
+          '운송장',
+          ${uploadId}
+        )
+      `.catch((error) => {
+        console.error("히스토리 저장 실패:", error);
+        // 히스토리 저장 실패해도 다운로드는 계속 진행
+      });
+    }
+
     // 응답 헤더 설정
     const responseHeaders = new Headers();
     responseHeaders.set(

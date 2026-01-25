@@ -19,32 +19,32 @@ export function getDateString(): string {
   return `${year}${month}${day}`;
 }
 
-// 내부코드 생성: 날짜(6자리, YYMMDD) + company_id(2자리) + mall_id(4자리) + 일련번호(4자리)
+// 내부코드 생성: 날짜(6자리, YYMMDD) + mall_id(4자리) + 일련번호(4자리)
 export function generateInternalCode(
   companyId: number,
   mallId: number | null,
   increment: number
 ): string {
   const dateStr = getDateString();
-  const companyIdStr = String(companyId).padStart(2, "0"); // 2자리로 패딩 (예: 1 -> 01)
+  // company_id는 더 이상 사용하지 않음 (호환성을 위해 파라미터는 유지)
   const mallIdStr = mallId ? String(mallId).padStart(4, "0") : "0000";
   const incrementStr = String(increment).padStart(4, "0");
-  return `${dateStr}${companyIdStr}${mallIdStr}${incrementStr}`;
+  return `${dateStr}${mallIdStr}${incrementStr}`;
 }
 
-// DB에서 특정 company_id, mall_id와 날짜에 대한 최대 일련번호 조회
+// DB에서 특정 mall_id와 날짜에 대한 최대 일련번호 조회
 export async function getMaxIncrement(
   companyId: number,
   mallId: number | null,
   dateStr: string
 ): Promise<number> {
   try {
-    const companyIdStr = String(companyId).padStart(2, "0"); // 2자리로 패딩 (예: 1 -> 01)
+    // company_id는 더 이상 사용하지 않음 (호환성을 위해 파라미터는 유지)
     const mallIdStr = mallId ? String(mallId).padStart(4, "0") : "0000";
-    const codePrefix = `${dateStr}${companyIdStr}${mallIdStr}`;
-    const expectedLength = codePrefix.length + 4; // 날짜(6) + company_id(2) + mall_id(4) + increment(4) = 16자리
+    const codePrefix = `${dateStr}${mallIdStr}`;
+    const expectedLength = codePrefix.length + 4; // 날짜(6) + mall_id(4) + increment(4) = 14자리
 
-    // 해당 날짜, company_id, mall_id로 시작하고 정확히 16자리인 내부코드만 조회
+    // 해당 날짜, mall_id로 시작하고 정확히 14자리인 내부코드만 조회
     let result;
     if (mallId === null) {
       result = await sql`
@@ -52,7 +52,6 @@ export async function getMaxIncrement(
         FROM upload_rows 
         WHERE row_data->>'내부코드' LIKE ${codePrefix + "%"}
           AND LENGTH(row_data->>'내부코드') = ${expectedLength}
-          AND company_id = ${companyId}
           AND mall_id IS NULL
         ORDER BY row_data->>'내부코드' DESC
         LIMIT 1
@@ -63,7 +62,6 @@ export async function getMaxIncrement(
         FROM upload_rows 
         WHERE row_data->>'내부코드' LIKE ${codePrefix + "%"}
           AND LENGTH(row_data->>'내부코드') = ${expectedLength}
-          AND company_id = ${companyId}
           AND mall_id = ${mallId}
         ORDER BY row_data->>'내부코드' DESC
         LIMIT 1
@@ -104,7 +102,7 @@ export async function areCodesUnique(codes: string[]): Promise<boolean> {
   }
 }
 
-// company_id와 mall_id별로 내부 코드 생성
+// mall_id별로 내부 코드 생성
 export async function generateUniqueCodesForVendors(
   companyId: number,
   mallIds: (number | null)[]
@@ -112,34 +110,33 @@ export async function generateUniqueCodesForVendors(
   const dateStr = getDateString();
   const codes: string[] = [];
 
-  // (company_id, mall_id) 조합별 현재 increment 추적
+  // mall_id별 현재 increment 추적
   const keyIncrements = new Map<string, number>();
 
-  // 각 고유 (company_id, mall_id) 조합별로 최대 increment 초기화
+  // 각 고유 mall_id별로 최대 increment 초기화
   const uniqueKeys = Array.from(
     new Set(
       mallIds.map((mallId) => {
-        const mallIdStr = mallId ? String(mallId) : "null";
-        return `${companyId}_${mallIdStr}`;
+        return mallId ? String(mallId) : "null";
       })
     )
   );
 
   for (const key of uniqueKeys) {
-    const [compIdStr, mallIdStr] = key.split("_");
-    const compId = parseInt(compIdStr, 10);
-    const mallId = mallIdStr === "null" ? null : parseInt(mallIdStr, 10);
-    const maxIncrement = await getMaxIncrement(compId, mallId, dateStr);
+    const mallId = key === "null" ? null : parseInt(key, 10);
+    // companyId는 호환성을 위해 전달하지만 실제로는 사용하지 않음
+    const maxIncrement = await getMaxIncrement(companyId, mallId, dateStr);
     keyIncrements.set(key, maxIncrement);
   }
 
   // mallIds 배열 순서대로 코드 생성
   for (const mallId of mallIds) {
-    const key = `${companyId}_${mallId === null ? "null" : String(mallId)}`;
+    const key = mallId === null ? "null" : String(mallId);
     const currentIncrement = keyIncrements.get(key) || 0;
     const nextIncrement = currentIncrement + 1;
     keyIncrements.set(key, nextIncrement);
 
+    // companyId는 호환성을 위해 전달하지만 실제로는 사용하지 않음
     const code = generateInternalCode(companyId, mallId, nextIncrement);
     codes.push(code);
   }

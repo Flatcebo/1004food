@@ -315,7 +315,7 @@ export async function POST(request: NextRequest) {
         templateNameForFilter.includes("CJ");
 
       // 필터 객체 로깅
-      console.log("🔍 받은 필터 객체:", JSON.stringify(filters, null, 2));
+      // console.log("🔍 받은 필터 객체:", JSON.stringify(filters, null, 2));
 
       const filtersWithType = {...filters};
       // 외주 발주서인 경우 type 필터가 없으면 "외주" 조건 추가
@@ -342,10 +342,10 @@ export async function POST(request: NextRequest) {
       delete filtersWithoutDate.uploadTimeFrom;
       delete filtersWithoutDate.uploadTimeTo;
 
-      console.log("🔍 기간 필터 값:", {
-        uploadTimeFrom,
-        uploadTimeTo,
-      });
+      // console.log("🔍 기간 필터 값:", {
+      //   uploadTimeFrom,
+      //   uploadTimeTo,
+      // });
 
       const {conditions} = buildFilterConditions(
         filtersWithoutDate as UploadFilters,
@@ -355,7 +355,7 @@ export async function POST(request: NextRequest) {
       );
 
       // 조건 로깅
-      console.log("🔍 생성된 조건 개수:", conditions.length);
+      // console.log("🔍 생성된 조건 개수:", conditions.length);
 
       // CJ외주 발주서인 경우: 지정된 매핑코드만 필터링
       if (isCJOutsourceTemplateForFilter) {
@@ -626,8 +626,8 @@ export async function POST(request: NextRequest) {
       dataRows = dataRowsWithIds.map((r: any) => r.row_data);
       downloadedRowIds = dataRowsWithIds.map((r: any) => r.id);
 
-      console.log("📊 필터링된 데이터 개수:", dataRows.length);
-      console.log("📊 필터링된 데이터 ID 개수:", downloadedRowIds.length);
+      // console.log("📊 필터링된 데이터 개수:", dataRows.length);
+      // console.log("📊 필터링된 데이터 ID 개수:", downloadedRowIds.length);
 
       // 실제 조회된 데이터의 업로드 날짜 확인
       if (dataRowsWithIds.length > 0) {
@@ -640,10 +640,10 @@ export async function POST(request: NextRequest) {
           GROUP BY u.created_at::date
           ORDER BY u.created_at::date DESC
         `;
-        console.log(
-          "📅 실제 조회된 데이터의 업로드 날짜 분포:",
-          allUploadDates
-        );
+        // console.log(
+        //   "📅 실제 조회된 데이터의 업로드 날짜 분포:",
+        //   allUploadDates
+        // );
 
         // 기간 필터와 비교
         if (filtersWithType.uploadTimeFrom && filtersWithType.uploadTimeTo) {
@@ -789,11 +789,11 @@ export async function POST(request: NextRequest) {
           (filters && Object.keys(filters).length > 0) ||
           (filters && (filters.uploadTimeFrom || filters.uploadTimeTo));
 
-        console.log("🔍 필터 확인:", {
-          hadFilters,
-          filtersKeys: filters ? Object.keys(filters) : [],
-          dataRowsCount: dataRowsWithIds.length,
-        });
+        // console.log("🔍 필터 확인:", {
+        //   hadFilters,
+        //   filtersKeys: filters ? Object.keys(filters) : [],
+        //   dataRowsCount: dataRowsWithIds.length,
+        // });
 
         // CJ 외주 매핑코드 목록 (CJ 외주 발주서에서만 다운로드됨)
         const CJ_OUTSOURCE_CODES = [
@@ -808,10 +808,10 @@ export async function POST(request: NextRequest) {
         if (hadFilters) {
           // 필터가 있을 때는 이미 필터링된 데이터 사용 (추가 필터링 불필요)
           filteredRowsWithIds = dataRowsWithIds;
-          console.log(
-            "✅ 필터가 있어서 이미 필터링된 데이터 사용:",
-            filteredRowsWithIds.length
-          );
+          // console.log(
+          //   "✅ 필터가 있어서 이미 필터링된 데이터 사용:",
+          //   filteredRowsWithIds.length
+          // );
         } else {
           // 필터가 없을 때만 "외주" 조건으로 필터링
           // 내외주 필드에 공백이 있을 수 있으므로 trim() 처리
@@ -948,14 +948,51 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // 매핑코드별 가격, 사방넷명, 업체명 정보 조회
+      // 상품 정보 조회: productId가 있으면 ID로, 없으면 매핑코드로 조회
+      const productIds = [
+        ...new Set(dataRows.map((row: any) => row.productId).filter(Boolean)),
+      ];
       const productCodes = [
-        ...new Set(dataRows.map((row: any) => row.매핑코드).filter(Boolean)),
+        ...new Set(
+          dataRows
+            .filter((row: any) => !row.productId && row.매핑코드)
+            .map((row: any) => row.매핑코드)
+        ),
       ];
       const productSalePriceMap: {[code: string]: number | null} = {};
       const productSabangNameMap: {[code: string]: string | null} = {};
       const productVendorNameMap: {[code: string]: string | null} = {};
+      const productSalePriceMapById: {[id: string | number]: number | null} =
+        {};
+      const productSabangNameMapById: {[id: string | number]: string | null} =
+        {};
+      const productVendorNameMapById: {[id: string | number]: string | null} =
+        {};
 
+      // productId로 조회
+      if (productIds.length > 0) {
+        const productsById = await sql`
+          SELECT id, code, sale_price, sabang_name as "sabangName", purchase as "vendorName"
+          FROM products
+          WHERE id = ANY(${productIds})
+        `;
+
+        productsById.forEach((p: any) => {
+          if (p.id) {
+            if (p.sale_price !== null && p.sale_price !== undefined) {
+              productSalePriceMapById[p.id] = p.sale_price;
+            }
+            if (p.sabangName !== undefined) {
+              productSabangNameMapById[p.id] = p.sabangName;
+            }
+            if (p.vendorName !== undefined) {
+              productVendorNameMapById[p.id] = p.vendorName;
+            }
+          }
+        });
+      }
+
+      // 매핑코드로 조회 (productId가 없는 경우)
       if (productCodes.length > 0) {
         const products = await sql`
           SELECT code, sale_price, sabang_name as "sabangName", purchase as "vendorName"
@@ -986,7 +1023,8 @@ export async function POST(request: NextRequest) {
           : [filterVendors]
         : null;
 
-      // 먼저 모든 행에 매핑코드 정보 주입 (사방넷명, 공급가, 매입처명)
+      // 먼저 모든 행에 상품 정보 주입 (사방넷명, 공급가, 매입처명)
+      // productId가 있으면 productId로, 없으면 매핑코드로 정보를 가져옴
       dataRows.forEach((row: any) => {
         // 내주는 제외 (외주만 처리)
         // 내외주 필드에 공백이 있을 수 있으므로 trim() 처리
@@ -995,8 +1033,41 @@ export async function POST(request: NextRequest) {
           return;
         }
 
-        // 공급가와 사방넷명 주입
-        if (row.매핑코드) {
+        // 공급가와 사방넷명 주입: productId가 있으면 ID로, 없으면 매핑코드로 찾기
+        if (row.productId) {
+          // productId로 조회한 정보 사용
+          if (productSalePriceMapById[row.productId] !== undefined) {
+            const salePrice = productSalePriceMapById[row.productId];
+            if (salePrice !== null) {
+              row["공급가"] = salePrice;
+            }
+          }
+          if (productSabangNameMapById[row.productId] !== undefined) {
+            const sabangName = productSabangNameMapById[row.productId];
+            if (
+              sabangName !== null &&
+              sabangName !== undefined &&
+              String(sabangName).trim() !== ""
+            ) {
+              row["사방넷명"] = sabangName;
+              row["sabangName"] = sabangName;
+              row["sabang_name"] = sabangName;
+            } else {
+              delete row["사방넷명"];
+              delete row["sabangName"];
+              delete row["sabang_name"];
+            }
+          } else {
+            delete row["사방넷명"];
+            delete row["sabangName"];
+            delete row["sabang_name"];
+          }
+          if (productVendorNameMapById[row.productId] !== undefined) {
+            row.업체명 =
+              productVendorNameMapById[row.productId] || "매입처미지정";
+          }
+        } else if (row.매핑코드) {
+          // 매핑코드로 조회한 정보 사용
           if (productSalePriceMap[row.매핑코드] !== undefined) {
             const salePrice = productSalePriceMap[row.매핑코드];
             if (salePrice !== null) {
@@ -1029,7 +1100,7 @@ export async function POST(request: NextRequest) {
         }
       });
 
-      // 매핑코드를 통해 매입처로 업체명 업데이트 및 중복 제거
+      // productId 또는 매핑코드를 통해 매입처로 업체명 업데이트 및 중복 제거
       const seenOrders = new Map<string, any>(); // 중복 주문 추적 (내부코드 또는 주문번호 사용)
       const processedDataRows: any[] = [];
 
@@ -1041,9 +1112,14 @@ export async function POST(request: NextRequest) {
           return;
         }
 
-        // 매핑코드를 통해 매입처명 가져오기
+        // productId 또는 매핑코드를 통해 매입처명 가져오기
         let vendor = "매입처미지정";
-        if (row.매핑코드) {
+        if (row.productId && productVendorNameMapById[row.productId]) {
+          const vendorName = productVendorNameMapById[row.productId];
+          if (vendorName && typeof vendorName === "string") {
+            vendor = vendorName;
+          }
+        } else if (row.매핑코드) {
           const vendorName = productVendorNameMap[row.매핑코드];
           if (vendorName && typeof vendorName === "string") {
             vendor = vendorName;
@@ -1081,11 +1157,14 @@ export async function POST(request: NextRequest) {
             seenOrders.set(orderKey, row);
             // processedDataRows에서 기존 행 제거하고 새 행 추가
             const index = processedDataRows.findIndex((r: any) => {
-              const rVendor =
-                r.업체명 ||
-                (r.매핑코드 && productVendorNameMap[r.매핑코드]
-                  ? productVendorNameMap[r.매핑코드]
-                  : "매입처미지정");
+              let rVendor = r.업체명 || "매입처미지정";
+              if (!r.업체명) {
+                if (r.productId && productVendorNameMapById[r.productId]) {
+                  rVendor = productVendorNameMapById[r.productId] as string;
+                } else if (r.매핑코드 && productVendorNameMap[r.매핑코드]) {
+                  rVendor = productVendorNameMap[r.매핑코드] as string;
+                }
+              }
               const rOrderIdentifier = r["내부코드"] || r["주문번호"];
               const rOrderKey = rOrderIdentifier
                 ? `${rVendor}_${rOrderIdentifier}`
@@ -1433,7 +1512,7 @@ export async function POST(request: NextRequest) {
                   header.display_name.includes("배메"))
               ) {
                 const receiverName =
-                  row["수취인명"] || row["받는사람"] || row["수령인명"] || "";
+                  row["주문자명"] || row["보낸사람"] || row["주문자"] || "";
                 if (receiverName) {
                   const prefix = `#${receiverName}`;
                   const trimmedValue = stringValue.trim();
@@ -1599,7 +1678,7 @@ export async function POST(request: NextRequest) {
                   headerStr === "배송 메시지")
               ) {
                 const receiverName =
-                  row["수취인명"] || row["받는사람"] || row["수령인명"] || "";
+                  row["주문자명"] || row["보낸사람"] || row["주문자"] || "";
                 if (receiverName) {
                   const prefix = `#${receiverName}`;
                   const trimmedValue = stringValue.trim();

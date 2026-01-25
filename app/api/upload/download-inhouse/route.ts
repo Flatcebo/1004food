@@ -2,6 +2,7 @@ import sql from "@/lib/db";
 import {NextRequest, NextResponse} from "next/server";
 import {getCompanyIdFromRequest} from "@/lib/company";
 import * as Excel from "exceljs";
+import * as XLSX from "xlsx";
 import {mapDataToTemplate, sortExcelData} from "@/utils/excelDataMapping";
 import {
   buildFilterConditions,
@@ -636,8 +637,56 @@ export async function POST(request: NextRequest) {
       });
     });
 
-    // 엑셀 파일 생성
-    const buffer = await wb.xlsx.writeBuffer();
+    // 내주 발주서인 경우: .xls 형식으로 변환 (97~03 바이너리 형식)
+    let buffer: ArrayBuffer;
+    let fileExtension = ".xlsx";
+    let contentType =
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+    if (isInhouse) {
+      // ExcelJS 워크북의 데이터를 추출하여 xlsx 라이브러리로 .xls 형식으로 변환
+      const workbookData: any[][] = [];
+      
+      // 헤더 행 추가
+      const headerRow: any[] = [];
+      headers.forEach((header: string) => {
+        headerRow.push(header);
+      });
+      workbookData.push(headerRow);
+
+      // 데이터 행 추가
+      excelData.forEach((rowData: any[]) => {
+        workbookData.push(rowData);
+      });
+
+      // xlsx 라이브러리로 워크북 생성
+      const xlsxWorkbook = XLSX.utils.book_new();
+      const xlsxWorksheet = XLSX.utils.aoa_to_sheet(workbookData);
+
+      // 열 너비 설정
+      const colWidths = headers.map((headerName: string) => {
+        const width =
+          typeof columnWidths === "object" && columnWidths[headerName]
+            ? columnWidths[headerName]
+            : 15;
+        return {wch: width};
+      });
+      xlsxWorksheet["!cols"] = colWidths;
+
+      // 워크시트를 워크북에 추가
+      XLSX.utils.book_append_sheet(xlsxWorkbook, xlsxWorksheet, templateData.worksheetName || "Sheet1");
+
+      // .xls 형식으로 변환 (bookType: 'biff8'는 Excel 97-2003 바이너리 형식)
+      buffer = XLSX.write(xlsxWorkbook, {
+        type: "buffer",
+        bookType: "biff8", // Excel 97-2003 바이너리 형식
+      }) as ArrayBuffer;
+      fileExtension = ".xls";
+      contentType = "application/vnd.ms-excel";
+    } else {
+      // 내주 발주서가 아닌 경우: 기존대로 .xlsx 형식
+      buffer = (await wb.xlsx.writeBuffer()) as ArrayBuffer;
+    }
 
     // 파일명 생성
     const fileName = generateExcelFileName(templateData.name || "download");
@@ -649,8 +698,10 @@ export async function POST(request: NextRequest) {
         .replace(/\.xlsx$/, "")
         .replace(/[^\x00-\x7F]/g, "")
         .replace(/\s+/g, "_") || "download";
-    const safeFileName = `${asciiFallbackBase}.xlsx`; // ASCII fallback
-    const encodedFileName = encodeURIComponent(fileName); // UTF-8 인코딩
+    const safeFileName = `${asciiFallbackBase}${fileExtension}`; // 확장자 동적 변경
+    const encodedFileName = encodeURIComponent(
+      fileName.replace(/\.xlsx$/, fileExtension)
+    ); // UTF-8 인코딩
     // filename* 우선, filename ASCII fallback 병행
     const contentDisposition = `attachment; filename="${safeFileName}"; filename*=UTF-8''${encodedFileName}`;
 
@@ -679,10 +730,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    responseHeaders.set(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
+    responseHeaders.set("Content-Type", contentType);
     responseHeaders.set("Content-Disposition", contentDisposition);
 
     return new Response(buffer, {

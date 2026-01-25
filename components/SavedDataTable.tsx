@@ -383,6 +383,18 @@ const SavedDataTable = memo(function SavedDataTable({
       return;
     }
 
+    // 템플릿 종류 미리 확인 (list API 호출 전에 type 필터 결정 필요)
+    const selectedTemplateObjForFilter = templates.find(
+      (t) => t.id === selectedTemplate
+    );
+    const templateNameForFilter = (selectedTemplateObjForFilter?.name || "")
+      .normalize("NFC")
+      .trim();
+    const isCJOutsourceForFilter = templateNameForFilter.includes("CJ외주");
+    const isOutsourceForFilter =
+      templateNameForFilter.includes("외주") && !isCJOutsourceForFilter;
+    const isInhouseForFilter = templateNameForFilter.includes("내주");
+
     // 체크박스 선택 여부에 따라 다운로드 방식 결정
     // - 체크박스가 선택되지 않으면: 필터링된 전체 데이터의 ID를 API에서 가져와서 다운로드
     // - 체크박스가 선택되면: 선택된 항목만 다운로드 (rowIds 전달)
@@ -394,8 +406,17 @@ const SavedDataTable = memo(function SavedDataTable({
       // 체크박스가 선택되지 않은 경우: 필터링된 전체 데이터의 ID를 API에서 가져오기
       try {
         const params = new URLSearchParams();
-        // 적용된 필터만 사용
-        if (appliedType) params.append("type", appliedType);
+        // 외주/내주 발주서인 경우: 해당 type 필터를 자동으로 설정 (전체 다운로드시 올바른 데이터만 가져오기)
+        if (isOutsourceForFilter || isCJOutsourceForFilter) {
+          // 외주 발주서: 외주 데이터만 가져오기
+          params.append("type", "외주");
+        } else if (isInhouseForFilter) {
+          // 내주 발주서: 내주 데이터만 가져오기
+          params.append("type", "내주");
+        } else if (appliedType) {
+          // 일반 발주서: 사용자가 적용한 필터 사용
+          params.append("type", appliedType);
+        }
         if (appliedPostType) params.append("postType", appliedPostType);
         if (appliedCompany && appliedCompany.length > 0) {
           appliedCompany.forEach((c) => params.append("company", c));
