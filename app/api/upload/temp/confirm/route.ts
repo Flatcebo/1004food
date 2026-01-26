@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
           success: false,
           error: "user_id가 필요합니다. 로그인 후 다시 시도해주세요.",
         },
-        {status: 401}
+        {status: 401},
       );
     }
 
@@ -69,11 +69,11 @@ export async function POST(request: NextRequest) {
         if (userResult.length > 0) {
           userGrade = userResult[0].grade;
           console.log(
-            `🔍 [userGrade 확인] userGrade=${userGrade}, userId=${userId}, companyId=${companyId}`
+            `🔍 [userGrade 확인] userGrade=${userGrade}, userId=${userId}, companyId=${companyId}`,
           );
         } else {
           console.warn(
-            `🔍 [userGrade 확인] 사용자를 찾을 수 없음: userId=${userId}, companyId=${companyId}`
+            `🔍 [userGrade 확인] 사용자를 찾을 수 없음: userId=${userId}, companyId=${companyId}`,
           );
         }
       } catch (error) {
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
       }
     } else {
       console.warn(
-        `🔍 [userGrade 확인] userId 또는 companyId가 없음: userId=${userId}, companyId=${companyId}`
+        `🔍 [userGrade 확인] userId 또는 companyId가 없음: userId=${userId}, companyId=${companyId}`,
       );
     }
 
@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
     // fileIds가 전달되었고 user_id가 있는 경우: 해당 파일만 조회 (가장 안전한 방법)
     if (requestFileIds.length > 0 && userId && hasUserIdColumn) {
       console.log(
-        `📋 [confirm] 클라이언트에서 전달된 fileIds로 조회: ${requestFileIds.length}개, userId=${userId}`
+        `📋 [confirm] 클라이언트에서 전달된 fileIds로 조회: ${requestFileIds.length}개, userId=${userId}`,
       );
       confirmedFiles = await sql`
         SELECT 
@@ -220,7 +220,7 @@ export async function POST(request: NextRequest) {
     } else if (requestFileIds.length > 0) {
       // user_id 컬럼이 없지만 fileIds가 있는 경우: 해당 파일만 조회 (하위 호환성)
       console.log(
-        `📋 [confirm] fileIds만으로 조회 (user_id 컬럼 없음): ${requestFileIds.length}개`
+        `📋 [confirm] fileIds만으로 조회 (user_id 컬럼 없음): ${requestFileIds.length}개`,
       );
       confirmedFiles = await sql`
         SELECT 
@@ -250,14 +250,14 @@ export async function POST(request: NextRequest) {
           success: false,
           error: "저장할 파일을 식별할 수 없습니다. 다시 시도해주세요.",
         },
-        {status: 400}
+        {status: 400},
       );
     }
 
     if (confirmedFiles.length === 0) {
       return NextResponse.json(
         {success: false, error: "확인된 파일이 없습니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -279,7 +279,7 @@ export async function POST(request: NextRequest) {
     // 각 행의 mall_id를 찾는 헬퍼 함수
     const findMallIdForRow = async (
       vendorName: string,
-      fileMallId: number | null
+      fileMallId: number | null,
     ): Promise<number | null> => {
       if (!vendorName || vendorName.trim() === "") {
         return fileMallId;
@@ -355,12 +355,17 @@ export async function POST(request: NextRequest) {
 
       // 납품업체 외의 유저: 각 행의 업체명/쇼핑몰명을 사용하여 mall_id 찾기
       if (shouldFindMallIdPerRow) {
+        // 온라인 유저 확인
+        const isOnlineUserForMall =
+          userGrade === "온라인" ||
+          String(userGrade || "").trim() === "온라인";
+
         // 업체명 또는 쇼핑몰명 컬럼 인덱스 찾기
         const vendorIdx = headerRow.findIndex(
           (h: any) =>
             h &&
             typeof h === "string" &&
-            (h === "업체명" || h === "업체" || h.includes("업체명"))
+            (h === "업체명" || h === "업체" || h.includes("업체명")),
         );
 
         const shopNameIdx = headerRow.findIndex(
@@ -370,7 +375,7 @@ export async function POST(request: NextRequest) {
             (h === "쇼핑몰명" ||
               h === "쇼핑몰명(1)" ||
               h === "쇼핑몰" ||
-              h.includes("쇼핑몰명"))
+              h.includes("쇼핑몰명")),
         );
 
         // 데이터 행 순회하면서 각 행의 업체명으로 mall_id 찾기
@@ -378,14 +383,28 @@ export async function POST(request: NextRequest) {
           const dataRow = tableData[i];
           let rowVendorName = "";
 
-          // 1순위: 업체명 컬럼
-          if (vendorIdx !== -1 && dataRow[vendorIdx]) {
-            rowVendorName = String(dataRow[vendorIdx]).trim();
+          // 온라인 유저의 경우: 쇼핑몰명을 우선 사용 (쇼핑몰명이 업체명에 자동 입력되므로)
+          if (isOnlineUserForMall) {
+            // 1순위: 쇼핑몰명 컬럼
+            if (shopNameIdx !== -1 && dataRow[shopNameIdx]) {
+              rowVendorName = String(dataRow[shopNameIdx]).trim();
+            }
+            // 2순위: 업체명 컬럼 (쇼핑몰명이 없는 경우, 자동 복사된 값)
+            if (!rowVendorName && vendorIdx !== -1 && dataRow[vendorIdx]) {
+              rowVendorName = String(dataRow[vendorIdx]).trim();
+            }
+          } else {
+            // 일반 유저: 기존 로직 유지
+            // 1순위: 업체명 컬럼
+            if (vendorIdx !== -1 && dataRow[vendorIdx]) {
+              rowVendorName = String(dataRow[vendorIdx]).trim();
+            }
+            // 2순위: 쇼핑몰명 컬럼 (업체명이 없는 경우)
+            if (!rowVendorName && shopNameIdx !== -1 && dataRow[shopNameIdx]) {
+              rowVendorName = String(dataRow[shopNameIdx]).trim();
+            }
           }
-          // 2순위: 쇼핑몰명 컬럼 (업체명이 없는 경우)
-          if (!rowVendorName && shopNameIdx !== -1 && dataRow[shopNameIdx]) {
-            rowVendorName = String(dataRow[shopNameIdx]).trim();
-          }
+
           // 3순위: 파일 레벨 vendor_name (fallback)
           if (!rowVendorName && fileVendorName) {
             rowVendorName = String(fileVendorName).trim();
@@ -394,7 +413,7 @@ export async function POST(request: NextRequest) {
           // 해당 행의 mall_id 찾기
           const rowMallId = await findMallIdForRow(
             rowVendorName || "",
-            resolvedFileMallId
+            resolvedFileMallId,
           );
           allMallIds.push(rowMallId);
         }
@@ -415,13 +434,13 @@ export async function POST(request: NextRequest) {
       try {
         internalCodes = await generateUniqueCodesForVendors(
           companyId,
-          allMallIds
+          allMallIds,
         );
       } catch (error) {
         console.error("내부코드 생성 실패:", error);
         return NextResponse.json(
           {success: false, error: "내부코드 생성에 실패했습니다."},
-          {status: 500}
+          {status: 500},
         );
       }
     }
@@ -454,7 +473,7 @@ export async function POST(request: NextRequest) {
           message: `다음 파일명이 이미 존재합니다: ${duplicateList}`,
           duplicateFiles: duplicateFileNames,
         },
-        {status: 409}
+        {status: 409},
       );
     }
 
@@ -474,12 +493,12 @@ export async function POST(request: NextRequest) {
 
       // 상품명 인덱스 찾기
       const nameIdx = headerRow.findIndex(
-        (h: any) => h && typeof h === "string" && h.includes("상품명")
+        (h: any) => h && typeof h === "string" && h.includes("상품명"),
       );
 
       // 원본 순서 인덱스 컬럼 찾기 (_originalRowIndex)
       const originalRowIndexIdx = headerRow.findIndex(
-        (h: any) => h && typeof h === "string" && h === "_originalRowIndex"
+        (h: any) => h && typeof h === "string" && h === "_originalRowIndex",
       );
 
       // 배송메시지 인덱스 찾기 (내부코드 추가용)
@@ -491,7 +510,7 @@ export async function POST(request: NextRequest) {
             h === "배송메세지" ||
             h === "배송요청" ||
             h === "요청사항" ||
-            h === "배송요청사항")
+            h === "배송요청사항"),
       );
 
       // user grade가 "온라인"인 경우 "주문번호(사방넷)" 헤더 찾기
@@ -506,7 +525,7 @@ export async function POST(request: NextRequest) {
                 h.includes("주문번호(사방넷)") ||
                 h === "주문번호(사방넷)" ||
                 h.replace(/\s+/g, "") ===
-                  "주문번호(사방넷)".replace(/\s+/g, ""))
+                  "주문번호(사방넷)".replace(/\s+/g, "")),
           )
         : -1;
 
@@ -520,11 +539,11 @@ export async function POST(request: NextRequest) {
 
       if (isOnlineUser && sabangnetOrderNumberIdx !== -1) {
         console.log(
-          `🔍 [sabang_code 디버깅] "주문번호(사방넷)" 헤더 발견: 인덱스 ${sabangnetOrderNumberIdx}`
+          `🔍 [sabang_code 디버깅] "주문번호(사방넷)" 헤더 발견: 인덱스 ${sabangnetOrderNumberIdx}`,
         );
       } else if (isOnlineUser) {
         console.warn(
-          `🔍 [sabang_code 디버깅] "주문번호(사방넷)" 헤더를 찾을 수 없음`
+          `🔍 [sabang_code 디버깅] "주문번호(사방넷)" 헤더를 찾을 수 없음`,
         );
       }
 
@@ -554,7 +573,7 @@ export async function POST(request: NextRequest) {
               headerStr.includes("공급단가") ||
               headerStr.replace(/\s+/g, "") === "공급단가".replace(/\s+/g, "")
             );
-          }
+          },
         );
 
         if (originalSupplyPriceIdx !== -1) {
@@ -562,7 +581,7 @@ export async function POST(request: NextRequest) {
           const originalHeaderName =
             file.original_header[originalSupplyPriceIdx];
           supplyPriceIdx = headerRow.findIndex(
-            (h: any) => String(h).trim() === String(originalHeaderName).trim()
+            (h: any) => String(h).trim() === String(originalHeaderName).trim(),
           );
 
           // 여전히 못 찾으면 원본 인덱스 사용 (데이터 행에서 직접 접근)
@@ -578,7 +597,7 @@ export async function POST(request: NextRequest) {
       // 배송메시지 자동 생성 적용
       const updatedTableData = generateAutoDeliveryMessage(
         tableData,
-        originalMessagesRef
+        originalMessagesRef,
       );
       const updatedDataRows = updatedTableData.slice(1);
 
@@ -596,7 +615,7 @@ export async function POST(request: NextRequest) {
           // "주문번호(사방넷)" 값을 찾아서 "주문번호"에 저장하고 sabang_code에도 저장
           if (sabangnetOrderNumberIdx !== -1 && row[sabangnetOrderNumberIdx]) {
             const sabangnetOrderNumber = String(
-              row[sabangnetOrderNumberIdx]
+              row[sabangnetOrderNumberIdx],
             ).trim();
             if (sabangnetOrderNumber) {
               rowObj["주문번호"] = sabangnetOrderNumber;
@@ -614,7 +633,7 @@ export async function POST(request: NextRequest) {
                     sabangnetOrderNumber,
                     주문번호: rowObj["주문번호"],
                     sabang_code: rowObj["sabang_code"],
-                  }
+                  },
                 );
               }
             }
@@ -625,7 +644,7 @@ export async function POST(request: NextRequest) {
                 rowIndex: rowIndex + 1,
                 sabangnetOrderNumberIdx,
                 headerRow: headerRow,
-              }
+              },
             );
           }
           // "주문번호(쇼핑몰)"는 제거
@@ -897,7 +916,7 @@ export async function POST(request: NextRequest) {
         if (verifyUpload.length > 0) {
           if (verifyUpload[0].user_id !== fileUserId) {
             console.error(
-              `❌ 경고: uploads 테이블에 저장된 user_id(${verifyUpload[0].user_id})가 예상값(${fileUserId})과 다릅니다!`
+              `❌ 경고: uploads 테이블에 저장된 user_id(${verifyUpload[0].user_id})가 예상값(${fileUserId})과 다릅니다!`,
             );
           }
         }
@@ -1010,7 +1029,7 @@ export async function POST(request: NextRequest) {
         (h: any) =>
           h &&
           typeof h === "string" &&
-          (h === "업체명" || h === "업체" || h.includes("업체명"))
+          (h === "업체명" || h === "업체" || h.includes("업체명")),
       );
       const vendorHeaderKey =
         vendorHeaderIdx !== -1 ? headerRow[vendorHeaderIdx] : null;
@@ -1024,7 +1043,7 @@ export async function POST(request: NextRequest) {
               (h === "쇼핑몰명" ||
                 h === "쇼핑몰명(1)" ||
                 h === "쇼핑몰" ||
-                h.includes("쇼핑몰명"))
+                h.includes("쇼핑몰명")),
           )
         : -1;
       const shopNameHeaderKey =
@@ -1034,7 +1053,7 @@ export async function POST(request: NextRequest) {
       const uniqueVendorNames = new Set<string>();
       rowObjects.forEach((rowObj: any, index: number) => {
         let rowVendorName = "";
-        
+
         if (vendorHeaderKey && rowObj[vendorHeaderKey]) {
           rowVendorName = String(rowObj[vendorHeaderKey]).trim();
         } else if (
@@ -1042,10 +1061,12 @@ export async function POST(request: NextRequest) {
           updatedDataRows[index] &&
           updatedDataRows[index][vendorHeaderIdx]
         ) {
-          rowVendorName = String(updatedDataRows[index][vendorHeaderIdx]).trim();
+          rowVendorName = String(
+            updatedDataRows[index][vendorHeaderIdx],
+          ).trim();
         } else {
           rowVendorName = String(
-            rowObj["업체명"] || rowObj["업체"] || ""
+            rowObj["업체명"] || rowObj["업체"] || "",
           ).trim();
         }
 
@@ -1058,14 +1079,14 @@ export async function POST(request: NextRequest) {
             updatedDataRows[index][shopNameHeaderIdx]
           ) {
             rowVendorName = String(
-              updatedDataRows[index][shopNameHeaderIdx]
+              updatedDataRows[index][shopNameHeaderIdx],
             ).trim();
           } else {
             rowVendorName = String(
               rowObj["쇼핑몰명"] ||
                 rowObj["쇼핑몰명(1)"] ||
                 rowObj["쇼핑몰"] ||
-                ""
+                "",
             ).trim();
           }
         }
@@ -1135,261 +1156,254 @@ export async function POST(request: NextRequest) {
       }> = [];
 
       rowObjects.forEach((rowObj: any, index: number) => {
-          // 쇼핑몰명 추출 (여러 가능한 키에서 찾기)
-          const shopName =
-            rowObj["쇼핑몰명"] ||
-            rowObj["쇼핑몰명(1)"] ||
-            rowObj["쇼핑몰"] ||
-            "";
+        // 쇼핑몰명 추출 (여러 가능한 키에서 찾기)
+        const shopName =
+          rowObj["쇼핑몰명"] || rowObj["쇼핑몰명(1)"] || rowObj["쇼핑몰"] || "";
 
-          // 각 행의 업체명 추출 (헤더 키 사용 또는 여러 가능한 키 시도)
-          // 온라인 유저의 경우 쇼핑몰명도 고려
-          let rowVendorName = "";
+        // 각 행의 업체명 추출 (헤더 키 사용 또는 여러 가능한 키 시도)
+        // 온라인 유저의 경우 쇼핑몰명도 고려
+        let rowVendorName = "";
 
-          // 1순위: 헤더에서 찾은 업체명 키 사용
-          if (vendorHeaderKey && rowObj[vendorHeaderKey]) {
-            rowVendorName = String(rowObj[vendorHeaderKey]).trim();
-          }
-          // 2순위: 원본 데이터 행에서 업체명 직접 추출 (vendorHeaderIdx 사용)
-          else if (
-            vendorHeaderIdx !== -1 &&
+        // 1순위: 헤더에서 찾은 업체명 키 사용
+        if (vendorHeaderKey && rowObj[vendorHeaderKey]) {
+          rowVendorName = String(rowObj[vendorHeaderKey]).trim();
+        }
+        // 2순위: 원본 데이터 행에서 업체명 직접 추출 (vendorHeaderIdx 사용)
+        else if (
+          vendorHeaderIdx !== -1 &&
+          updatedDataRows[index] &&
+          updatedDataRows[index][vendorHeaderIdx]
+        ) {
+          rowVendorName = String(
+            updatedDataRows[index][vendorHeaderIdx],
+          ).trim();
+        }
+        // 3순위: 일반적인 업체명 키 이름 시도
+        else {
+          rowVendorName = String(
+            rowObj["업체명"] || rowObj["업체"] || "",
+          ).trim();
+        }
+
+        // 온라인 유저의 경우: 업체명이 없으면 쇼핑몰명 사용
+        if (isOnlineUser && !rowVendorName) {
+          if (shopNameHeaderKey && rowObj[shopNameHeaderKey]) {
+            rowVendorName = String(rowObj[shopNameHeaderKey]).trim();
+          } else if (
+            shopNameHeaderIdx !== -1 &&
             updatedDataRows[index] &&
-            updatedDataRows[index][vendorHeaderIdx]
+            updatedDataRows[index][shopNameHeaderIdx]
           ) {
             rowVendorName = String(
-              updatedDataRows[index][vendorHeaderIdx]
+              updatedDataRows[index][shopNameHeaderIdx],
             ).trim();
-          }
-          // 3순위: 일반적인 업체명 키 이름 시도
-          else {
+          } else {
             rowVendorName = String(
-              rowObj["업체명"] || rowObj["업체"] || ""
+              rowObj["쇼핑몰명"] ||
+                rowObj["쇼핑몰명(1)"] ||
+                rowObj["쇼핑몰"] ||
+                "",
             ).trim();
           }
+        }
 
-          // 온라인 유저의 경우: 업체명이 없으면 쇼핑몰명 사용
-          if (isOnlineUser && !rowVendorName) {
-            if (shopNameHeaderKey && rowObj[shopNameHeaderKey]) {
-              rowVendorName = String(rowObj[shopNameHeaderKey]).trim();
-            } else if (
-              shopNameHeaderIdx !== -1 &&
-              updatedDataRows[index] &&
-              updatedDataRows[index][shopNameHeaderIdx]
-            ) {
-              rowVendorName = String(
-                updatedDataRows[index][shopNameHeaderIdx]
-              ).trim();
-            } else {
-              rowVendorName = String(
-                rowObj["쇼핑몰명"] ||
-                  rowObj["쇼핑몰명(1)"] ||
-                  rowObj["쇼핑몰"] ||
-                  ""
-              ).trim();
-            }
+        // 여전히 없으면 파일 레벨 vendor_name 사용 (fallback)
+        if (!rowVendorName && vendorName) {
+          rowVendorName = String(vendorName).trim();
+        }
+
+        const trimmedRowVendorName = rowVendorName;
+
+        // 각 행의 업체명으로 mall 찾기 (캐시에서만 조회, 이미 배치로 조회했음)
+        let rowMallId: number | null = null;
+        let rowVendorNameToSave: string | null = null;
+
+        if (trimmedRowVendorName) {
+          rowVendorNameToSave = trimmedRowVendorName;
+          // 캐시에서 조회 (이미 배치로 조회했으므로 캐시에 있음)
+          rowMallId = mallCache[trimmedRowVendorName] || null;
+
+          if (!rowMallId && index < 5) {
+            // 처음 5개 행만 경고 로그 출력
+            console.warn(
+              `⚠️ 행 ${
+                index + 1
+              }: 업체명 "${trimmedRowVendorName}"에 해당하는 mall을 찾을 수 없습니다.`,
+            );
           }
+        } else {
+          // 행에 업체명이 없으면 파일 레벨 업체명과 mallId 사용
+          rowVendorNameToSave = vendorName || null;
+          rowMallId = mallId;
+        }
 
-          // 여전히 없으면 파일 레벨 vendor_name 사용 (fallback)
-          if (!rowVendorName && vendorName) {
-            rowVendorName = String(vendorName).trim();
-          }
+        // 업로드 당시 원본 순서 사용 (rowObj에 이미 저장된 순서번호 사용)
+        // 절대 index + 1을 사용하지 않고, 업로드 시 부여된 원본 순서를 사용
+        const originalRowOrder =
+          rowObj["rowOrder"] || rowObj["순서번호"] || index + 1;
 
-          const trimmedRowVendorName = rowVendorName;
+        // user grade가 "온라인"인 경우 rowObj["주문번호"] 값을 sabang_code에 저장
+        // uploads 테이블의 data에 저장된 "주문번호" 값을 upload_rows의 sabang_code 컬럼에 저장
+        let sabangCode: string | null = null;
 
-          // 각 행의 업체명으로 mall 찾기 (캐시에서만 조회, 이미 배치로 조회했음)
-          let rowMallId: number | null = null;
-          let rowVendorNameToSave: string | null = null;
-
-          if (trimmedRowVendorName) {
-            rowVendorNameToSave = trimmedRowVendorName;
-            // 캐시에서 조회 (이미 배치로 조회했으므로 캐시에 있음)
-            rowMallId = mallCache[trimmedRowVendorName] || null;
-            
-            if (!rowMallId && index < 5) {
-              // 처음 5개 행만 경고 로그 출력
-              console.warn(
-                `⚠️ 행 ${
-                  index + 1
-                }: 업체명 "${trimmedRowVendorName}"에 해당하는 mall을 찾을 수 없습니다.`
-              );
-            }
-          } else {
-            // 행에 업체명이 없으면 파일 레벨 업체명과 mallId 사용
-            rowVendorNameToSave = vendorName || null;
-            rowMallId = mallId;
-          }
-
-          // 업로드 당시 원본 순서 사용 (rowObj에 이미 저장된 순서번호 사용)
-          // 절대 index + 1을 사용하지 않고, 업로드 시 부여된 원본 순서를 사용
-          const originalRowOrder =
-            rowObj["rowOrder"] || rowObj["순서번호"] || index + 1;
-
-          // user grade가 "온라인"인 경우 rowObj["주문번호"] 값을 sabang_code에 저장
-          // uploads 테이블의 data에 저장된 "주문번호" 값을 upload_rows의 sabang_code 컬럼에 저장
-          let sabangCode: string | null = null;
-
-          // userGrade 확인 로그 (모든 행에 대해 첫 번째 행만 출력)
-          // isOnlineUser는 이미 파일 처리 루프 상단(398줄)에서 선언됨
-          if (index === 0) {
-            console.log(`🔍 [sabang_code 디버깅] userGrade 확인:`, {
-              userGrade,
-              userGradeType: typeof userGrade,
-              userGradeTrimmed: String(userGrade || "").trim(),
-              isOnline: isOnlineUser,
-              userId,
-              companyId,
-            });
-          }
-
-          if (isOnlineUser) {
-            // 우선순위 1: rowObjects 생성 시점에서 이미 저장된 rowObj["sabang_code"] 확인
-            if (
-              rowObj["sabang_code"] !== undefined &&
-              rowObj["sabang_code"] !== null
-            ) {
-              const sabangCodeValue = String(rowObj["sabang_code"]).trim();
-              if (sabangCodeValue && sabangCodeValue !== "") {
-                sabangCode = sabangCodeValue;
-              }
-            }
-
-            // 우선순위 2: rowObj["주문번호"]에서 값을 가져오기 (빈 문자열도 확인)
-            if (
-              (!sabangCode || sabangCode === "") &&
-              rowObj["주문번호"] !== undefined &&
-              rowObj["주문번호"] !== null
-            ) {
-              const orderNumber = String(rowObj["주문번호"]).trim();
-              if (orderNumber && orderNumber !== "") {
-                sabangCode = orderNumber;
-                // row_data에도 sabang_code 추가 (uploads 테이블의 data에도 저장됨)
-                rowObj["sabang_code"] = sabangCode;
-              }
-            }
-
-            // 우선순위 3: rowObj["주문번호(사방넷)"]에서 값을 가져오기
-            if (
-              (!sabangCode || sabangCode === "") &&
-              rowObj["주문번호(사방넷)"] !== undefined &&
-              rowObj["주문번호(사방넷)"] !== null
-            ) {
-              const sabangnetOrderNumber = String(
-                rowObj["주문번호(사방넷)"]
-              ).trim();
-              if (sabangnetOrderNumber && sabangnetOrderNumber !== "") {
-                sabangCode = sabangnetOrderNumber;
-                // row_data에도 sabang_code 추가
-                rowObj["sabang_code"] = sabangCode;
-              }
-            }
-
-            // 디버깅: 첫 3개 행만 로그 출력
-            if (index < 3) {
-              if (sabangCode && sabangCode !== "") {
-                console.log(`🔍 [sabang_code 디버깅] sabang_code 저장 성공:`, {
-                  index: index + 1,
-                  sabangCode,
-                  rowObj주문번호: rowObj["주문번호"],
-                  rowObj주문번호타입: typeof rowObj["주문번호"],
-                  rowObj주문번호사방넷: rowObj["주문번호(사방넷)"],
-                  rowObjSabangCode: rowObj["sabang_code"],
-                });
-              } else {
-                console.warn(
-                  `🔍 [sabang_code 디버깅] sabang_code가 비어있음:`,
-                  {
-                    index: index + 1,
-                    rowObj주문번호: rowObj["주문번호"],
-                    rowObj주문번호타입: typeof rowObj["주문번호"],
-                    rowObj주문번호값: String(rowObj["주문번호"] || "").trim(),
-                    rowObj주문번호사방넷: rowObj["주문번호(사방넷)"],
-                    rowObjSabangCode: rowObj["sabang_code"],
-                    rowObjKeys: Object.keys(rowObj).filter(
-                      (k) => k.includes("주문") || k.includes("sabang")
-                    ),
-                    sabangnetOrderNumberIdx,
-                    전체rowObj샘플: Object.keys(rowObj).slice(0, 10),
-                  }
-                );
-              }
-            }
-          } else {
-            // userGrade가 "온라인"이 아닌 경우 로그 출력 (첫 번째 행만)
-            if (index === 0) {
-              console.warn(
-                `🔍 [sabang_code 디버깅] userGrade가 "온라인"이 아님:`,
-                {
-                  userGrade,
-                  userGradeType: typeof userGrade,
-                  userGradeTrimmed: String(userGrade || "").trim(),
-                  isOnline: isOnlineUser,
-                  userId,
-                  companyId,
-                }
-              );
-            }
-          }
-
-          // "공급단가" 헤더가 있으면 supply_price 컬럼에 저장
-          // uploadStore.ts에서 파일 읽을 때 이미 정규화된 헤더와 데이터에 추가되었으므로
-          // rowObj["공급단가"]에서 직접 값을 가져올 수 있음
-          let supplyPrice: number | null = null;
-          const supplyPriceValue = rowObj["공급단가"];
-
-          // 값 파싱 및 저장
-          if (
-            supplyPriceValue !== null &&
-            supplyPriceValue !== undefined &&
-            supplyPriceValue !== ""
-          ) {
-            // 문자열인 경우 쉼표 제거 후 파싱
-            const cleanedValue =
-              typeof supplyPriceValue === "string"
-                ? String(supplyPriceValue).replace(/,/g, "").trim()
-                : String(supplyPriceValue);
-
-            const parsedValue = parseFloat(cleanedValue);
-
-            if (!isNaN(parsedValue) && parsedValue > 0) {
-              supplyPrice = Math.round(parsedValue);
-            }
-          }
-
-          // INSERT 직전 sabang_code 값 확인 (디버깅용)
-          if (index < 3) {
-            console.log(`🔍 [sabang_code 디버깅] INSERT 직전 확인:`, {
-              index: index + 1,
-              userGrade,
-              sabangCode,
-              sabangCodeType: typeof sabangCode,
-              rowObj주문번호: rowObj["주문번호"],
-              rowObj주문번호타입: typeof rowObj["주문번호"],
-              rowObjSabangCode: rowObj["sabang_code"],
-              isOnline: isOnlineUser,
-            });
-          }
-
-          rowsToInsert.push({
-            rowObj,
-            shopName,
-            rowVendorName: rowVendorNameToSave || "",
-            rowMallId,
-            originalRowOrder,
-            sabangCode,
-            supplyPrice,
-            index,
+        // userGrade 확인 로그 (모든 행에 대해 첫 번째 행만 출력)
+        // isOnlineUser는 이미 파일 처리 루프 상단(398줄)에서 선언됨
+        if (index === 0) {
+          console.log(`🔍 [sabang_code 디버깅] userGrade 확인:`, {
+            userGrade,
+            userGradeType: typeof userGrade,
+            userGradeTrimmed: String(userGrade || "").trim(),
+            isOnline: isOnlineUser,
+            userId,
+            companyId,
           });
         }
-      );
+
+        if (isOnlineUser) {
+          // 우선순위 1: rowObjects 생성 시점에서 이미 저장된 rowObj["sabang_code"] 확인
+          if (
+            rowObj["sabang_code"] !== undefined &&
+            rowObj["sabang_code"] !== null
+          ) {
+            const sabangCodeValue = String(rowObj["sabang_code"]).trim();
+            if (sabangCodeValue && sabangCodeValue !== "") {
+              sabangCode = sabangCodeValue;
+            }
+          }
+
+          // 우선순위 2: rowObj["주문번호"]에서 값을 가져오기 (빈 문자열도 확인)
+          if (
+            (!sabangCode || sabangCode === "") &&
+            rowObj["주문번호"] !== undefined &&
+            rowObj["주문번호"] !== null
+          ) {
+            const orderNumber = String(rowObj["주문번호"]).trim();
+            if (orderNumber && orderNumber !== "") {
+              sabangCode = orderNumber;
+              // row_data에도 sabang_code 추가 (uploads 테이블의 data에도 저장됨)
+              rowObj["sabang_code"] = sabangCode;
+            }
+          }
+
+          // 우선순위 3: rowObj["주문번호(사방넷)"]에서 값을 가져오기
+          if (
+            (!sabangCode || sabangCode === "") &&
+            rowObj["주문번호(사방넷)"] !== undefined &&
+            rowObj["주문번호(사방넷)"] !== null
+          ) {
+            const sabangnetOrderNumber = String(
+              rowObj["주문번호(사방넷)"],
+            ).trim();
+            if (sabangnetOrderNumber && sabangnetOrderNumber !== "") {
+              sabangCode = sabangnetOrderNumber;
+              // row_data에도 sabang_code 추가
+              rowObj["sabang_code"] = sabangCode;
+            }
+          }
+
+          // 디버깅: 첫 3개 행만 로그 출력
+          if (index < 3) {
+            if (sabangCode && sabangCode !== "") {
+              console.log(`🔍 [sabang_code 디버깅] sabang_code 저장 성공:`, {
+                index: index + 1,
+                sabangCode,
+                rowObj주문번호: rowObj["주문번호"],
+                rowObj주문번호타입: typeof rowObj["주문번호"],
+                rowObj주문번호사방넷: rowObj["주문번호(사방넷)"],
+                rowObjSabangCode: rowObj["sabang_code"],
+              });
+            } else {
+              console.warn(`🔍 [sabang_code 디버깅] sabang_code가 비어있음:`, {
+                index: index + 1,
+                rowObj주문번호: rowObj["주문번호"],
+                rowObj주문번호타입: typeof rowObj["주문번호"],
+                rowObj주문번호값: String(rowObj["주문번호"] || "").trim(),
+                rowObj주문번호사방넷: rowObj["주문번호(사방넷)"],
+                rowObjSabangCode: rowObj["sabang_code"],
+                rowObjKeys: Object.keys(rowObj).filter(
+                  (k) => k.includes("주문") || k.includes("sabang"),
+                ),
+                sabangnetOrderNumberIdx,
+                전체rowObj샘플: Object.keys(rowObj).slice(0, 10),
+              });
+            }
+          }
+        } else {
+          // userGrade가 "온라인"이 아닌 경우 로그 출력 (첫 번째 행만)
+          if (index === 0) {
+            console.warn(
+              `🔍 [sabang_code 디버깅] userGrade가 "온라인"이 아님:`,
+              {
+                userGrade,
+                userGradeType: typeof userGrade,
+                userGradeTrimmed: String(userGrade || "").trim(),
+                isOnline: isOnlineUser,
+                userId,
+                companyId,
+              },
+            );
+          }
+        }
+
+        // "공급단가" 헤더가 있으면 supply_price 컬럼에 저장
+        // uploadStore.ts에서 파일 읽을 때 이미 정규화된 헤더와 데이터에 추가되었으므로
+        // rowObj["공급단가"]에서 직접 값을 가져올 수 있음
+        let supplyPrice: number | null = null;
+        const supplyPriceValue = rowObj["공급단가"];
+
+        // 값 파싱 및 저장
+        if (
+          supplyPriceValue !== null &&
+          supplyPriceValue !== undefined &&
+          supplyPriceValue !== ""
+        ) {
+          // 문자열인 경우 쉼표 제거 후 파싱
+          const cleanedValue =
+            typeof supplyPriceValue === "string"
+              ? String(supplyPriceValue).replace(/,/g, "").trim()
+              : String(supplyPriceValue);
+
+          const parsedValue = parseFloat(cleanedValue);
+
+          if (!isNaN(parsedValue) && parsedValue > 0) {
+            supplyPrice = Math.round(parsedValue);
+          }
+        }
+
+        // INSERT 직전 sabang_code 값 확인 (디버깅용)
+        if (index < 3) {
+          console.log(`🔍 [sabang_code 디버깅] INSERT 직전 확인:`, {
+            index: index + 1,
+            userGrade,
+            sabangCode,
+            sabangCodeType: typeof sabangCode,
+            rowObj주문번호: rowObj["주문번호"],
+            rowObj주문번호타입: typeof rowObj["주문번호"],
+            rowObjSabangCode: rowObj["sabang_code"],
+            isOnline: isOnlineUser,
+          });
+        }
+
+        rowsToInsert.push({
+          rowObj,
+          shopName,
+          rowVendorName: rowVendorNameToSave || "",
+          rowMallId,
+          originalRowOrder,
+          sabangCode,
+          supplyPrice,
+          index,
+        });
+      });
 
       // 배치 INSERT (동시 실행 수 제한하여 EMFILE 에러 방지)
       const BATCH_SIZE = 50; // 배치 크기
       const PARALLEL_SIZE = 10; // 동시 실행 수 제한
       const rowResults: any[] = [];
-      
+
       for (let i = 0; i < rowsToInsert.length; i += BATCH_SIZE) {
         const batch = rowsToInsert.slice(i, i + BATCH_SIZE);
-        
+
         // 배치 내에서도 동시 실행 수를 제한하여 처리
         const insertPromises = batch.map((row) => {
           return sql`
@@ -1410,7 +1424,7 @@ export async function POST(request: NextRequest) {
             RETURNING id, mall_id, vendor_name, row_order, user_id, sabang_code, supply_price
           `;
         });
-        
+
         // 동시 실행 수를 제한하여 처리
         for (let j = 0; j < insertPromises.length; j += PARALLEL_SIZE) {
           const parallelBatch = insertPromises.slice(j, j + PARALLEL_SIZE);
@@ -1443,7 +1457,7 @@ export async function POST(request: NextRequest) {
               id: r.id,
               sabang_code: r.sabang_code,
               주문번호: r.주문번호,
-            }))
+            })),
           );
         } catch (error) {
           console.error("sabang_code 검증 쿼리 실패:", error);
@@ -1487,7 +1501,7 @@ export async function POST(request: NextRequest) {
     console.error("임시 데이터 확정 및 저장 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
     );
   }
 }
