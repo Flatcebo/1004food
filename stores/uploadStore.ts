@@ -452,7 +452,6 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       };
 
       let userId: string | null = null;
-      let companyId: string | null = null;
 
       if (typeof window !== "undefined") {
         try {
@@ -461,16 +460,11 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             const parsed = JSON.parse(stored);
             const user = parsed.state?.user;
             if (user?.companyId) {
-              companyId = user.companyId.toString();
-              if (companyId) {
-                headers["company-id"] = companyId;
-              }
+              headers["company-id"] = user.companyId.toString();
             }
             if (user?.id) {
               userId = user.id;
-              if (userId) {
-                headers["user-id"] = userId;
-              }
+              headers["user-id"] = user.id;
             }
           }
         } catch (e) {
@@ -481,7 +475,6 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       // user_id가 없으면 로그인 필요
       if (!userId) {
         alert("로그인이 필요합니다. 다시 로그인해주세요.");
-        // 로그인 페이지로 리다이렉트
         if (typeof window !== "undefined") {
           window.location.href = "/login";
         }
@@ -540,7 +533,6 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       };
 
       let userId: string | null = null;
-      let companyId: string | null = null;
 
       if (typeof window !== "undefined") {
         try {
@@ -549,16 +541,11 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             const parsed = JSON.parse(stored);
             const user = parsed.state?.user;
             if (user?.companyId) {
-              companyId = user.companyId.toString();
-              if (companyId) {
-                headers["company-id"] = companyId;
-              }
+              headers["company-id"] = user.companyId.toString();
             }
             if (user?.id) {
               userId = user.id;
-              if (userId) {
-                headers["user-id"] = userId;
-              }
+              headers["user-id"] = user.id;
             }
           }
         } catch (e) {
@@ -569,7 +556,6 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       // user_id가 없으면 로그인 필요
       if (!userId) {
         console.warn("⚠️ user_id가 없어서 파일 목록을 불러올 수 없습니다.");
-        // 로그인 페이지로 리다이렉트 (alert 없이 조용히)
         if (typeof window !== "undefined") {
           window.location.href = "/login";
         }

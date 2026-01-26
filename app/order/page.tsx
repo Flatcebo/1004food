@@ -892,8 +892,9 @@ function OrderPageContent() {
   const handleFileDelete = async (fileId: string) => {
     // 서버에서 먼저 삭제
     try {
-      // company-id 헤더 포함
+      // company-id, user-id 헤더 포함
       const headers: HeadersInit = {};
+      let userId: string | null = null;
 
       if (typeof window !== "undefined") {
         try {
@@ -904,10 +905,23 @@ function OrderPageContent() {
             if (user?.companyId) {
               headers["company-id"] = user.companyId.toString();
             }
+            if (user?.id) {
+              userId = user.id;
+              headers["user-id"] = user.id;
+            }
           }
         } catch (e) {
           console.error("인증 정보 로드 실패:", e);
         }
+      }
+
+      // user_id가 없으면 삭제 불가
+      if (!userId) {
+        alert("로그인이 필요합니다. 다시 로그인해주세요.");
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
+        return;
       }
 
       const response = await fetch(`/api/upload/temp/delete?fileId=${fileId}`, {
@@ -926,23 +940,13 @@ function OrderPageContent() {
         await loadFilesFromServer();
       } else {
         console.error("서버에서 파일 삭제 실패:", result.error);
-        // 서버 삭제 실패해도 로컬에서는 삭제
-        removeUploadedFile(fileId);
-        unconfirmFile(fileId);
-        sessionStorage.removeItem(`uploadedFile_${fileId}`);
-
-        // 서버에서 파일 목록 다시 불러오기 (동기화)
-        await loadFilesFromServer();
+        alert(`파일 삭제 실패: ${result.error || "알 수 없는 오류"}`);
+        // 서버 삭제 실패 시 로컬 상태를 건드리지 않음 (일관성 유지)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("서버에서 파일 삭제 실패:", error);
-      // 에러 발생해도 로컬에서는 삭제
-      removeUploadedFile(fileId);
-      unconfirmFile(fileId);
-      sessionStorage.removeItem(`uploadedFile_${fileId}`);
-
-      // 서버에서 파일 목록 다시 불러오기 (동기화)
-      await loadFilesFromServer();
+      alert(`파일 삭제 실패: ${error.message || "네트워크 오류"}`);
+      // 에러 발생 시 로컬 상태를 건드리지 않음 (일관성 유지)
     } finally {
       // 파일 삭제 후 input value 초기화 (같은 파일을 다시 선택할 수 있도록)
       if (fileInputRef.current) {
