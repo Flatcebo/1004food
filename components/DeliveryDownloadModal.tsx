@@ -45,9 +45,9 @@ export default function DeliveryDownloadModal({
     string | null
   >(null);
   const [downloadingAllSabangnet, setDownloadingAllSabangnet] = useState(false);
-  const [dateFilter, setDateFilter] = useState<"3days_ago" | "yesterday" | "today" | "all">(
-    "all",
-  );
+  const [dateFilter, setDateFilter] = useState<
+    "3days_ago" | "yesterday" | "today" | "all"
+  >("all");
   const [vendorSearchQuery, setVendorSearchQuery] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [downloadHistory, setDownloadHistory] = useState<DownloadHistory[]>([]);
@@ -421,7 +421,7 @@ export default function DeliveryDownloadModal({
       className="fixed inset-0 backdrop-blur-xs flex justify-center items-center z-50 bg-[#00000053]"
     >
       <div
-        className="bg-white rounded-lg w-[95vw] max-w-6xl max-h-[90vh] relative z-60 flex overflow-hidden"
+        className="bg-white rounded-lg w-[95vw] max-w-6xl h-[90vh] relative z-60 flex overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 히스토리 사이드바 */}
@@ -600,7 +600,11 @@ export default function DeliveryDownloadModal({
                         value={dateFilter}
                         onChange={(e) =>
                           setDateFilter(
-                            e.target.value as "3days_ago" | "yesterday" | "today" | "all",
+                            e.target.value as
+                              | "3days_ago"
+                              | "yesterday"
+                              | "today"
+                              | "all",
                           )
                         }
                         className="px-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
@@ -652,17 +656,19 @@ export default function DeliveryDownloadModal({
             )}
 
             {/* 업체 리스트 */}
-            {!loading && vendors.length === 0 && (
+            {!loading && filteredVendors.length === 0 && (
               <div className="text-center py-8">
                 <p className="text-gray-600">
-                  3일전~오늘 업로드한 업체가 없습니다.
+                  {vendorSearchQuery.trim()
+                    ? "검색 결과가 없습니다."
+                    : "3일전~오늘 업로드한 업체가 없습니다."}
                 </p>
               </div>
             )}
 
-            {!loading && vendors.length > 0 && (
+            {!loading && filteredVendors.length > 0 && (
               <div className="space-y-6">
-                {vendors.map((vendor) => (
+                {filteredVendors.map((vendor) => (
                   <div
                     key={vendor.vendorName}
                     className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow"

@@ -84,7 +84,7 @@ export default function MultiSelectDropdown({
         const exactMatch = normalizedOptions.find(
           (opt) =>
             opt.label.toLowerCase() === inputValue.toLowerCase() &&
-            !selectedValues.some((v) => String(v) === String(opt.value))
+            !selectedValues.some((v) => String(v) === String(opt.value)),
         );
         if (exactMatch) {
           handleToggleOption(exactMatch.value);
@@ -101,7 +101,7 @@ export default function MultiSelectDropdown({
       case "ArrowDown":
         e.preventDefault();
         setSelectedIndex((prev) =>
-          prev < filteredOptions.length - 1 ? prev + 1 : prev
+          prev < filteredOptions.length - 1 ? prev + 1 : prev,
         );
         break;
       case "ArrowUp":
@@ -118,7 +118,7 @@ export default function MultiSelectDropdown({
           const exactMatch = normalizedOptions.find(
             (opt) =>
               opt.label.toLowerCase() === inputValue.toLowerCase() &&
-              !selectedValues.some((v) => String(v) === String(opt.value))
+              !selectedValues.some((v) => String(v) === String(opt.value)),
           );
           if (exactMatch) {
             handleToggleOption(exactMatch.value);
@@ -149,7 +149,7 @@ export default function MultiSelectDropdown({
       setFilteredOptions(normalizedOptions);
     } else {
       const filtered = normalizedOptions.filter((opt) =>
-        opt.label.toLowerCase().includes(inputValue.toLowerCase())
+        opt.label.toLowerCase().includes(inputValue.toLowerCase()),
       );
       setFilteredOptions(filtered);
     }
@@ -222,14 +222,14 @@ export default function MultiSelectDropdown({
     selectedValues.length === 0
       ? placeholder
       : selectedValues.length === 1
-      ? selectedLabels[0] || String(selectedValues[0])
-      : `${selectedValues.length}개 선택됨`;
+        ? selectedLabels[0] || String(selectedValues[0])
+        : `${selectedValues.length}개 선택됨`;
 
   return (
     <div
       className={`text-sm font-medium multi-select-dropdown-${label.replace(
         /\s+/g,
-        "-"
+        "-",
       )} relative ${
         labelOnTop || showSelectedTags ? "flex flex-col" : "flex items-center"
       } ${className}`}
@@ -365,7 +365,7 @@ export default function MultiSelectDropdown({
         <div className="mt-2 flex flex-wrap gap-2">
           {selectedValues.map((value) => {
             const option = normalizedOptions.find(
-              (opt) => String(opt.value) === String(value)
+              (opt) => String(opt.value) === String(value),
             );
             const label = option ? option.label : String(value);
             return (
@@ -378,7 +378,7 @@ export default function MultiSelectDropdown({
                   type="button"
                   onClick={() => {
                     onChange(
-                      selectedValues.filter((v) => String(v) !== String(value))
+                      selectedValues.filter((v) => String(v) !== String(value)),
                     );
                   }}
                   className="ml-1 text-blue-600 hover:text-blue-800"
