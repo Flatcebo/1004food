@@ -265,11 +265,13 @@ export async function POST(request: NextRequest) {
     const koreaTime = new Date(Date.now() + 9 * 60 * 60 * 1000);
 
     // 각 행의 mall_id를 찾아서 내부코드 생성에 사용
-    // 온라인 유저의 경우: 각 행의 업체명/쇼핑몰명 컬럼 값을 사용하여 mall_id 찾기
-    // 일반 유저의 경우: 파일 레벨의 vendor_name을 사용하여 mall_id 찾기
+    // 모든 유저에 대해 각 행의 업체명/쇼핑몰명 컬럼 값을 사용하여 mall_id 찾기
+    // (납품업체 제외 - 납품업체는 파일 레벨 vendor_name만 사용)
     const allMallIds: (number | null)[] = [];
-    const isOnlineUserForInternalCode =
-      userGrade === "온라인" || String(userGrade || "").trim() === "온라인";
+    const isVendorUser =
+      userGrade === "납품업체" || String(userGrade || "").trim() === "납품업체";
+    // 납품업체를 제외한 모든 유저는 각 행별로 mall_id를 찾음
+    const shouldFindMallIdPerRow = !isVendorUser;
 
     // mall 조회를 위한 캐시 (성능 최적화)
     const mallCache: {[key: string]: number | null} = {};
@@ -351,8 +353,8 @@ export async function POST(request: NextRequest) {
         resolvedFileMallId = await findMallIdForRow(fileVendorName, null);
       }
 
-      // 온라인 유저인 경우: 각 행의 업체명/쇼핑몰명을 사용
-      if (isOnlineUserForInternalCode) {
+      // 납품업체 외의 유저: 각 행의 업체명/쇼핑몰명을 사용하여 mall_id 찾기
+      if (shouldFindMallIdPerRow) {
         // 업체명 또는 쇼핑몰명 컬럼 인덱스 찾기
         const vendorIdx = headerRow.findIndex(
           (h: any) =>
@@ -397,7 +399,7 @@ export async function POST(request: NextRequest) {
           allMallIds.push(rowMallId);
         }
       } else {
-        // 일반 유저: 파일 레벨 vendor_name 사용
+        // 납품업체 유저: 파일 레벨 vendor_name 사용 (모든 행에 동일한 mall_id 적용)
         const rowCount = tableData.length - 1; // 헤더 제외한 데이터 행 개수
 
         // 각 행에 대해 동일한 mall_id 사용
@@ -1028,9 +1030,111 @@ export async function POST(request: NextRequest) {
       const shopNameHeaderKey =
         shopNameHeaderIdx !== -1 ? headerRow[shopNameHeaderIdx] : null;
 
+      // 먼저 모든 행의 업체명을 수집하여 한 번에 mall 조회 (성능 최적화)
+      const uniqueVendorNames = new Set<string>();
+      rowObjects.forEach((rowObj: any, index: number) => {
+        let rowVendorName = "";
+        
+        if (vendorHeaderKey && rowObj[vendorHeaderKey]) {
+          rowVendorName = String(rowObj[vendorHeaderKey]).trim();
+        } else if (
+          vendorHeaderIdx !== -1 &&
+          updatedDataRows[index] &&
+          updatedDataRows[index][vendorHeaderIdx]
+        ) {
+          rowVendorName = String(updatedDataRows[index][vendorHeaderIdx]).trim();
+        } else {
+          rowVendorName = String(
+            rowObj["업체명"] || rowObj["업체"] || ""
+          ).trim();
+        }
+
+        if (isOnlineUser && !rowVendorName) {
+          if (shopNameHeaderKey && rowObj[shopNameHeaderKey]) {
+            rowVendorName = String(rowObj[shopNameHeaderKey]).trim();
+          } else if (
+            shopNameHeaderIdx !== -1 &&
+            updatedDataRows[index] &&
+            updatedDataRows[index][shopNameHeaderIdx]
+          ) {
+            rowVendorName = String(
+              updatedDataRows[index][shopNameHeaderIdx]
+            ).trim();
+          } else {
+            rowVendorName = String(
+              rowObj["쇼핑몰명"] ||
+                rowObj["쇼핑몰명(1)"] ||
+                rowObj["쇼핑몰"] ||
+                ""
+            ).trim();
+          }
+        }
+
+        if (!rowVendorName && vendorName) {
+          rowVendorName = String(vendorName).trim();
+        }
+
+        if (rowVendorName) {
+          uniqueVendorNames.add(rowVendorName);
+        }
+      });
+
+      // 파일 레벨 mall_id가 있으면 캐시에 추가
+      if (mallId) {
+        mallCache[vendorName || ""] = mallId;
+      }
+
+      // 모든 업체명을 한 번에 조회 (배치 쿼리)
+      if (uniqueVendorNames.size > 0) {
+        try {
+          const vendorNamesArray = Array.from(uniqueVendorNames);
+          const mallResults = await sql`
+            SELECT id, name FROM mall 
+            WHERE name = ANY(${vendorNamesArray})
+            OR LOWER(TRIM(name)) = ANY(${vendorNamesArray.map((n) => n.toLowerCase().trim())})
+          `;
+
+          // 결과를 캐시에 저장
+          mallResults.forEach((mall: any) => {
+            const mallName = String(mall.name || "").trim();
+            if (mallName) {
+              // 정확한 매칭
+              mallCache[mallName] = mall.id;
+              // 대소문자 구분 없는 매칭
+              const lowerMallName = mallName.toLowerCase();
+              vendorNamesArray.forEach((vn) => {
+                if (vn.toLowerCase() === lowerMallName) {
+                  mallCache[vn] = mall.id;
+                }
+              });
+            }
+          });
+
+          // 찾지 못한 업체명은 null로 캐시에 저장
+          vendorNamesArray.forEach((vn) => {
+            if (!mallCache.hasOwnProperty(vn)) {
+              mallCache[vn] = null;
+            }
+          });
+        } catch (error) {
+          console.error("배치 mall 조회 실패:", error);
+        }
+      }
+
       // 각 행을 upload_rows에 저장 (객체 형태로, row_order 포함)
-      const insertPromises = rowObjects.map(
-        async (rowObj: any, index: number) => {
+      // 배치 INSERT를 위해 데이터를 먼저 준비
+      const rowsToInsert: Array<{
+        rowObj: any;
+        shopName: string;
+        rowVendorName: string;
+        rowMallId: number | null;
+        originalRowOrder: number;
+        sabangCode: string | null;
+        supplyPrice: number | null;
+        index: number;
+      }> = [];
+
+      rowObjects.forEach((rowObj: any, index: number) => {
           // 쇼핑몰명 추출 (여러 가능한 키에서 찾기)
           const shopName =
             rowObj["쇼핑몰명"] ||
@@ -1092,55 +1196,22 @@ export async function POST(request: NextRequest) {
 
           const trimmedRowVendorName = rowVendorName;
 
-          // 각 행의 업체명으로 mall 찾기
+          // 각 행의 업체명으로 mall 찾기 (캐시에서만 조회, 이미 배치로 조회했음)
           let rowMallId: number | null = null;
           let rowVendorNameToSave: string | null = null;
 
           if (trimmedRowVendorName) {
             rowVendorNameToSave = trimmedRowVendorName;
-
-            // 캐시에서 먼저 확인
-            if (mallCache.hasOwnProperty(trimmedRowVendorName)) {
-              rowMallId = mallCache[trimmedRowVendorName];
-            } else {
-              // 캐시에 없으면 DB에서 조회
-              try {
-                // 정확한 매칭 시도
-                let mallResult = await sql`
-                SELECT id, name FROM mall 
-                WHERE name = ${trimmedRowVendorName}
-                LIMIT 1
-              `;
-
-                if (mallResult.length > 0) {
-                  rowMallId = mallResult[0].id;
-                } else {
-                  // 대소문자 구분 없이 매칭 시도
-                  mallResult = await sql`
-                  SELECT id, name FROM mall 
-                  WHERE LOWER(TRIM(name)) = LOWER(${trimmedRowVendorName})
-                  LIMIT 1
-                `;
-
-                  if (mallResult.length > 0) {
-                    rowMallId = mallResult[0].id;
-                  }
-                }
-
-                // 캐시에 저장
-                mallCache[trimmedRowVendorName] = rowMallId;
-
-                if (!rowMallId && index < 5) {
-                  // 처음 5개 행만 경고 로그 출력
-                  console.warn(
-                    `⚠️ 행 ${
-                      index + 1
-                    }: 업체명 "${trimmedRowVendorName}"에 해당하는 mall을 찾을 수 없습니다.`
-                  );
-                }
-              } catch (error) {
-                console.error(`행 ${index + 1}: mall 조회 실패:`, error);
-              }
+            // 캐시에서 조회 (이미 배치로 조회했으므로 캐시에 있음)
+            rowMallId = mallCache[trimmedRowVendorName] || null;
+            
+            if (!rowMallId && index < 5) {
+              // 처음 5개 행만 경고 로그 출력
+              console.warn(
+                `⚠️ 행 ${
+                  index + 1
+                }: 업체명 "${trimmedRowVendorName}"에 해당하는 mall을 찾을 수 없습니다.`
+              );
             }
           } else {
             // 행에 업체명이 없으면 파일 레벨 업체명과 mallId 사용
@@ -1298,27 +1369,55 @@ export async function POST(request: NextRequest) {
             });
           }
 
-          return sql`
-          INSERT INTO upload_rows (upload_id, row_data, shop_name, company_id, mall_id, vendor_name, row_order, user_id, sabang_code, supply_price, created_at)
-          VALUES (
-            ${uploadId},
-            ${JSON.stringify(rowObj)},
-            ${shopName},
-            ${companyId},
-            ${rowMallId},
-            ${rowVendorNameToSave},
-            ${originalRowOrder},
-            ${fileUserId},
-            ${sabangCode},
-            ${supplyPrice},
-            ${koreaTime.toISOString()}::timestamp
-          )
-          RETURNING id, mall_id, vendor_name, row_order, user_id, sabang_code, supply_price
-        `;
+          rowsToInsert.push({
+            rowObj,
+            shopName,
+            rowVendorName: rowVendorNameToSave || "",
+            rowMallId,
+            originalRowOrder,
+            sabangCode,
+            supplyPrice,
+            index,
+          });
         }
       );
 
-      const rowResults = await Promise.all(insertPromises);
+      // 배치 INSERT (동시 실행 수 제한하여 EMFILE 에러 방지)
+      const BATCH_SIZE = 50; // 배치 크기
+      const PARALLEL_SIZE = 10; // 동시 실행 수 제한
+      const rowResults: any[] = [];
+      
+      for (let i = 0; i < rowsToInsert.length; i += BATCH_SIZE) {
+        const batch = rowsToInsert.slice(i, i + BATCH_SIZE);
+        
+        // 배치 내에서도 동시 실행 수를 제한하여 처리
+        const insertPromises = batch.map((row) => {
+          return sql`
+            INSERT INTO upload_rows (upload_id, row_data, shop_name, company_id, mall_id, vendor_name, row_order, user_id, sabang_code, supply_price, created_at)
+            VALUES (
+              ${uploadId},
+              ${JSON.stringify(row.rowObj)},
+              ${row.shopName},
+              ${companyId},
+              ${row.rowMallId},
+              ${row.rowVendorName},
+              ${row.originalRowOrder},
+              ${fileUserId},
+              ${row.sabangCode},
+              ${row.supplyPrice},
+              ${koreaTime.toISOString()}::timestamp
+            )
+            RETURNING id, mall_id, vendor_name, row_order, user_id, sabang_code, supply_price
+          `;
+        });
+        
+        // 동시 실행 수를 제한하여 처리
+        for (let j = 0; j < insertPromises.length; j += PARALLEL_SIZE) {
+          const parallelBatch = insertPromises.slice(j, j + PARALLEL_SIZE);
+          const batchResults = await Promise.all(parallelBatch);
+          rowResults.push(...batchResults);
+        }
+      }
 
       // 저장 후 검증: sabang_code 저장 확인
       // isOnlineUser는 이미 파일 레벨에서 선언됨 (325줄)
