@@ -13,8 +13,14 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // user_id 추출
+    // user_id 추출 (필수)
     const userId = await getUserIdFromRequest(request);
+    if (!userId) {
+      return NextResponse.json(
+        {success: false, error: "user_id가 필요합니다. 로그인 후 다시 시도해주세요."},
+        {status: 401}
+      );
+    }
 
     const {searchParams} = new URL(request.url);
     const fileId = searchParams.get("fileId");
@@ -26,34 +32,12 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // user_id 컬럼 존재 여부 확인
-    let hasUserIdColumn = false;
-    try {
-      const columnCheck = await sql`
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'temp_files' AND column_name = 'user_id'
-      `;
-      hasUserIdColumn = columnCheck.length > 0;
-    } catch (error) {
-      // 테이블이 없거나 다른 에러인 경우 무시
-      console.log("컬럼 확인 실패:", error);
-    }
-
-    // 특정 파일 삭제 (company_id, user_id 필터링)
-    let result;
-    if (userId && hasUserIdColumn) {
-      result = await sql`
-        DELETE FROM temp_files
-        WHERE file_id = ${fileId} AND company_id = ${companyId} AND user_id = ${userId}
-        RETURNING id
-      `;
-    } else {
-      result = await sql`
-        DELETE FROM temp_files
-        WHERE file_id = ${fileId} AND company_id = ${companyId}
-        RETURNING id
-      `;
-    }
+    // 특정 파일 삭제 (company_id, user_id 필터링 - user_id 필수)
+    const result = await sql`
+      DELETE FROM temp_files
+      WHERE file_id = ${fileId} AND company_id = ${companyId} AND user_id = ${userId}
+      RETURNING id
+    `;
 
     if (result.length === 0) {
       return NextResponse.json(

@@ -34,8 +34,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // user_id 추출
+    // user_id 추출 (필수)
     const userId = await getUserIdFromRequest(request);
+    if (!userId) {
+      return NextResponse.json(
+        {success: false, error: "user_id가 필요합니다. 로그인 후 다시 시도해주세요."},
+        {status: 401}
+      );
+    }
 
     const body = await request.json();
     const {files, sessionId} = body;

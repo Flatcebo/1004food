@@ -14,8 +14,14 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    // user_id 추출
+    // user_id 추출 (필수)
     const userId = await getUserIdFromRequest(request);
+    if (!userId) {
+      return NextResponse.json(
+        {success: false, error: "user_id가 필요합니다. 로그인 후 다시 시도해주세요."},
+        {status: 401}
+      );
+    }
 
     const body = await request.json();
     const {
@@ -89,19 +95,6 @@ export async function PUT(request: NextRequest) {
       console.log("컬럼 확인:", error.message);
     }
 
-    // user_id 컬럼 존재 여부 확인
-    let hasUserIdColumn = false;
-    try {
-      const columnCheck = await sql`
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'temp_files' AND column_name = 'user_id'
-      `;
-      hasUserIdColumn = columnCheck.length > 0;
-    } catch (error) {
-      // 테이블이 없거나 다른 에러인 경우 무시
-      console.log("컬럼 확인 실패:", error);
-    }
-
     // 파일 검증 수행
     const validationResult = checkFileValidation({
       id: fileId,
@@ -113,9 +106,39 @@ export async function PUT(request: NextRequest) {
     });
 
     // postgres.js 템플릿 리터럴 사용 (더 안전함, company_id, user_id 필터링)
+    // user_id는 필수이므로 항상 user_id 필터링 사용
     let result;
     try {
-      if (userId && hasUserIdColumn) {
+      result = await sql`
+        UPDATE temp_files
+        SET 
+          table_data = ${JSON.stringify(tableData)},
+          row_count = ${rowCount},
+          header_index = ${JSON.stringify(headerIndex)},
+          product_code_map = ${JSON.stringify(productCodeMap)},
+          product_id_map = ${JSON.stringify(productIdMap || {})},
+          validation_status = ${JSON.stringify(validationResult)},
+          vendor_name = ${vendorName || null},
+          mall_id = ${mallId || null},
+          user_id = COALESCE(user_id, ${userId}),
+          is_confirmed = ${isConfirmed ?? false},
+              updated_at = ${now.toISOString()}
+        WHERE file_id = ${fileId} AND company_id = ${companyId} AND (user_id = ${userId} OR user_id IS NULL)
+        RETURNING *
+      `;
+    } catch (error: any) {
+      // validation_status 컬럼이 없으면 컬럼 추가 후 다시 시도
+      if (
+        error.message &&
+        error.message.includes('column "validation_status" does not exist')
+      ) {
+        try {
+          await sql`ALTER TABLE temp_files ADD COLUMN validation_status JSONB`;
+        } catch (addError: any) {
+          // 이미 존재할 수 있음
+          console.log("validation_status 컬럼 추가:", addError.message);
+        }
+        // 다시 업데이트 시도 (user_id 필수)
         result = await sql`
           UPDATE temp_files
           SET 
@@ -129,77 +152,10 @@ export async function PUT(request: NextRequest) {
             mall_id = ${mallId || null},
             user_id = COALESCE(user_id, ${userId}),
             is_confirmed = ${isConfirmed ?? false},
-                updated_at = ${now.toISOString()}
+              updated_at = ${now.toISOString()}
           WHERE file_id = ${fileId} AND company_id = ${companyId} AND (user_id = ${userId} OR user_id IS NULL)
           RETURNING *
         `;
-      } else {
-        result = await sql`
-          UPDATE temp_files
-          SET 
-            table_data = ${JSON.stringify(tableData)},
-            row_count = ${rowCount},
-            header_index = ${JSON.stringify(headerIndex)},
-            product_code_map = ${JSON.stringify(productCodeMap)},
-            product_id_map = ${JSON.stringify(productIdMap || {})},
-            validation_status = ${JSON.stringify(validationResult)},
-            vendor_name = ${vendorName || null},
-            mall_id = ${mallId || null},
-            is_confirmed = ${isConfirmed ?? false},
-                updated_at = ${now.toISOString()}
-          WHERE file_id = ${fileId} AND company_id = ${companyId}
-          RETURNING *
-        `;
-      }
-    } catch (error: any) {
-      // validation_status 컬럼이 없으면 컬럼 추가 후 다시 시도
-      if (
-        error.message &&
-        error.message.includes('column "validation_status" does not exist')
-      ) {
-        try {
-          await sql`ALTER TABLE temp_files ADD COLUMN validation_status JSONB`;
-        } catch (addError: any) {
-          // 이미 존재할 수 있음
-          console.log("validation_status 컬럼 추가:", addError.message);
-        }
-        // 다시 업데이트 시도
-        if (userId && hasUserIdColumn) {
-          result = await sql`
-            UPDATE temp_files
-            SET 
-              table_data = ${JSON.stringify(tableData)},
-              row_count = ${rowCount},
-              header_index = ${JSON.stringify(headerIndex)},
-              product_code_map = ${JSON.stringify(productCodeMap)},
-              product_id_map = ${JSON.stringify(productIdMap || {})},
-              validation_status = ${JSON.stringify(validationResult)},
-              vendor_name = ${vendorName || null},
-              mall_id = ${mallId || null},
-              user_id = COALESCE(user_id, ${userId}),
-              is_confirmed = ${isConfirmed ?? false},
-                updated_at = ${now.toISOString()}
-            WHERE file_id = ${fileId} AND company_id = ${companyId} AND (user_id = ${userId} OR user_id IS NULL)
-            RETURNING *
-          `;
-        } else {
-          result = await sql`
-            UPDATE temp_files
-            SET 
-              table_data = ${JSON.stringify(tableData)},
-              row_count = ${rowCount},
-              header_index = ${JSON.stringify(headerIndex)},
-              product_code_map = ${JSON.stringify(productCodeMap)},
-              product_id_map = ${JSON.stringify(productIdMap || {})},
-              validation_status = ${JSON.stringify(validationResult)},
-              vendor_name = ${vendorName || null},
-              mall_id = ${mallId || null},
-              is_confirmed = ${isConfirmed ?? false},
-                updated_at = ${now.toISOString()}
-            WHERE file_id = ${fileId} AND company_id = ${companyId}
-            RETURNING *
-          `;
-        }
       } else {
         throw error;
       }

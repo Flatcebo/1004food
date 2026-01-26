@@ -451,6 +451,9 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
         "Content-Type": "application/json",
       };
 
+      let userId: string | null = null;
+      let companyId: string | null = null;
+
       if (typeof window !== "undefined") {
         try {
           const stored = localStorage.getItem("auth-storage");
@@ -458,15 +461,31 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             const parsed = JSON.parse(stored);
             const user = parsed.state?.user;
             if (user?.companyId) {
-              headers["company-id"] = user.companyId.toString();
+              companyId = user.companyId.toString();
+              if (companyId) {
+                headers["company-id"] = companyId;
+              }
             }
             if (user?.id) {
-              headers["user-id"] = user.id;
+              userId = user.id;
+              if (userId) {
+                headers["user-id"] = userId;
+              }
             }
           }
         } catch (e) {
           console.error("인증 정보 로드 실패:", e);
         }
+      }
+
+      // user_id가 없으면 로그인 필요
+      if (!userId) {
+        alert("로그인이 필요합니다. 다시 로그인해주세요.");
+        // 로그인 페이지로 리다이렉트
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
+        return false;
       }
 
       const response = await fetch("/api/upload/temp/save", {
@@ -520,6 +539,9 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
         "Content-Type": "application/json",
       };
 
+      let userId: string | null = null;
+      let companyId: string | null = null;
+
       if (typeof window !== "undefined") {
         try {
           const stored = localStorage.getItem("auth-storage");
@@ -527,15 +549,31 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             const parsed = JSON.parse(stored);
             const user = parsed.state?.user;
             if (user?.companyId) {
-              headers["company-id"] = user.companyId.toString();
+              companyId = user.companyId.toString();
+              if (companyId) {
+                headers["company-id"] = companyId;
+              }
             }
             if (user?.id) {
-              headers["user-id"] = user.id;
+              userId = user.id;
+              if (userId) {
+                headers["user-id"] = userId;
+              }
             }
           }
         } catch (e) {
           console.error("인증 정보 로드 실패:", e);
         }
+      }
+
+      // user_id가 없으면 로그인 필요
+      if (!userId) {
+        console.warn("⚠️ user_id가 없어서 파일 목록을 불러올 수 없습니다.");
+        // 로그인 페이지로 리다이렉트 (alert 없이 조용히)
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
+        return;
       }
 
       const response = await fetch(
@@ -1618,6 +1656,28 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
 
   handleFile: async (file) => {
     try {
+      // user_id 체크 - 없으면 로그인 필요
+      let userId: string | null = null;
+      if (typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem("auth-storage");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            userId = parsed.state?.user?.id || null;
+          }
+        } catch (e) {
+          console.error("인증 정보 로드 실패:", e);
+        }
+      }
+
+      if (!userId) {
+        alert("로그인이 필요합니다. 다시 로그인해주세요.");
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
+        return;
+      }
+
       // 로딩 시작
       useLoadingStore
         .getState()
@@ -1673,6 +1733,28 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     const {addUploadedFile, checkForDuplicateFileName} = get();
 
     try {
+      // user_id 체크 - 없으면 로그인 필요
+      let userId: string | null = null;
+      if (typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem("auth-storage");
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            userId = parsed.state?.user?.id || null;
+          }
+        } catch (e) {
+          console.error("인증 정보 로드 실패:", e);
+        }
+      }
+
+      if (!userId) {
+        alert("로그인이 필요합니다. 다시 로그인해주세요.");
+        if (typeof window !== "undefined") {
+          window.location.href = "/login";
+        }
+        return;
+      }
+
       // 로딩 시작
       useLoadingStore
         .getState()

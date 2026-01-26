@@ -26,6 +26,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // user_id 추출 (필수)
+    const userId = await getUserIdFromRequest(request);
+    if (!userId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "user_id가 필요합니다. 로그인 후 다시 시도해주세요.",
+        },
+        {status: 401}
+      );
+    }
+
     // user_id 컬럼 존재 여부 확인
     let hasUserIdColumn = false;
     try {
@@ -36,20 +48,6 @@ export async function POST(request: NextRequest) {
       hasUserIdColumn = columnCheck.length > 0;
     } catch (error) {
       // 테이블이 없거나 다른 에러인 경우 무시
-    }
-
-    // user_id 추출 (헤더에서 먼저 시도)
-    let userId = await getUserIdFromRequest(request);
-
-    // user_id가 없으면 에러 반환 (다른 사용자의 파일을 저장하지 않도록)
-    if (!userId && hasUserIdColumn) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "user_id가 필요합니다. 로그인 후 다시 시도해주세요.",
-        },
-        {status: 400}
-      );
     }
 
     // temp_files에서 user_id를 가져와서 검증 (헤더의 user_id와 일치하는지 확인용)

@@ -1,6 +1,6 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
-import {getCompanyIdFromRequest} from "@/lib/company";
+import {getCompanyIdFromRequest, getUserIdFromRequest} from "@/lib/company";
 
 export async function POST(request: NextRequest) {
   try {
@@ -9,6 +9,15 @@ export async function POST(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
+        {status: 400}
+      );
+    }
+
+    // user_id 추출
+    const userId = await getUserIdFromRequest(request);
+    if (!userId) {
+      return NextResponse.json(
+        {success: false, error: "user_id가 필요합니다. 로그인 후 다시 시도해주세요."},
         {status: 400}
       );
     }
@@ -66,12 +75,31 @@ export async function POST(request: NextRequest) {
       console.error("mall_id 컬럼 확인/추가 실패:", error);
     }
 
-    // 한국 시간(KST) 생성 - NOW()에 9시간 추가 (company_id 포함)
+    // uploads 테이블에 user_id 컬럼이 있는지 확인하고 없으면 추가
+    try {
+      const userIdColumnExists = await sql`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'uploads' 
+        AND column_name = 'user_id'
+      `;
+
+      if (userIdColumnExists.length === 0) {
+        await sql`
+          ALTER TABLE uploads 
+          ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+        `;
+      }
+    } catch (error) {
+      console.error("uploads user_id 컬럼 확인/추가 실패:", error);
+    }
+
+    // 한국 시간(KST) 생성 - NOW()에 9시간 추가 (company_id, user_id 포함)
     const uploadResult = await sql`
-      INSERT INTO uploads (file_name, row_count, data, company_id, vendor_name, created_at)
+      INSERT INTO uploads (file_name, row_count, data, company_id, vendor_name, user_id, created_at)
       VALUES (${fileName}, ${rowCount}, ${JSON.stringify(
       data
-    )}, ${companyId}, ${vendorName || null}, (NOW() + INTERVAL '9 hours'))
+    )}, ${companyId}, ${vendorName || null}, ${userId}, (NOW() + INTERVAL '9 hours'))
       RETURNING id, created_at
     `;
 
@@ -121,14 +149,33 @@ export async function POST(request: NextRequest) {
       console.error("upload_rows vendor_name 컬럼 확인/추가 실패:", error);
     }
 
-    // 각 행을 개별적으로 저장 (한국 시간, company_id 포함)
+    // upload_rows 테이블에 user_id 컬럼이 있는지 확인하고 없으면 추가
+    try {
+      const userIdColumnExists = await sql`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'upload_rows' 
+        AND column_name = 'user_id'
+      `;
+
+      if (userIdColumnExists.length === 0) {
+        await sql`
+          ALTER TABLE upload_rows 
+          ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+        `;
+      }
+    } catch (error) {
+      console.error("upload_rows user_id 컬럼 확인/추가 실패:", error);
+    }
+
+    // 각 행을 개별적으로 저장 (한국 시간, company_id, user_id 포함)
     const insertPromises = data.map(
       (row: any) =>
         sql`
-        INSERT INTO upload_rows (upload_id, company_id, row_data, mall_id, vendor_name, created_at)
+        INSERT INTO upload_rows (upload_id, company_id, row_data, mall_id, vendor_name, user_id, created_at)
         VALUES (${uploadId}, ${companyId}, ${JSON.stringify(row)}, ${mallId}, ${
           vendorName || null
-        }, (NOW() + INTERVAL '9 hours'))
+        }, ${userId}, (NOW() + INTERVAL '9 hours'))
         RETURNING id
       `
     );

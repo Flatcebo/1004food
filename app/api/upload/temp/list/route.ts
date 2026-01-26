@@ -13,22 +13,26 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // user_id 추출
+    // user_id 추출 (필수)
     const userId = await getUserIdFromRequest(request);
+    if (!userId) {
+      return NextResponse.json(
+        {success: false, error: "user_id가 필요합니다. 로그인 후 다시 시도해주세요."},
+        {status: 401}
+      );
+    }
 
     // 관리자 권한 확인
     let isAdmin = false;
-    if (userId) {
-      try {
-        const userResult = await sql`
-          SELECT grade FROM users WHERE id = ${userId} AND company_id = ${companyId}
-        `;
-        if (userResult.length > 0 && userResult[0].grade === "관리자") {
-          isAdmin = true;
-        }
-      } catch (error) {
-        console.error("사용자 권한 확인 실패:", error);
+    try {
+      const userResult = await sql`
+        SELECT grade FROM users WHERE id = ${userId} AND company_id = ${companyId}
+      `;
+      if (userResult.length > 0 && userResult[0].grade === "관리자") {
+        isAdmin = true;
       }
+    } catch (error) {
+      console.error("사용자 권한 확인 실패:", error);
     }
 
     const {searchParams} = new URL(request.url);
@@ -113,27 +117,11 @@ export async function GET(request: NextRequest) {
             ORDER BY created_at DESC
           `) as any[];
         } else {
-          // user_id가 없는 경우: company_id만 필터링
-          files = (await sql`
-            SELECT
-              file_id as id,
-              file_name as "fileName",
-              'all-sessions' as "sessionId",
-              row_count as "rowCount",
-              table_data as "tableData",
-              header_index as "headerIndex",
-              product_code_map as "productCodeMap",
-              product_id_map as "productIdMap",
-              validation_status as "validationStatus",
-              is_confirmed as "isConfirmed",
-              vendor_name as "vendorName",
-              original_header as "originalHeader",
-              created_at as "createdAt",
-              updated_at
-            FROM temp_files
-            WHERE company_id = ${companyId}
-            ORDER BY created_at DESC
-          `) as any[];
+          // user_id는 위에서 필수 체크됨, 이 분기는 도달하지 않음
+          return NextResponse.json(
+            {success: false, error: "user_id가 필요합니다."},
+            {status: 401}
+          );
         }
       } else if (sessionId) {
         // 특정 세션의 파일 조회
@@ -186,28 +174,11 @@ export async function GET(request: NextRequest) {
             ORDER BY created_at DESC
           `) as any[];
         } else {
-          // user_id가 없는 경우: company_id와 session_id만 필터링
-          files = (await sql`
-            SELECT
-              file_id as id,
-              file_name as "fileName",
-              COALESCE(session_id, 'default-session') as "sessionId",
-              row_count as "rowCount",
-              table_data as "tableData",
-              header_index as "headerIndex",
-              product_code_map as "productCodeMap",
-              product_id_map as "productIdMap",
-              validation_status as "validationStatus",
-              is_confirmed as "isConfirmed",
-              vendor_name as "vendorName",
-              original_header as "originalHeader",
-              created_at as "createdAt",
-              updated_at
-            FROM temp_files
-            WHERE company_id = ${companyId}
-            AND COALESCE(session_id, 'default-session') = ${sessionId}
-            ORDER BY created_at DESC
-          `) as any[];
+          // user_id는 위에서 필수 체크됨, 이 분기는 도달하지 않음
+          return NextResponse.json(
+            {success: false, error: "user_id가 필요합니다."},
+            {status: 401}
+          );
         }
       }
     } catch (error: any) {
