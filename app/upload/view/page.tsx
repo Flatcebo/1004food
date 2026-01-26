@@ -1167,10 +1167,11 @@ function FileViewContent() {
         //   confirmedVendorName: confirmedVendorName,
         // });
 
-        // company-id 헤더 포함
+        // company-id, user-id 헤더 포함
         const headers: HeadersInit = {
           "Content-Type": "application/json",
         };
+        let userId: string | null = null;
 
         if (typeof window !== "undefined") {
           try {
@@ -1181,10 +1182,23 @@ function FileViewContent() {
               if (user?.companyId) {
                 headers["company-id"] = user.companyId.toString();
               }
+              if (user?.id) {
+                userId = user.id;
+                headers["user-id"] = user.id;
+              }
             }
           } catch (e) {
             console.error("인증 정보 로드 실패:", e);
           }
+        }
+
+        // user_id가 없으면 로그인 필요
+        if (!userId) {
+          alert("로그인이 필요합니다. 다시 로그인해주세요.");
+          if (typeof window !== "undefined") {
+            window.location.href = "/login";
+          }
+          return;
         }
 
         const response = await fetch("/api/upload/temp/update", {
@@ -1645,8 +1659,29 @@ function FileViewContent() {
         const sessionId = sessionStorage.getItem("uploadSessionId");
         if (sessionId) {
           try {
+            // company-id, user-id 헤더 포함
+            const listHeaders: HeadersInit = {};
+            if (typeof window !== "undefined") {
+              try {
+                const stored = localStorage.getItem("auth-storage");
+                if (stored) {
+                  const parsed = JSON.parse(stored);
+                  const user = parsed.state?.user;
+                  if (user?.companyId) {
+                    listHeaders["company-id"] = user.companyId.toString();
+                  }
+                  if (user?.id) {
+                    listHeaders["user-id"] = user.id;
+                  }
+                }
+              } catch (e) {
+                console.error("인증 정보 로드 실패:", e);
+              }
+            }
+
             const response = await fetch(
-              `/api/upload/temp/list?sessionId=${sessionId}`
+              `/api/upload/temp/list?sessionId=${sessionId}`,
+              {headers: listHeaders}
             );
             const result = await response.json();
             if (result.success && result.data) {
