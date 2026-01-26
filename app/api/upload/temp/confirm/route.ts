@@ -292,13 +292,7 @@ export async function POST(request: NextRequest) {
         return mallCache[trimmedVendorName];
       }
 
-      // 파일 레벨 mall_id가 있으면 우선 사용
-      if (fileMallId) {
-        mallCache[trimmedVendorName] = fileMallId;
-        return fileMallId;
-      }
-
-      // DB에서 조회
+      // DB에서 조회 (각 행의 업체명/쇼핑몰명으로 mall.id를 찾기)
       try {
         // 정확한 매칭 시도
         let mallResult = await sql`
@@ -324,6 +318,12 @@ export async function POST(request: NextRequest) {
           const foundMallId = mallResult[0].id;
           mallCache[trimmedVendorName] = foundMallId;
           return foundMallId;
+        }
+
+        // DB에서 찾지 못한 경우 파일 레벨 mall_id를 fallback으로 사용
+        if (fileMallId) {
+          mallCache[trimmedVendorName] = fileMallId;
+          return fileMallId;
         }
 
         // 찾지 못한 경우 null 저장
