@@ -109,8 +109,11 @@ export async function POST(request: NextRequest) {
             FROM products
             WHERE company_id = ${companyId}
               AND (
-                code = ur.row_data->>'매핑코드'
-                OR id::text = ur.row_data->>'productId'
+                -- productId가 유효하면 productId로 매칭 (우선)
+                (COALESCE(ur.row_data->>'productId', '') != '' AND id::text = ur.row_data->>'productId')
+                OR
+                -- productId가 없거나 빈 문자열이면 매핑코드로 매칭 (대안)
+                (COALESCE(ur.row_data->>'productId', '') = '' AND code = ur.row_data->>'매핑코드')
               )
             LIMIT 1
           ) p ON true
@@ -123,6 +126,21 @@ export async function POST(request: NextRequest) {
         `;
 
         totalOrdersCount += orders.length;
+
+        // 디버깅: 상품 매칭 결과 확인 (처음 3개만)
+        if (orders.length > 0) {
+          console.log(`📊 [refresh] ${mallName}: 주문 ${orders.length}건 조회됨`);
+          orders.slice(0, 3).forEach((order: any, idx: number) => {
+            console.log(`📊 [refresh] 샘플 ${idx + 1}:`, {
+              orderId: order.id,
+              row_data_매핑코드: order.row_data?.매핑코드,
+              row_data_productId: order.row_data?.productId,
+              matched_product_id: order.product_id,
+              matched_product_code: order.product_code,
+              matched_product_name: order.product_name,
+            });
+          });
+        }
 
         // 주문 통계 계산
         // 작업일지 기준:
@@ -262,6 +280,9 @@ export async function POST(request: NextRequest) {
             existingData.total_profit_amount === totalProfitAmount &&
             existingData.net_profit_amount === netProfitAmount;
 
+          // 디버깅: isIdentical 상태 로그
+          console.log(`📊 [refresh] ${mallName}: 기존 데이터 있음, settlementId=${settlementId}, isIdentical=${isIdentical}`);
+
           if (!isIdentical) {
             // 값이 다르면 업데이트
             await sql`
@@ -352,11 +373,15 @@ export async function POST(request: NextRequest) {
 
         // 정산에 사용된 주문 데이터 전체를 중간 테이블에 저장 (기존 데이터와 동일하더라도 갱신)
         if (settlementId && orders.length > 0) {
+          // 디버깅: 저장 시작 로그
+          console.log(`💾 [refresh] ${mallName}: 주문 데이터 저장 시작 (settlementId=${settlementId}, orders=${orders.length}개)`);
+          
           // 기존 주문 연결 데이터 삭제 (갱신을 위해)
           await sql`
             DELETE FROM mall_sales_settlement_orders
             WHERE settlement_id = ${settlementId}
           `;
+          console.log(`💾 [refresh] ${mallName}: 기존 주문 연결 데이터 삭제 완료`);
           
           // 배치로 삽입 (배치 크기로 나눠서 처리하여 타임아웃 방지)
           try {
@@ -419,7 +444,23 @@ export async function POST(request: NextRequest) {
               WHERE settlement_id = ${settlementId}
             `;
             
-            console.log(`[${mallName}] ${orders.length}개의 주문 데이터를 정산 데이터에 저장 완료 (실제 저장된 개수: ${savedCount[0]?.count || 0})`);
+            console.log(`✅ [refresh] ${mallName}: ${orders.length}개의 주문 데이터 저장 완료 (실제 저장된 개수: ${savedCount[0]?.count || 0})`);
+            
+            // 디버깅: 저장된 데이터 샘플 확인
+            const savedSample = await sql`
+              SELECT order_id, order_data->>'매핑코드' as mapping_code, order_data->>'productId' as product_id,
+                     product_data->>'id' as saved_product_id, product_data->>'name' as saved_product_name
+              FROM mall_sales_settlement_orders
+              WHERE settlement_id = ${settlementId}
+              LIMIT 3
+            `;
+            console.log(`✅ [refresh] ${mallName}: 저장된 샘플 데이터:`, savedSample.map((s: any) => ({
+              order_id: s.order_id,
+              mapping_code: s.mapping_code,
+              product_id: s.product_id,
+              saved_product_id: s.saved_product_id,
+              saved_product_name: s.saved_product_name,
+            })));
           } catch (error: any) {
             console.error(`[${mallName}] 주문 데이터 저장 중 오류 발생:`, error);
             throw error;

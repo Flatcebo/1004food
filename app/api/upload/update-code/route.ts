@@ -55,18 +55,39 @@ export async function PUT(request: NextRequest) {
       상품명: currentProductName, // 기존 상품명 유지
     };
 
-    // 선택한 상품 ID가 있으면 저장 (다운로드 시 정확한 상품을 찾기 위함)
+    // 선택한 상품 ID로 업데이트 (다운로드 및 정산 시 정확한 상품을 찾기 위함)
+    // 중요: 이전 productId가 남아있으면 정산 갱신 시 잘못된 상품이 매칭될 수 있음
     if (codeData.productId) {
       updatedRowData.productId = codeData.productId;
+    } else {
+      // productId가 없으면 이전 값을 삭제하여 매핑코드로만 매칭되도록 함
+      delete updatedRowData.productId;
     }
+
+    // 디버깅: 업데이트 전 로그
+    console.log(`📝 [update-code] rowId=${rowId}, 새 매핑코드=${codeData.code}, 새 productId=${codeData.productId || 'N/A'}`);
+    console.log(`📝 [update-code] 업데이트할 row_data:`, {
+      매핑코드: updatedRowData.매핑코드,
+      productId: updatedRowData.productId,
+    });
 
     // row_data 업데이트
     const result = await sql`
       UPDATE upload_rows
       SET row_data = ${JSON.stringify(updatedRowData)}::jsonb
       WHERE id = ${rowId}
-      RETURNING id
+      RETURNING id, row_data
     `;
+
+    // 디버깅: 업데이트 후 확인
+    if (result.length > 0) {
+      const savedRowData = result[0].row_data;
+      console.log(`✅ [update-code] 저장 완료:`, {
+        rowId: result[0].id,
+        매핑코드: savedRowData?.매핑코드,
+        productId: savedRowData?.productId,
+      });
+    }
 
     if (result.length === 0) {
       return NextResponse.json(

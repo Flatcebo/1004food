@@ -129,7 +129,8 @@ export async function GET(request: NextRequest) {
           order_id,
           order_data,
           product_data,
-          created_at as saved_at
+          created_at as saved_at,
+          updated_at
         FROM mall_sales_settlement_orders
         WHERE settlement_id = ${settlementIdInt}
         ORDER BY order_id
@@ -142,8 +143,19 @@ export async function GET(request: NextRequest) {
         orders = [];
       } else {
         console.log(
-          `[주문 목록 조회] 정산에 저장된 주문 개수: ${settlementOrders.length}`
+          `🔍 [주문 목록 조회] settlement_id=${settlementIdInt}, 저장된 주문 개수: ${settlementOrders.length}`
         );
+        
+        // 디버깅: 저장된 데이터 샘플 확인
+        console.log(`🔍 [주문 목록 조회] 저장된 데이터 샘플:`, settlementOrders.slice(0, 3).map((so: any) => ({
+          order_id: so.order_id,
+          order_data_매핑코드: so.order_data?.매핑코드,
+          order_data_productId: so.order_data?.productId,
+          product_data_id: so.product_data?.id,
+          product_data_name: so.product_data?.name,
+          updated_at: so.updated_at,
+        })));
+        
         console.log(
           `[주문 목록 조회] 주문 ID 샘플 (최대 10개):`,
           settlementOrders.slice(0, 10).map((so) => so.order_id)
@@ -180,6 +192,11 @@ export async function GET(request: NextRequest) {
             row_created_at: uploadRow?.row_created_at || so.saved_at,
             product_price: productData.price || null, // 저장된 상품 정보 사용
             product_sale_price: productData.sale_price || null, // 저장된 상품 정보 사용
+            // 매핑된 상품 정보 추가
+            mapped_product_id: productData.id || null,
+            mapped_product_code: productData.code || null,
+            mapped_product_name: productData.name || null,
+            mapped_product_sabang_name: productData.sabang_name || null,
           };
         });
       }
@@ -202,8 +219,11 @@ export async function GET(request: NextRequest) {
           FROM products
           WHERE company_id = ${companyId}
             AND (
-              code = ur.row_data->>'매핑코드'
-              OR id::text = ur.row_data->>'productId'
+              -- productId가 유효하면 productId로 매칭 (우선)
+              (COALESCE(ur.row_data->>'productId', '') != '' AND id::text = ur.row_data->>'productId')
+              OR
+              -- productId가 없거나 빈 문자열이면 매핑코드로 매칭 (대안)
+              (COALESCE(ur.row_data->>'productId', '') = '' AND code = ur.row_data->>'매핑코드')
             )
           LIMIT 1
         ) p ON true
@@ -330,8 +350,13 @@ export async function GET(request: NextRequest) {
           rowData["주문번호(쇼핑몰)"] ||
           null,
         internalCode: rowData["내부코드"] || null,
-        productName: rowData["상품명"] || null,
+        productName: rowData["상품명"] || null, // 주문 원본 상품명
         mappingCode: rowData["매핑코드"] || null,
+        // 매핑된 상품 정보 (정산 갱신 시 저장된 상품 정보)
+        mappedProductId: order.mapped_product_id || rowData["productId"] || null,
+        mappedProductCode: order.mapped_product_code || rowData["매핑코드"] || null,
+        mappedProductName: order.mapped_product_name || null, // 매핑된 상품명
+        mappedProductSabangName: order.mapped_product_sabang_name || null, // 매핑된 사방넷명
         quantity:
           typeof quantity === "number"
             ? quantity

@@ -1418,13 +1418,36 @@ export async function POST(request: NextRequest) {
                 }
               }
 
-              // 수취인명인 경우 앞에 ★ 붙이기
-              if (
+              // 수취인명인지 확인 (더 엄격한 조건: 주소, 전화, 우편, 연락 등이 포함되면 수취인명이 아님)
+              const displayNameNormalized = header.display_name.replace(/\s+/g, "").toLowerCase();
+              const isReceiverName =
                 header.column_key === "receiverName" ||
-                header.display_name.includes("수취인") ||
-                header.display_name.includes("받는사람")
-              ) {
-                stringValue = "★" + stringValue;
+                header.display_name === "수취인명" ||
+                header.display_name === "수취인" ||
+                header.display_name === "받는사람" ||
+                (header.display_name.includes("수취인") &&
+                  !displayNameNormalized.includes("전화") &&
+                  !displayNameNormalized.includes("주소") &&
+                  !displayNameNormalized.includes("우편") &&
+                  !displayNameNormalized.includes("연락"));
+
+              // 배송메시지 필드인지 확인 (배송메시지에서는 별을 유지해야 함)
+              const isDeliveryMessage =
+                header.column_key === "deliveryMessage" ||
+                header.display_name.includes("배송") ||
+                header.display_name.includes("메시지") ||
+                header.display_name.includes("배메");
+
+              // 수취인명이 아닌 필드에서는 별 제거 (DB에 저장된 값은 유지하되 다운로드 시에만 제거)
+              // 단, 배송메시지 필드에서는 별을 유지
+              if (!isReceiverName && !isDeliveryMessage) {
+                stringValue = stringValue.replace(/^★/, "").trim();
+              }
+
+              // 수취인명인 경우 앞에 ★ 붙이기 (기존 별 제거 후)
+              if (isReceiverName) {
+                // 기존 별 제거 후 맨 앞에 별 추가
+                stringValue = "★" + stringValue.replace(/^★/, "").trim();
               }
 
               // 주문번호인 경우 내부코드 사용 또는 sabang_code 사용
@@ -1474,6 +1497,8 @@ export async function POST(request: NextRequest) {
                 header.display_name.includes("전화") ||
                 header.display_name.includes("연락")
               ) {
+                // 별 제거 (전화번호 필드에는 별이 없어야 함)
+                stringValue = stringValue.replace(/^★/, "").trim();
                 const numOnly = stringValue.replace(/\D/g, "");
                 if (
                   (numOnly.length === 10 || numOnly.length === 11) &&
@@ -1497,10 +1522,21 @@ export async function POST(request: NextRequest) {
 
               // 우편번호 처리
               if (header.display_name.includes("우편")) {
+                // 별 제거 (우편번호 필드에는 별이 없어야 함)
+                stringValue = stringValue.replace(/^★/, "").trim();
                 const numOnly = stringValue.replace(/\D/g, "");
                 if (numOnly.length >= 4 && numOnly.length <= 5) {
                   stringValue = numOnly.padStart(5, "0");
                 }
+              }
+
+              // 주소 처리 (별 제거)
+              if (
+                header.column_key === "receiverAddr" ||
+                header.display_name.includes("주소")
+              ) {
+                // 별 제거 (주소 필드에는 별이 없어야 함)
+                stringValue = stringValue.replace(/^★/, "").trim();
               }
 
               // 배송메시지 처리: grade가 "온라인"인 경우 맨 앞에 #수취인명 추가
@@ -1588,13 +1624,36 @@ export async function POST(request: NextRequest) {
 
               let stringValue = value != null ? String(value) : "";
 
-              // 수취인명인 경우 앞에 ★ 붙이기
-              if (
+              // 수취인명인지 확인 (더 엄격한 조건: 주소, 전화, 우편, 연락 등이 포함되면 수취인명이 아님)
+              const headerStrNormalized = headerStr.replace(/\s+/g, "").toLowerCase();
+              const isReceiverName =
                 headerStr === "수취인명" ||
                 headerStr === "수취인" ||
-                headerStr === "받는사람"
-              ) {
-                stringValue = "★" + stringValue;
+                headerStr === "받는사람" ||
+                (headerStr.includes("수취인") &&
+                  !headerStrNormalized.includes("전화") &&
+                  !headerStrNormalized.includes("주소") &&
+                  !headerStrNormalized.includes("우편") &&
+                  !headerStrNormalized.includes("연락"));
+
+              // 배송메시지 필드인지 확인 (배송메시지에서는 별을 유지해야 함)
+              const isDeliveryMessageField =
+                headerStr.includes("배송") ||
+                headerStr.includes("메시지") ||
+                headerStr.includes("배메") ||
+                headerStr === "배송메시지" ||
+                headerStr === "배송 메시지";
+
+              // 수취인명이 아닌 필드에서는 별 제거 (DB에 저장된 값은 유지하되 다운로드 시에만 제거)
+              // 단, 배송메시지 필드에서는 별을 유지
+              if (!isReceiverName && !isDeliveryMessageField) {
+                stringValue = stringValue.replace(/^★/, "").trim();
+              }
+
+              // 수취인명인 경우 앞에 ★ 붙이기 (기존 별 제거 후)
+              if (isReceiverName) {
+                // 기존 별 제거 후 맨 앞에 별 추가
+                stringValue = "★" + stringValue.replace(/^★/, "").trim();
               }
 
               // 주문번호인 경우 내부코드 사용 또는 sabang_code 사용
@@ -1629,6 +1688,8 @@ export async function POST(request: NextRequest) {
               }
 
               if (headerStr.includes("전화") || headerStr.includes("연락")) {
+                // 별 제거 (전화번호 필드에는 별이 없어야 함)
+                stringValue = stringValue.replace(/^★/, "").trim();
                 const numOnly = stringValue.replace(/\D/g, "");
                 if (
                   (numOnly.length === 10 || numOnly.length === 11) &&
@@ -1662,10 +1723,18 @@ export async function POST(request: NextRequest) {
               }
 
               if (headerStr.includes("우편")) {
+                // 별 제거 (우편번호 필드에는 별이 없어야 함)
+                stringValue = stringValue.replace(/^★/, "").trim();
                 const numOnly = stringValue.replace(/\D/g, "");
                 if (numOnly.length >= 4 && numOnly.length <= 5) {
                   stringValue = numOnly.padStart(5, "0");
                 }
+              }
+
+              // 주소 처리 (별 제거)
+              if (headerStr.includes("주소") && !isReceiverName) {
+                // 별 제거 (주소 필드에는 별이 없어야 함)
+                stringValue = stringValue.replace(/^★/, "").trim();
               }
 
               // 배송메시지 처리: grade가 "온라인"인 경우 맨 앞에 #수취인명 추가

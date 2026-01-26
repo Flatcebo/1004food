@@ -651,6 +651,53 @@ export async function POST(request: NextRequest) {
           if (rowObj["주문번호(쇼핑몰)"]) {
             delete rowObj["주문번호(쇼핑몰)"];
           }
+
+          // 수취인 전화번호와 주문자 전화번호 보완 처리
+          // 헤더에서 수취인 전화번호와 주문자 전화번호 키 찾기
+          const receiverPhoneIdx = headerRow.findIndex(
+            (h: any) =>
+              h &&
+              typeof h === "string" &&
+              (h === "수취인 전화번호" ||
+                h.includes("수취인 전화번호") ||
+                h.includes("수취인전화번호") ||
+                h.includes("수취인 연락처") ||
+                h.includes("받는분 전화번호")),
+          );
+          const ordererPhoneIdx = headerRow.findIndex(
+            (h: any) =>
+              h &&
+              typeof h === "string" &&
+              (h === "주문자 전화번호" ||
+                h.includes("주문자 전화번호") ||
+                h.includes("주문자전화번호") ||
+                h.includes("주문자 연락처") ||
+                h.includes("보내는분 전화번호")),
+          );
+
+          const receiverPhoneKey =
+            receiverPhoneIdx !== -1 ? headerRow[receiverPhoneIdx] : null;
+          const ordererPhoneKey =
+            ordererPhoneIdx !== -1 ? headerRow[ordererPhoneIdx] : null;
+
+          const receiverPhoneValue = receiverPhoneKey
+            ? String(rowObj[receiverPhoneKey] || "").trim()
+            : "";
+          const ordererPhoneValue = ordererPhoneKey
+            ? String(rowObj[ordererPhoneKey] || "").trim()
+            : "";
+
+          // 전화번호 보완: 한쪽이 공란이고 다른 쪽이 있으면 반대편 전화번호로 채우기
+          if (receiverPhoneKey && ordererPhoneKey) {
+            // 수취인 전화번호가 공란이고 주문자 전화번호가 있으면
+            if (!receiverPhoneValue && ordererPhoneValue) {
+              rowObj[receiverPhoneKey] = ordererPhoneValue;
+            }
+            // 주문자 전화번호가 공란이고 수취인 전화번호가 있으면
+            else if (!ordererPhoneValue && receiverPhoneValue) {
+              rowObj[ordererPhoneKey] = receiverPhoneValue;
+            }
+          }
         }
 
         // "공급단가"는 uploadStore.ts에서 파일 읽을 때 이미 정규화된 헤더와 데이터에 추가되었으므로

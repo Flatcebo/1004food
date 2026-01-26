@@ -42,6 +42,11 @@ interface OrderData {
   internalCode: string | null;
   productName: string | null;
   mappingCode: string | null;
+  // 매핑된 상품 정보
+  mappedProductId?: number | string | null;
+  mappedProductCode?: string | null;
+  mappedProductName?: string | null;
+  mappedProductSabangName?: string | null;
   quantity: number;
   salePrice: number;
   eventPrice?: number | null;
@@ -1057,10 +1062,13 @@ export default function SalesByMallPage() {
                             주문번호
                           </th>
                           <th className="border border-gray-300 px-3 py-2 text-left">
-                            상품명
+                            주문상품명
                           </th>
                           <th className="border border-gray-300 px-3 py-2 text-left">
                             매핑코드
+                          </th>
+                          <th className="border border-gray-300 px-3 py-2 text-left">
+                            매핑상품명
                           </th>
                           <th className="border border-gray-300 px-3 py-2 text-left">
                             내부코드
@@ -1171,6 +1179,9 @@ export default function SalesByMallPage() {
                                 </td>
                                 <td className="border border-gray-300 px-3 py-2">
                                   {order.mappingCode || "-"}
+                                </td>
+                                <td className="border border-gray-300 px-3 py-2">
+                                  {order.mappedProductName || "-"}
                                 </td>
                                 <td className="border border-gray-300 px-3 py-2">
                                   {order.internalCode || "-"}
