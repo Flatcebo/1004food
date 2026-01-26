@@ -15,13 +15,13 @@ export async function GET(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
     // user_id 추출
     const userId = await getUserIdFromRequest(request);
-    
+
     // 사용자 정보 조회 (grade, assigned_vendor_ids)
     let userGrade: string | null = null;
     let assignedVendorIds: number[] = [];
@@ -34,15 +34,17 @@ export async function GET(request: NextRequest) {
           FROM users
           WHERE id = ${userId} AND company_id = ${companyId}
         `;
-        
+
         if (userResult.length > 0) {
           userGrade = userResult[0].grade;
           isAdmin = userGrade === "관리자";
-          
+
           // assigned_vendor_ids 파싱
           if (userResult[0].assigned_vendor_ids) {
             try {
-              assignedVendorIds = Array.isArray(userResult[0].assigned_vendor_ids)
+              assignedVendorIds = Array.isArray(
+                userResult[0].assigned_vendor_ids,
+              )
                 ? userResult[0].assigned_vendor_ids
                 : JSON.parse(userResult[0].assigned_vendor_ids || "[]");
             } catch (e) {
@@ -56,26 +58,28 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 어제~오늘 날짜 계산 (한국 시간 기준)
+    // 3일전~오늘 날짜 계산 (한국 시간 기준)
     const today = new Date();
     const koreaTime = new Date(today.getTime() + 9 * 60 * 60 * 1000); // UTC+9
-    
-    // 어제 시작 시간 (00:00:00)
-    const yesterdayStart = new Date(koreaTime);
-    yesterdayStart.setDate(yesterdayStart.getDate() - 1);
-    yesterdayStart.setHours(0, 0, 0, 0);
-    
+
+    // 3일전 시작 시간 (00:00:00)
+    const threeDaysAgoStart = new Date(koreaTime);
+    threeDaysAgoStart.setDate(threeDaysAgoStart.getDate() - 3);
+    threeDaysAgoStart.setHours(0, 0, 0, 0);
+
     // 오늘 종료 시간 (23:59:59)
     const todayEnd = new Date(koreaTime);
     todayEnd.setHours(23, 59, 59, 999);
-    
+
     // UTC로 변환
-    const yesterdayStartUTC = new Date(yesterdayStart.getTime() - 9 * 60 * 60 * 1000);
+    const threeDaysAgoStartUTC = new Date(
+      threeDaysAgoStart.getTime() - 9 * 60 * 60 * 1000,
+    );
     const todayEndUTC = new Date(todayEnd.getTime() - 9 * 60 * 60 * 1000);
 
     // 금일 업로드된 주문에서 업체명 추출
     let vendorsQuery;
-    
+
     if (isAdmin) {
       // 관리자: 모든 업체
       vendorsQuery = sql`
@@ -84,7 +88,7 @@ export async function GET(request: NextRequest) {
         FROM upload_rows ur
         INNER JOIN uploads u ON ur.upload_id = u.id
         WHERE u.company_id = ${companyId}
-          AND u.created_at >= ${yesterdayStartUTC.toISOString()}
+          AND u.created_at >= ${threeDaysAgoStartUTC.toISOString()}
           AND u.created_at <= ${todayEndUTC.toISOString()}
           AND ur.row_data->>'업체명' IS NOT NULL
           AND ur.row_data->>'업체명' != ''
@@ -106,9 +110,9 @@ export async function GET(request: NextRequest) {
         FROM mall
         WHERE id = ANY(${assignedVendorIds})
       `;
-      
+
       const vendorNames = vendorNamesResult.map((v: any) => v.name);
-      
+
       if (vendorNames.length === 0) {
         return NextResponse.json({
           success: true,
@@ -122,7 +126,7 @@ export async function GET(request: NextRequest) {
         FROM upload_rows ur
         INNER JOIN uploads u ON ur.upload_id = u.id
         WHERE u.company_id = ${companyId}
-          AND u.created_at >= ${yesterdayStartUTC.toISOString()}
+          AND u.created_at >= ${threeDaysAgoStartUTC.toISOString()}
           AND u.created_at <= ${todayEndUTC.toISOString()}
           AND ur.row_data->>'업체명' = ANY(${vendorNames})
           AND ur.row_data->>'업체명' IS NOT NULL
@@ -155,7 +159,7 @@ export async function GET(request: NextRequest) {
           FROM upload_rows ur
           INNER JOIN uploads u ON ur.upload_id = u.id
           WHERE u.company_id = ${companyId}
-            AND u.created_at >= ${yesterdayStartUTC.toISOString()}
+            AND u.created_at >= ${threeDaysAgoStartUTC.toISOString()}
             AND u.created_at <= ${todayEndUTC.toISOString()}
             AND ur.row_data->>'업체명' = ${vendorName}
           GROUP BY u.id, u.file_name, u.created_at
@@ -173,14 +177,20 @@ export async function GET(request: NextRequest) {
           FROM upload_rows ur
           INNER JOIN uploads u ON ur.upload_id = u.id
           WHERE u.company_id = ${companyId}
-            AND u.created_at >= ${yesterdayStartUTC.toISOString()}
+            AND u.created_at >= ${threeDaysAgoStartUTC.toISOString()}
             AND u.created_at <= ${todayEndUTC.toISOString()}
             AND ur.row_data->>'업체명' = ${vendorName}
         `;
 
         const sabangCodeStats = sabangCodeStatsResult[0] || {};
-        const sabangCodeOrders = parseInt(sabangCodeStats.sabang_code_orders || "0", 10);
-        const totalOrdersForSabang = parseInt(sabangCodeStats.total_orders || "0", 10);
+        const sabangCodeOrders = parseInt(
+          sabangCodeStats.sabang_code_orders || "0",
+          10,
+        );
+        const totalOrdersForSabang = parseInt(
+          sabangCodeStats.total_orders || "0",
+          10,
+        );
 
         const files = fileStatsResult.map((file: any) => ({
           uploadId: file.upload_id,
@@ -196,7 +206,7 @@ export async function GET(request: NextRequest) {
           sabangCodeOrders,
           totalOrdersForSabang,
         };
-      })
+      }),
     );
 
     return NextResponse.json({
@@ -207,7 +217,7 @@ export async function GET(request: NextRequest) {
     console.error("운송장 업체 리스트 조회 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
     );
   }
 }

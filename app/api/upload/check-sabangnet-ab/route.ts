@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
           if (userResult[0].assigned_vendor_ids) {
             try {
               assignedVendorIds = Array.isArray(
-                userResult[0].assigned_vendor_ids
+                userResult[0].assigned_vendor_ids,
               )
                 ? userResult[0].assigned_vendor_ids
                 : JSON.parse(userResult[0].assigned_vendor_ids || "[]");
@@ -64,12 +64,12 @@ export async function POST(request: NextRequest) {
     });
     const koreaParts = koreaFormatter.formatToParts(now);
     const koreaYear = parseInt(
-      koreaParts.find((p) => p.type === "year")?.value || "2024"
+      koreaParts.find((p) => p.type === "year")?.value || "2024",
     );
     const koreaMonth =
       parseInt(koreaParts.find((p) => p.type === "month")?.value || "1") - 1; // 0-based
     const koreaDay = parseInt(
-      koreaParts.find((p) => p.type === "day")?.value || "1"
+      koreaParts.find((p) => p.type === "day")?.value || "1",
     );
 
     let dateFromUTC: Date;
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
       hour: number,
       minute: number,
       second: number,
-      ms: number
+      ms: number,
     ) => {
       // 한국 시간을 UTC로 변환
       // 한국은 UTC+9이므로 한국 시간에서 9시간을 빼면 UTC 시간이 됨
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
       }
 
       return new Date(
-        Date.UTC(utcYear, utcMonth, utcDay, utcHour, minute, second, ms)
+        Date.UTC(utcYear, utcMonth, utcDay, utcHour, minute, second, ms),
       );
     };
 
@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
         23,
         59,
         59,
-        999
+        999,
       );
     } else if (dateFilter === "today") {
       // 오늘만 (한국 시간 기준)
@@ -142,11 +142,11 @@ export async function POST(request: NextRequest) {
     console.log(`🔍 [AB 체크 API] dateFilter: ${dateFilter}`);
     console.log(
       `🔍 [AB 체크 API] 한국 오늘: ${koreaYear}-${String(
-        koreaMonth + 1
-      ).padStart(2, "0")}-${String(koreaDay).padStart(2, "0")}`
+        koreaMonth + 1,
+      ).padStart(2, "0")}-${String(koreaDay).padStart(2, "0")}`,
     );
     console.log(
-      `🔍 [AB 체크 API] 조회 범위 (UTC): ${dateFromUTC.toISOString()} ~ ${dateToUTC.toISOString()}`
+      `🔍 [AB 체크 API] 조회 범위 (UTC): ${dateFromUTC.toISOString()} ~ ${dateToUTC.toISOString()}`,
     );
 
     // 조회할 업체 목록 결정
@@ -203,7 +203,7 @@ export async function POST(request: NextRequest) {
       if (!vendorName) {
         return NextResponse.json(
           {success: false, error: "업체명이 필요합니다."},
-          {status: 400}
+          {status: 400},
         );
       }
 
@@ -279,7 +279,7 @@ export async function POST(request: NextRequest) {
     console.error("사방넷 AB 데이터 확인 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
     );
   }
 }

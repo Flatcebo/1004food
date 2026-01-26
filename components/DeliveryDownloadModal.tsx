@@ -45,7 +45,7 @@ export default function DeliveryDownloadModal({
     string | null
   >(null);
   const [downloadingAllSabangnet, setDownloadingAllSabangnet] = useState(false);
-  const [dateFilter, setDateFilter] = useState<"yesterday" | "today" | "all">(
+  const [dateFilter, setDateFilter] = useState<"3days_ago" | "yesterday" | "today" | "all">(
     "all",
   );
   const [vendorSearchQuery, setVendorSearchQuery] = useState("");
@@ -228,7 +228,7 @@ export default function DeliveryDownloadModal({
 
   const handleDownloadSabangnetAB = async (
     vendorName: string,
-    currentDateFilter: "yesterday" | "today" | "all",
+    currentDateFilter: "3days_ago" | "yesterday" | "today" | "all",
   ) => {
     const downloadKey = `sabangnet_${vendorName}`;
     setDownloadingSabangnet(downloadKey);
@@ -254,11 +254,13 @@ export default function DeliveryDownloadModal({
 
       if (!checkResult.hasData) {
         const dateFilterLabel =
-          currentDateFilter === "yesterday"
-            ? "어제"
-            : currentDateFilter === "today"
-              ? "오늘"
-              : "전체";
+          currentDateFilter === "3days_ago"
+            ? "3일전"
+            : currentDateFilter === "yesterday"
+              ? "어제"
+              : currentDateFilter === "today"
+                ? "오늘"
+                : "전체";
         alert(`${dateFilterLabel} 기간에 다운로드할 데이터가 없습니다.`);
         return;
       }
@@ -598,12 +600,13 @@ export default function DeliveryDownloadModal({
                         value={dateFilter}
                         onChange={(e) =>
                           setDateFilter(
-                            e.target.value as "yesterday" | "today" | "all",
+                            e.target.value as "3days_ago" | "yesterday" | "today" | "all",
                           )
                         }
                         className="px-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
                       >
                         <option value="all">전체</option>
+                        <option value="3days_ago">3일전</option>
                         <option value="yesterday">어제</option>
                         <option value="today">오늘</option>
                       </select>
@@ -652,7 +655,7 @@ export default function DeliveryDownloadModal({
             {!loading && vendors.length === 0 && (
               <div className="text-center py-8">
                 <p className="text-gray-600">
-                  어제~오늘 업로드한 업체가 없습니다.
+                  3일전~오늘 업로드한 업체가 없습니다.
                 </p>
               </div>
             )}
