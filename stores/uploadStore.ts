@@ -109,6 +109,9 @@ const getInternalColumns = async (): Promise<ColumnDef[]> => {
           "수령인 전화번호",
           "수령인 전화번호1",
           "수취인 전화번호1",
+          "수취인전화번호1",
+          "수취인 전화번호2",
+          "수취인전화번호2",
           "받는분전화번호",
         ],
       },
@@ -166,6 +169,9 @@ const getInternalColumns = async (): Promise<ColumnDef[]> => {
           "주문자 전화번화",
           "주문자전화번호",
           "주문자전화번호1",
+          "주문자 전화번호1",
+          "주문자전화번호2",
+          "주문자 전화번호2",
           "보내는분전화번호",
         ],
       },
@@ -1106,6 +1112,37 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
                 return normalizedH === normalizeHeader("주문번호(사방넷)");
               });
               indexMap[col.key] = sabangnetIdx; // 없으면 -1
+            } else if ((col.key === "receiverPhone" || col.key === "ordererPhone") && isOnlineUser) {
+              // 온라인 유저: 전화번호1을 먼저 찾고, 없으면 전화번호2 찾기
+              const phone1Key = col.key === "receiverPhone" ? "수취인전화번호1" : "주문자전화번호1";
+              const phone2Key = col.key === "receiverPhone" ? "수취인전화번호2" : "주문자전화번호2";
+              
+              // 1순위: 전화번호1 헤더 찾기
+              let idx = rawHeader.findIndex((h) => {
+                const normalizedH = normalizeHeader(String(h));
+                return normalizedH === normalizeHeader(phone1Key) || 
+                       normalizedH === normalizeHeader(phone1Key.replace("전화번호", " 전화번호"));
+              });
+              
+              // 2순위: 전화번호1이 없으면 전화번호2 헤더 찾기
+              if (idx === -1) {
+                idx = rawHeader.findIndex((h) => {
+                  const normalizedH = normalizeHeader(String(h));
+                  return normalizedH === normalizeHeader(phone2Key) || 
+                         normalizedH === normalizeHeader(phone2Key.replace("전화번호", " 전화번호"));
+                });
+              }
+              
+              // 3순위: 전화번호1/2가 없으면 기존 aliases로 찾기
+              if (idx === -1) {
+                idx = rawHeader.findIndex((h) =>
+                  col.aliases.some(
+                    (al) => normalizeHeader(String(h)) === normalizeHeader(al)
+                  )
+                );
+              }
+              
+              indexMap[col.key] = idx; // 없으면 -1
             } else {
               // 그 외의 경우 기존 로직 사용
               const idx = rawHeader.findIndex((h) =>
@@ -1134,6 +1171,19 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
                 const idx = indexMap[c.key];
                 let value: string =
                   idx >= 0 ? String(row[idx] ?? "").trim() : "";
+
+                // 온라인 유저: 전화번호1이 비어있으면 전화번호2 사용
+                if (isOnlineUser && (c.key === "receiverPhone" || c.key === "ordererPhone") && !value) {
+                  const phone2Key = c.key === "receiverPhone" ? "수취인전화번호2" : "주문자전화번호2";
+                  const phone2Idx = rawHeader.findIndex((h) => {
+                    const normalizedH = normalizeHeader(String(h));
+                    return normalizedH === normalizeHeader(phone2Key) || 
+                           normalizedH === normalizeHeader(phone2Key.replace("전화번호", " 전화번호"));
+                  });
+                  if (phone2Idx >= 0) {
+                    value = String(row[phone2Idx] ?? "").trim();
+                  }
+                }
 
                 // 업체명 컬럼은 엑셀 파일에서 읽지 않도록 빈 값으로 처리
                 // (드롭다운에서 선택한 값만 사용)

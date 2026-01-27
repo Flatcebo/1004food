@@ -72,10 +72,35 @@ export async function PUT(request: NextRequest) {
           updatedRowData.productId = codeData.productId;
         }
 
-        // row_data 업데이트
+        // 상품의 매입처(purchase) 정보로 purchase_id 조회
+        let purchaseId: number | null = null;
+        if (codeData.productId) {
+          try {
+            const productResult = await sql`
+              SELECT pr.purchase FROM products pr
+              WHERE pr.id = ${codeData.productId} AND pr.company_id = ${companyId}
+            `;
+            
+            if (productResult.length > 0 && productResult[0].purchase) {
+              const purchaseResult = await sql`
+                SELECT id FROM purchase
+                WHERE name = ${productResult[0].purchase} AND company_id = ${companyId}
+              `;
+              
+              if (purchaseResult.length > 0) {
+                purchaseId = purchaseResult[0].id;
+              }
+            }
+          } catch (error) {
+            console.error("매입처 조회 실패:", error);
+          }
+        }
+
+        // row_data 및 purchase_id 업데이트
         const result = await sql`
           UPDATE upload_rows ur
-          SET row_data = ${JSON.stringify(updatedRowData)}::jsonb
+          SET row_data = ${JSON.stringify(updatedRowData)}::jsonb,
+              purchase_id = ${purchaseId}
           FROM uploads u
           WHERE ur.upload_id = u.id 
             AND ur.id = ${rowId}

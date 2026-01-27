@@ -1199,8 +1199,86 @@ export async function POST(request: NextRequest) {
         originalRowOrder: number;
         sabangCode: string | null;
         supplyPrice: number | null;
+        purchaseId: number | null;
         index: number;
       }> = [];
+
+      // purchase_id 조회를 위한 캐시 (성능 최적화)
+      const purchaseCache: {[key: string]: number | null} = {};
+
+      // 모든 productId와 매핑코드를 수집하여 배치로 purchase 조회
+      const productIds = new Set<number>();
+      const mappingCodes = new Set<string>();
+      
+      rowObjects.forEach((rowObj: any) => {
+        if (rowObj.productId) {
+          const productId = typeof rowObj.productId === "string" 
+            ? parseInt(rowObj.productId) 
+            : rowObj.productId;
+          if (!isNaN(productId) && productId > 0) {
+            productIds.add(productId);
+          }
+        }
+        if (rowObj.매핑코드) {
+          const code = String(rowObj.매핑코드).trim();
+          if (code) {
+            mappingCodes.add(code);
+          }
+        }
+      });
+
+      // 배치로 purchase 조회
+      if (productIds.size > 0 || mappingCodes.size > 0) {
+        try {
+          // productId로 조회
+          if (productIds.size > 0) {
+            const productIdsArray = Array.from(productIds);
+            const productsResult = await sql`
+              SELECT DISTINCT pr.id, pr.purchase
+              FROM products pr
+              WHERE pr.id = ANY(${productIdsArray}) AND pr.company_id = ${companyId}
+            `;
+            
+            for (const product of productsResult) {
+              if (product.purchase) {
+                const purchaseResult = await sql`
+                  SELECT id FROM purchase
+                  WHERE name = ${product.purchase} AND company_id = ${companyId}
+                  LIMIT 1
+                `;
+                if (purchaseResult.length > 0) {
+                  purchaseCache[`productId:${product.id}`] = purchaseResult[0].id;
+                }
+              }
+            }
+          }
+
+          // 매핑코드로 조회
+          if (mappingCodes.size > 0) {
+            const mappingCodesArray = Array.from(mappingCodes);
+            const productsByCodeResult = await sql`
+              SELECT DISTINCT pr.code, pr.purchase
+              FROM products pr
+              WHERE pr.code = ANY(${mappingCodesArray}) AND pr.company_id = ${companyId}
+            `;
+            
+            for (const product of productsByCodeResult) {
+              if (product.purchase) {
+                const purchaseResult = await sql`
+                  SELECT id FROM purchase
+                  WHERE name = ${product.purchase} AND company_id = ${companyId}
+                  LIMIT 1
+                `;
+                if (purchaseResult.length > 0) {
+                  purchaseCache[`code:${product.code}`] = purchaseResult[0].id;
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error("배치 purchase 조회 실패:", error);
+        }
+      }
 
       rowObjects.forEach((rowObj: any, index: number) => {
         // 쇼핑몰명 추출 (여러 가능한 키에서 찾기)
@@ -1417,6 +1495,24 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // purchase_id 조회 (매핑된 상품의 매입처)
+        let purchaseId: number | null = null;
+        if (rowObj.productId) {
+          const productId = typeof rowObj.productId === "string" 
+            ? parseInt(rowObj.productId) 
+            : rowObj.productId;
+          if (!isNaN(productId) && productId > 0) {
+            purchaseId = purchaseCache[`productId:${productId}`] || null;
+          }
+        }
+        // productId로 찾지 못한 경우 매핑코드로 시도
+        if (!purchaseId && rowObj.매핑코드) {
+          const code = String(rowObj.매핑코드).trim();
+          if (code) {
+            purchaseId = purchaseCache[`code:${code}`] || null;
+          }
+        }
+
         // INSERT 직전 sabang_code 값 확인 (디버깅용)
         if (index < 3) {
           console.log(`🔍 [sabang_code 디버깅] INSERT 직전 확인:`, {
@@ -1439,6 +1535,7 @@ export async function POST(request: NextRequest) {
           originalRowOrder,
           sabangCode,
           supplyPrice,
+          purchaseId,
           index,
         });
       });
@@ -1454,7 +1551,7 @@ export async function POST(request: NextRequest) {
         // 배치 내에서도 동시 실행 수를 제한하여 처리
         const insertPromises = batch.map((row) => {
           return sql`
-            INSERT INTO upload_rows (upload_id, row_data, shop_name, company_id, mall_id, vendor_name, row_order, user_id, sabang_code, supply_price, created_at)
+            INSERT INTO upload_rows (upload_id, row_data, shop_name, company_id, mall_id, vendor_name, row_order, user_id, sabang_code, supply_price, purchase_id, created_at)
             VALUES (
               ${uploadId},
               ${JSON.stringify(row.rowObj)},
@@ -1466,9 +1563,10 @@ export async function POST(request: NextRequest) {
               ${fileUserId},
               ${row.sabangCode},
               ${row.supplyPrice},
+              ${row.purchaseId},
               ${koreaTime.toISOString()}::timestamp
             )
-            RETURNING id, mall_id, vendor_name, row_order, user_id, sabang_code, supply_price
+            RETURNING id, mall_id, vendor_name, row_order, user_id, sabang_code, supply_price, purchase_id
           `;
         });
 

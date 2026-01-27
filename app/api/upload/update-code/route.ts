@@ -71,12 +71,40 @@ export async function PUT(request: NextRequest) {
       productId: updatedRowData.productId,
     });
 
-    // row_data 업데이트
+    // 상품의 매입처(purchase) 정보로 purchase_id 업데이트
+    let purchaseId: number | null = null;
+    if (codeData.productId) {
+      try {
+        // 상품에서 purchase 값 조회
+        const productResult = await sql`
+          SELECT pr.purchase FROM products pr
+          WHERE pr.id = ${codeData.productId} AND pr.company_id = ${companyId}
+        `;
+        
+        if (productResult.length > 0 && productResult[0].purchase) {
+          // purchase 이름으로 purchase 테이블에서 id 조회
+          const purchaseResult = await sql`
+            SELECT id FROM purchase
+            WHERE name = ${productResult[0].purchase} AND company_id = ${companyId}
+          `;
+          
+          if (purchaseResult.length > 0) {
+            purchaseId = purchaseResult[0].id;
+            console.log(`📝 [update-code] 매입처 연결: productId=${codeData.productId}, purchase=${productResult[0].purchase}, purchaseId=${purchaseId}`);
+          }
+        }
+      } catch (error) {
+        console.error("매입처 조회 실패:", error);
+      }
+    }
+
+    // row_data 및 purchase_id 업데이트
     const result = await sql`
       UPDATE upload_rows
-      SET row_data = ${JSON.stringify(updatedRowData)}::jsonb
+      SET row_data = ${JSON.stringify(updatedRowData)}::jsonb,
+          purchase_id = ${purchaseId}
       WHERE id = ${rowId}
-      RETURNING id, row_data
+      RETURNING id, row_data, purchase_id
     `;
 
     // 디버깅: 업데이트 후 확인

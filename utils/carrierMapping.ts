@@ -6,7 +6,7 @@
 // 택배사 매핑 규칙
 const CARRIER_MAPPING_RULES = [
   {
-    keywords: ["cj", "cj택배", "cj대한통운", "cj대통", "cj대"],
+    keywords: ["cj", "cj택배", "cj대한통운", "cj대통", "cj대", "대한통운"],
     standardName: "CJ택배",
   },
   {
@@ -14,7 +14,7 @@ const CARRIER_MAPPING_RULES = [
     standardName: "우체국택배",
   },
   {
-    keywords: ["한진", "한진택배", "대한통운", "대통", "한진대통"],
+    keywords: ["한진", "한진택배"],
     standardName: "한진택배",
   },
   {keywords: ["천일", "천일택배", "천일특송"], standardName: "천일택배"},
@@ -42,7 +42,7 @@ export function normalizeCarrierName(carrier: string): string {
   for (const rule of CARRIER_MAPPING_RULES) {
     // 키워드 중 하나라도 포함되어 있는지 확인
     const hasKeyword = rule.keywords.some((keyword) =>
-      normalizedInput.includes(keyword.toLowerCase())
+      normalizedInput.includes(keyword.toLowerCase()),
     );
 
     if (hasKeyword) {
@@ -68,6 +68,6 @@ export function getSupportedCarriers(): string[] {
  */
 export function getCarrierMappingDescription(): string {
   return CARRIER_MAPPING_RULES.map(
-    (rule) => `${rule.keywords.join(", ")} → ${rule.standardName}`
+    (rule) => `${rule.keywords.join(", ")} → ${rule.standardName}`,
   ).join("\n");
 }

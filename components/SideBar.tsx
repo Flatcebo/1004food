@@ -29,6 +29,7 @@ interface AccordionMenuConfig {
   items: AccordionMenuItem[];
   autoOpenPaths?: string[];
   requiresAdmin?: boolean;
+  requiresOnlineOrAdmin?: boolean;
 }
 
 // 메뉴 설정 배열 (컴포넌트 외부로 이동)
@@ -48,6 +49,19 @@ const menuConfigs: AccordionMenuConfig[] = [
       },
     ],
     autoOpenPaths: ["/order", "/order/upload","/order/edit"],
+  },
+  {
+    id: "purchase-orders",
+    icon: IoDocumentText,
+    title: "매입처 주문 관리",
+    items: [
+      {
+        path: "/purchase-orders",
+        name: "매입처별 주문",
+      },
+    ],
+    autoOpenPaths: ["/purchase-orders"],
+    requiresOnlineOrAdmin: true,
   },
   {
     id: "products",
@@ -75,11 +89,15 @@ const menuConfigs: AccordionMenuConfig[] = [
         name: "매출 정산 관리",
       },
       {
+        path: "/analytics/sales-by-purchase",
+        name: "매입처별 정산 관리",
+      },
+      {
         path: "/mall-promotions",
         name: "쇼핑몰 프로모션 관리",
       },
     ],
-    autoOpenPaths: ["/analytics/sales-by-mall", "/mall-promotions"],
+    autoOpenPaths: ["/analytics/sales-by-mall", "/analytics/sales-by-purchase", "/mall-promotions"],
   },
   {
     id: "template",
@@ -128,11 +146,15 @@ const menuConfigs: AccordionMenuConfig[] = [
         name: "쇼핑몰 관리",
       },
       {
+        path: "/purchase-management",
+        name: "매입처 관리",
+      },
+      {
         path: "/logs",
         name: "로그",
       },
     ],
-    autoOpenPaths: ["/products/upload", "/users", "/vendors", "/malls", "/logs"],
+    autoOpenPaths: ["/products/upload", "/users", "/vendors", "/malls", "/purchase-management", "/logs"],
     requiresAdmin: true,
   },
 ];
@@ -215,11 +237,15 @@ export default function SideBar() {
   }, [pathname, openMenu, mounted]);
 
   const isAdmin = mounted && user?.grade === "관리자";
+  const isOnline = mounted && user?.grade === "온라인";
+  const isOnlineOrAdmin = isAdmin || isOnline;
 
-  // 관리자 메뉴 필터링
-  const visibleMenus = menuConfigs.filter(
-    (config) => !config.requiresAdmin || isAdmin
-  );
+  // 메뉴 필터링 (관리자 전용, 온라인/관리자 전용)
+  const visibleMenus = menuConfigs.filter((config) => {
+    if (config.requiresAdmin && !isAdmin) return false;
+    if (config.requiresOnlineOrAdmin && !isOnlineOrAdmin) return false;
+    return true;
+  });
 
   return (
     <div className="w-60 h-full bg-[#25323c] shrink-0">
