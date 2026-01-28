@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     if (!purchaseId && !purchaseName) {
       return NextResponse.json(
         {success: false, error: "purchaseId 또는 purchaseName이 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
     if (!purchase) {
       return NextResponse.json(
         {success: false, error: "매입처를 찾을 수 없습니다."},
-        {status: 404}
+        {status: 404},
       );
     }
 
@@ -76,13 +76,17 @@ export async function GET(request: NextRequest) {
         ur.row_data,
         ur.is_ordered,
         ur.purchase_id,
+        ur.order_batch_id,
         ur.created_at,
         u.created_at as upload_date,
         pr.id as product_id,
         pr.code as product_code,
         pr.name as product_name,
         pr.sale_price,
-        pr.sabang_name
+        pr.sabang_name,
+        ob.batch_number,
+        ob.batch_date,
+        ob.created_at as batch_created_at
       FROM upload_rows ur
       INNER JOIN uploads u ON ur.upload_id = u.id AND u.company_id = ${companyId}
       LEFT JOIN LATERAL (
@@ -95,6 +99,7 @@ export async function GET(request: NextRequest) {
           )
         LIMIT 1
       ) pr ON true
+      LEFT JOIN order_batches ob ON ur.order_batch_id = ob.id
       WHERE ur.purchase_id = ${purchase.id}
         AND ur.row_data->>'주문상태' NOT IN ('취소')
         AND u.created_at >= ${queryStartDate}::date
@@ -102,6 +107,95 @@ export async function GET(request: NextRequest) {
         ${orderFilterCondition}
       ORDER BY ur.id, u.created_at DESC
     `;
+
+    // 발주 차수별 그룹화 정보 생성
+    const batches: {
+      [key: string]: {
+        batchNumber: number;
+        batchDate: string;
+        batchCreatedAt: string | null;
+        orderIds: number[];
+      };
+    } = {};
+    orders.forEach((row: any) => {
+      if (row.order_batch_id && row.batch_number && row.batch_date) {
+        // batch_date를 문자열로 변환 (Date 객체일 수 있음)
+        const batchDateStr =
+          row.batch_date instanceof Date
+            ? row.batch_date.toISOString().split("T")[0]
+            : String(row.batch_date);
+
+        const batchKey = `${batchDateStr}_${row.batch_number}`;
+        if (!batches[batchKey]) {
+          // batch_created_at은 이미 한국 시간으로 저장되어 있음
+          // 문자열로 변환 (Date 객체일 수 있음)
+          let batchCreatedAtStr: string | null = null;
+          if (row.batch_created_at) {
+            try {
+              if (row.batch_created_at instanceof Date) {
+                // Date 객체인 경우 포맷팅
+                const year = row.batch_created_at.getFullYear();
+                const month = String(
+                  row.batch_created_at.getMonth() + 1,
+                ).padStart(2, "0");
+                const day = String(row.batch_created_at.getDate()).padStart(
+                  2,
+                  "0",
+                );
+                const hours = String(row.batch_created_at.getHours()).padStart(
+                  2,
+                  "0",
+                );
+                const minutes = String(
+                  row.batch_created_at.getMinutes(),
+                ).padStart(2, "0");
+                const seconds = String(
+                  row.batch_created_at.getSeconds(),
+                ).padStart(2, "0");
+                batchCreatedAtStr = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+              } else {
+                // 문자열인 경우 그대로 사용 (이미 포맷팅되어 있을 수 있음)
+                const dateStr = String(row.batch_created_at);
+                // ISO 형식이면 파싱 후 포맷팅
+                if (dateStr.includes("T") || dateStr.includes("Z")) {
+                  const date = new Date(dateStr);
+                  const year = date.getFullYear();
+                  const month = String(date.getMonth() + 1).padStart(2, "0");
+                  const day = String(date.getDate()).padStart(2, "0");
+                  const hours = String(date.getHours()).padStart(2, "0");
+                  const minutes = String(date.getMinutes()).padStart(2, "0");
+                  const seconds = String(date.getSeconds()).padStart(2, "0");
+                  batchCreatedAtStr = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+                } else {
+                  batchCreatedAtStr = dateStr;
+                }
+              }
+            } catch (error) {
+              console.error("batch_created_at 처리 실패:", error);
+              batchCreatedAtStr = String(row.batch_created_at);
+            }
+          }
+
+          batches[batchKey] = {
+            batchNumber: row.batch_number,
+            batchDate: batchDateStr,
+            batchCreatedAt: batchCreatedAtStr,
+            orderIds: [],
+          };
+        }
+        batches[batchKey].orderIds.push(row.id);
+      }
+    });
+
+    // 차수 정보를 배열로 변환 (날짜 오름차순, 차수 오름차순)
+    const batchList = Object.values(batches).sort((a, b) => {
+      const dateA = String(a.batchDate || "");
+      const dateB = String(b.batchDate || "");
+      if (dateA !== dateB) {
+        return dateA.localeCompare(dateB);
+      }
+      return a.batchNumber - b.batchNumber;
+    });
 
     return NextResponse.json({
       success: true,
@@ -118,6 +212,9 @@ export async function GET(request: NextRequest) {
         rowData: row.row_data,
         isOrdered: row.is_ordered,
         purchaseId: row.purchase_id,
+        orderBatchId: row.order_batch_id,
+        batchNumber: row.batch_number,
+        batchDate: row.batch_date,
         createdAt: row.created_at,
         uploadDate: row.upload_date,
         productId: row.product_id,
@@ -126,6 +223,7 @@ export async function GET(request: NextRequest) {
         salePrice: row.sale_price,
         sabangName: row.sabang_name,
       })),
+      batches: batchList,
       count: orders.length,
       period: {
         startDate: queryStartDate,
@@ -136,7 +234,7 @@ export async function GET(request: NextRequest) {
     console.error("매입처별 주문 목록 조회 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
     );
   }
 }
@@ -152,7 +250,7 @@ export async function PUT(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -162,7 +260,7 @@ export async function PUT(request: NextRequest) {
     if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
       return NextResponse.json(
         {success: false, error: "orderIds가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -185,7 +283,7 @@ export async function PUT(request: NextRequest) {
     console.error("발주 상태 업데이트 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
     );
   }
 }

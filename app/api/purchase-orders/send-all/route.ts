@@ -3,19 +3,20 @@ import sql from "@/lib/db";
 import {getCompanyIdFromRequest} from "@/lib/company";
 
 /**
- * 모든 매입처에 미발주 주문 전송 API
+ * 선택된 매입처 또는 모든 매입처에 미발주 주문 전송 API
+ * purchaseIds: 선택된 매입처 ID 배열 (없으면 전체)
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const {startDate, endDate} = body;
+    const {startDate, endDate, purchaseIds} = body;
 
     // company_id 추출
     const companyId = await getCompanyIdFromRequest(request);
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -23,20 +24,35 @@ export async function POST(request: NextRequest) {
     const queryStartDate = startDate || today;
     const queryEndDate = endDate || today;
 
-    // 전송 방법이 설정된 매입처 목록 조회
-    const purchases = await sql`
-      SELECT id, name, submit_type, email, kakaotalk
-      FROM purchase
-      WHERE company_id = ${companyId}
-        AND submit_type IS NOT NULL
-        AND array_length(submit_type, 1) > 0
-      ORDER BY name
-    `;
+    // 전송 방법이 설정된 매입처 목록 조회 (선택된 매입처가 있으면 해당 매입처만)
+    let purchases;
+    if (purchaseIds && Array.isArray(purchaseIds) && purchaseIds.length > 0) {
+      // 선택된 매입처만 조회
+      purchases = await sql`
+        SELECT id, name, submit_type, email, kakaotalk
+        FROM purchase
+        WHERE company_id = ${companyId}
+          AND id = ANY(${purchaseIds})
+          AND submit_type IS NOT NULL
+          AND array_length(submit_type, 1) > 0
+        ORDER BY name
+      `;
+    } else {
+      // 전체 매입처 조회
+      purchases = await sql`
+        SELECT id, name, submit_type, email, kakaotalk
+        FROM purchase
+        WHERE company_id = ${companyId}
+          AND submit_type IS NOT NULL
+          AND array_length(submit_type, 1) > 0
+        ORDER BY name
+      `;
+    }
 
     if (purchases.length === 0) {
       return NextResponse.json(
         {success: false, error: "전송 방법이 설정된 매입처가 없습니다."},
-        {status: 404}
+        {status: 404},
       );
     }
 
@@ -87,7 +103,9 @@ export async function POST(request: NextRequest) {
 
       // 카카오톡 전송
       if (submitTypes.includes("kakaotalk") && purchase.kakaotalk) {
-        console.log(`[KAKAOTALK] 전송: ${purchase.name} -> ${purchase.kakaotalk}`);
+        console.log(
+          `[KAKAOTALK] 전송: ${purchase.name} -> ${purchase.kakaotalk}`,
+        );
         kakaoSent = ordersData.length;
         totalKakaoCount += kakaoSent;
       }
@@ -99,19 +117,75 @@ export async function POST(request: NextRequest) {
         totalEmailCount += emailSent;
       }
 
-      // 발주 상태 업데이트
+      // 발주 상태 업데이트 및 차수 정보 저장
       const updatedOrderIds = ordersData.map((o: any) => o.id);
       if (updatedOrderIds.length > 0 && (kakaoSent > 0 || emailSent > 0)) {
         try {
+          // 한국 시간 기준 오늘 날짜 계산
+          // 한국 시간 계산
+          const now = new Date();
+          const koreaTimeMs = now.getTime() + 9 * 60 * 60 * 1000; // UTC + 9시간
+          const koreaDate = new Date(koreaTimeMs);
+          const batchDate = koreaDate.toISOString().split("T")[0];
+
+          // 한국 시간을 PostgreSQL timestamp 형식으로 변환 (YYYY-MM-DD HH:mm:ss)
+          const koreaYear = koreaDate.getUTCFullYear();
+          const koreaMonth = String(koreaDate.getUTCMonth() + 1).padStart(
+            2,
+            "0",
+          );
+          const koreaDay = String(koreaDate.getUTCDate()).padStart(2, "0");
+          const koreaHours = String(koreaDate.getUTCHours()).padStart(2, "0");
+          const koreaMinutes = String(koreaDate.getUTCMinutes()).padStart(
+            2,
+            "0",
+          );
+          const koreaSeconds = String(koreaDate.getUTCSeconds()).padStart(
+            2,
+            "0",
+          );
+          const koreaTimestamp = `${koreaYear}-${koreaMonth}-${koreaDay} ${koreaHours}:${koreaMinutes}:${koreaSeconds}`;
+
+          // 해당 매입처의 오늘 마지막 batch_number 조회
+          const lastBatchResult = await sql`
+            SELECT COALESCE(MAX(batch_number), 0) as last_batch
+            FROM order_batches
+            WHERE company_id = ${companyId}
+              AND purchase_id = ${purchase.id}
+              AND batch_date = ${batchDate}::date
+          `;
+          const lastBatchNumber = lastBatchResult[0]?.last_batch || 0;
+          const newBatchNumber = lastBatchNumber + 1;
+
+          // 새 batch 생성 (한국 시간으로 created_at 설정)
+          const newBatchResult = await sql`
+            INSERT INTO order_batches (company_id, purchase_id, batch_number, batch_date, created_at)
+            VALUES (
+              ${companyId}, 
+              ${purchase.id}, 
+              ${newBatchNumber}, 
+              ${batchDate}::date,
+              ${koreaTimestamp}::timestamp
+            )
+            RETURNING id
+          `;
+          const newBatchId = newBatchResult[0]?.id;
+
+          // upload_rows 업데이트 (is_ordered = true, order_batch_id 설정)
           await sql`
             UPDATE upload_rows ur
-            SET is_ordered = true
+            SET is_ordered = true,
+                order_batch_id = ${newBatchId}
             FROM uploads u
             WHERE ur.upload_id = u.id 
               AND u.company_id = ${companyId}
               AND ur.id = ANY(${updatedOrderIds})
           `;
           totalSentCount += ordersData.length;
+
+          console.log(
+            `[BATCH] ${purchase.name}: ${newBatchNumber}차 발주 (${ordersData.length}건)`,
+          );
         } catch (updateError) {
           console.error("발주 상태 업데이트 실패:", updateError);
         }
@@ -136,7 +210,7 @@ export async function POST(request: NextRequest) {
     console.error("전체 전송 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
     );
   }
 }

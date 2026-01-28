@@ -9,6 +9,7 @@ interface UseAutoMappingProps {
   setProductCodeMap: (map: {[name: string]: string}) => void;
   setHeaderIndex: (v: {nameIdx?: number} | null) => void;
   fileId?: string; // 파일 ID 추가
+  userGrade?: string; // 사용자 등급 (온라인 유저는 상품명 기반 자동 매핑 스킵)
 }
 
 export function useAutoMapping({
@@ -20,6 +21,7 @@ export function useAutoMapping({
   setProductCodeMap,
   setHeaderIndex,
   fileId,
+  userGrade,
 }: UseAutoMappingProps) {
   const codesOriginRef = useRef<any[]>([]);
 
@@ -37,7 +39,7 @@ export function useAutoMapping({
     }
     const headerRow = tableData[0];
     const nameIdx = headerRow.findIndex(
-      (h: any) => h && typeof h === "string" && h.includes("상품명")
+      (h: any) => h && typeof h === "string" && h.includes("상품명"),
     );
     setHeaderIndex({nameIdx});
   }, [tableData, setHeaderIndex]);
@@ -77,20 +79,27 @@ export function useAutoMapping({
 
       // 코드 우선순위: 직접 입력(productCodeMap) > codes.json 자동 매칭
       let codeVal = newMap[name];
-      // 택배사가 있는 상품 우선 선택
-      const productsWithPostType = codes.filter(
-        (c: any) =>
-          c.name === name && c.postType && String(c.postType).trim() !== ""
-      );
-      const productsWithoutPostType = codes.filter(
-        (c: any) =>
-          c.name === name && (!c.postType || String(c.postType).trim() === "")
-      );
-      const found =
-        productsWithPostType.length > 0
-          ? productsWithPostType[0]
-          : productsWithoutPostType[0];
-      if (!codeVal && found?.code) codeVal = found.code;
+
+      // 온라인 유저: 매핑코드로만 매칭 (상품명 기반 자동 매핑 스킵)
+      // 일반 유저: 상품명 기반 자동 매핑도 수행
+      let found: any = null;
+      if (userGrade !== "온라인") {
+        // 택배사가 있는 상품 우선 선택 (일반 유저만)
+        const productsWithPostType = codes.filter(
+          (c: any) =>
+            c.name === name && c.postType && String(c.postType).trim() !== "",
+        );
+        const productsWithoutPostType = codes.filter(
+          (c: any) =>
+            c.name === name &&
+            (!c.postType || String(c.postType).trim() === ""),
+        );
+        found =
+          productsWithPostType.length > 0
+            ? productsWithPostType[0]
+            : productsWithoutPostType[0];
+        if (!codeVal && found?.code) codeVal = found.code;
+      }
 
       if (mappingIdx >= 0 && codeVal && row[mappingIdx] !== codeVal) {
         if (!rowChanged) {
@@ -124,8 +133,8 @@ export function useAutoMapping({
         }
       }
 
-      // productCodeMap에 비어있고 자동매칭된 코드가 있으면 map에도 채워둠
-      if (!newMap[name] && found?.code) {
+      // productCodeMap에 비어있고 자동매칭된 코드가 있으면 map에도 채워둠 (일반 유저만)
+      if (userGrade !== "온라인" && !newMap[name] && found?.code) {
         newMap[name] = found.code;
       }
 
@@ -182,6 +191,7 @@ export function useAutoMapping({
     setTableData,
     setProductCodeMap,
     fileId,
+    userGrade,
   ]);
 
   return {

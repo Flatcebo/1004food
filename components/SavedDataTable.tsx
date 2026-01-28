@@ -135,7 +135,7 @@ const SavedDataTable = memo(function SavedDataTable({
       const hasDeliveryMessage = filtered.includes("배송메시지");
       if (hasDeliveryMessage) {
         filtered = filtered.map((header) =>
-          header === "배송메시지" ? "운송장입력" : header
+          header === "배송메시지" ? "운송장입력" : header,
         );
       } else {
         // 배송메시지가 없으면 마지막에 운송장입력 추가
@@ -281,7 +281,7 @@ const SavedDataTable = memo(function SavedDataTable({
   const [detailRow, setDetailRow] = useState<any>(null);
   // 외부에서 제어하는 경우 외부 상태 사용, 아니면 내부 상태 사용
   const [internalSelectedRows, setInternalSelectedRows] = useState<Set<number>>(
-    new Set()
+    new Set(),
   );
   const selectedRows = externalSelectedRows ?? internalSelectedRows;
 
@@ -305,7 +305,7 @@ const SavedDataTable = memo(function SavedDataTable({
         }
       }
     },
-    [externalSelectedRows, onSelectedRowsChange]
+    [externalSelectedRows, onSelectedRowsChange],
   );
   // 드래그 선택 상태
   const [dragStartRow, setDragStartRow] = useState<number | null>(null);
@@ -326,7 +326,7 @@ const SavedDataTable = memo(function SavedDataTable({
   }>({});
   const [isConfirmingDelivery, setIsConfirmingDelivery] = useState(false);
   const [validationErrors, setValidationErrors] = useState<Set<number>>(
-    new Set()
+    new Set(),
   );
   const [tooltip, setTooltip] = useState<{
     visible: boolean;
@@ -385,7 +385,7 @@ const SavedDataTable = memo(function SavedDataTable({
 
     // 템플릿 종류 미리 확인 (list API 호출 전에 type 필터 결정 필요)
     const selectedTemplateObjForFilter = templates.find(
-      (t) => t.id === selectedTemplate
+      (t) => t.id === selectedTemplate,
     );
     const templateNameForFilter = (selectedTemplateObjForFilter?.name || "")
       .normalize("NFC")
@@ -445,7 +445,7 @@ const SavedDataTable = memo(function SavedDataTable({
           `/api/upload/list?${params.toString()}`,
           {
             headers: getAuthHeaders(),
-          }
+          },
         );
         const listResult = await listResponse.json();
 
@@ -459,7 +459,7 @@ const SavedDataTable = memo(function SavedDataTable({
             .map((row: any) => row.id)
             .filter((id: any) => id != null);
           console.warn(
-            "⚠️ 필터링된 전체 데이터 ID 수집 실패, 현재 페이지 데이터만 사용"
+            "⚠️ 필터링된 전체 데이터 ID 수집 실패, 현재 페이지 데이터만 사용",
           );
         }
       } catch (error) {
@@ -469,6 +469,12 @@ const SavedDataTable = memo(function SavedDataTable({
           .map((row: any) => row.id)
           .filter((id: any) => id != null);
       }
+    }
+
+    // 다운로드할 데이터가 없으면 알림 후 중단
+    if (!rowIdsToDownload || rowIdsToDownload.length === 0) {
+      alert("다운로드할 데이터가 없습니다. 필터 조건을 확인해주세요.");
+      return;
     }
 
     setIsDownloading(true);
@@ -492,7 +498,7 @@ const SavedDataTable = memo(function SavedDataTable({
 
       // 템플릿 확인
       const selectedTemplateObj = templates.find(
-        (t) => t.id === selectedTemplate
+        (t) => t.id === selectedTemplate,
       );
       // 한글 자모 분리 문제 해결을 위해 정규화 (macOS NFD -> NFC)
       const templateName = (selectedTemplateObj?.name || "")
@@ -515,10 +521,10 @@ const SavedDataTable = memo(function SavedDataTable({
       const apiUrl = isOutsource
         ? "/api/upload/download-outsource"
         : isInhouse
-        ? "/api/upload/download-inhouse"
-        : isSabangnet
-        ? "/api/upload/download-sabangnet"
-        : "/api/upload/download";
+          ? "/api/upload/download-inhouse"
+          : isSabangnet
+            ? "/api/upload/download-sabangnet"
+            : "/api/upload/download";
 
       const headers = getAuthHeaders();
 
@@ -562,7 +568,7 @@ const SavedDataTable = memo(function SavedDataTable({
       if (contentDisposition) {
         // filename* 우선
         const filenameStarMatch = contentDisposition.match(
-          /filename\*\s*=\s*UTF-8''([^;]+)/i
+          /filename\*\s*=\s*UTF-8''([^;]+)/i,
         );
         if (filenameStarMatch?.[1]) {
           try {
@@ -572,7 +578,7 @@ const SavedDataTable = memo(function SavedDataTable({
           }
         } else {
           const filenameMatch = contentDisposition.match(
-            /filename\s*=\s*\"?([^\";]+)\"?/i
+            /filename\s*=\s*\"?([^\";]+)\"?/i,
           );
           if (filenameMatch?.[1]) {
             fileName = filenameMatch[1];
@@ -661,7 +667,7 @@ const SavedDataTable = memo(function SavedDataTable({
     if (validTargetIds.length === 0) {
       alert(
         "저장할 수 있는 유효한 데이터가 없습니다.\n\n유효성 검사 오류:\n" +
-          validationErrorMessages.join("\n")
+          validationErrorMessages.join("\n"),
       );
       return;
     }
@@ -672,8 +678,8 @@ const SavedDataTable = memo(function SavedDataTable({
         `유효성 검사 실패 항목 ${
           validationErrorMessages.length
         }건이 제외됩니다.\n\n실패 항목:\n${validationErrorMessages.join(
-          "\n"
-        )}\n\n유효한 ${validTargetIds.length}건을 저장하시겠습니까?`
+          "\n",
+        )}\n\n유효한 ${validTargetIds.length}건을 저장하시겠습니까?`,
       );
       if (!proceed) {
         return;
@@ -772,12 +778,12 @@ const SavedDataTable = memo(function SavedDataTable({
       } else {
         alert(
           `일부 저장에 실패했습니다:\n\n${errorMessages.join(
-            "\n"
+            "\n",
           )}\n\n성공: ${successCount}건${
             excludedCount > 0
               ? ` (유효성 검사 실패 ${excludedCount}건 제외)`
               : ""
-          }`
+          }`,
         );
         // 성공한 경우에도 데이터 새로고침
         onDataUpdate?.();
@@ -806,7 +812,7 @@ const SavedDataTable = memo(function SavedDataTable({
         }
       }
     },
-    [paginatedRows, externalOnSelectAll, setSelectedRows]
+    [paginatedRows, externalOnSelectAll, setSelectedRows],
   );
 
   // 개별 선택/해제 - 메모이제이션 강화
@@ -857,7 +863,7 @@ const SavedDataTable = memo(function SavedDataTable({
 
       e.preventDefault();
     },
-    [selectedRows]
+    [selectedRows],
   );
 
   // 드래그 중
@@ -901,7 +907,7 @@ const SavedDataTable = memo(function SavedDataTable({
         return newSelected;
       });
     },
-    [isDragging, dragStartRow, dragStartPos, paginatedRows]
+    [isDragging, dragStartRow, dragStartPos, paginatedRows],
   );
 
   // 드래그 종료
@@ -964,7 +970,7 @@ const SavedDataTable = memo(function SavedDataTable({
         return newErrors;
       });
     },
-    []
+    [],
   );
 
   // 툴팁 핸들러 메모이제이션
@@ -977,7 +983,7 @@ const SavedDataTable = memo(function SavedDataTable({
         y,
       });
     },
-    []
+    [],
   );
 
   const handleTooltipHide = useCallback(() => {
@@ -1053,7 +1059,7 @@ const SavedDataTable = memo(function SavedDataTable({
 
     if (
       !confirm(
-        `선택한 ${selectedRows.size}개의 데이터를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`
+        `선택한 ${selectedRows.size}개의 데이터를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`,
       )
     ) {
       return;
@@ -1112,7 +1118,7 @@ const SavedDataTable = memo(function SavedDataTable({
     () =>
       paginatedRows.length > 0 &&
       paginatedRows.every((row: any) => selectedRows.has(row.id)),
-    [paginatedRows, selectedRows]
+    [paginatedRows, selectedRows],
   );
 
   // 행 컴포넌트 메모이제이션
@@ -1159,7 +1165,7 @@ const SavedDataTable = memo(function SavedDataTable({
       handleDeliveryDataChange: (
         rowId: number,
         field: string,
-        value: string
+        value: string,
       ) => void;
       isDeliveryInputMode: boolean;
       validationErrors: Set<number>;
@@ -1195,8 +1201,8 @@ const SavedDataTable = memo(function SavedDataTable({
             isCancelled
               ? "bg-red-50"
               : isSelected
-              ? "bg-gray-50"
-              : rowBackgroundClass
+                ? "bg-gray-50"
+                : rowBackgroundClass
           }`}
           style={{height: "56px"}}
         >
@@ -1264,8 +1270,8 @@ const SavedDataTable = memo(function SavedDataTable({
                   isInternalCode
                     ? "cursor-pointer hover:bg-blue-50"
                     : isDeliveryMessage || isTrackingNumber || isAddress
-                    ? "cursor-default"
-                    : ""
+                      ? "cursor-default"
+                      : ""
                 } ${isOrdererName || isOrdererPhone ? "text-blue-600" : ""}`}
                 style={{
                   width:
@@ -1281,8 +1287,8 @@ const SavedDataTable = memo(function SavedDataTable({
                     header === "수취인명"
                       ? "nowrap"
                       : isMultiLine
-                      ? "pre-line"
-                      : "nowrap",
+                        ? "pre-line"
+                        : "nowrap",
                 }}
                 onClick={() => {
                   if (isMappingCode && currentCode) {
@@ -1297,10 +1303,10 @@ const SavedDataTable = memo(function SavedDataTable({
                   !isDeliveryInput && !isDeliveryMessage && !isTrackingNumber
                     ? cellValue.replace(/\n/g, " / ")
                     : isDeliveryMessage
-                    ? cellValue || "배송메시지 없음"
-                    : isTrackingNumber
-                    ? cellValue || "운송장번호 없음"
-                    : ""
+                      ? cellValue || "배송메시지 없음"
+                      : isTrackingNumber
+                        ? cellValue || "운송장번호 없음"
+                        : ""
                 }
               >
                 {isDeliveryInput ? (
@@ -1383,7 +1389,7 @@ const SavedDataTable = memo(function SavedDataTable({
           })}
         </tr>
       );
-    }
+    },
   );
 
   // 체크박스 컴포넌트 메모이제이션
@@ -1454,7 +1460,7 @@ const SavedDataTable = memo(function SavedDataTable({
           className="cursor-pointer"
         />
       </td>
-    )
+    ),
   );
 
   // 매핑코드 셀 컴포넌트 메모이제이션
@@ -1477,7 +1483,7 @@ const SavedDataTable = memo(function SavedDataTable({
       >
         {cellValue}
       </span>
-    )
+    ),
   );
 
   // 내부코드 셀 컴포넌트 메모이제이션
@@ -1498,7 +1504,7 @@ const SavedDataTable = memo(function SavedDataTable({
       >
         {cellValue}
       </span>
-    )
+    ),
   );
 
   // 배송메시지 버튼 컴포넌트 메모이제이션
@@ -1545,7 +1551,7 @@ const SavedDataTable = memo(function SavedDataTable({
                   ? cellValue
                   : "배송메시지 없음 (클릭 불가)",
                 rect.left + rect.width / 2,
-                rect.top - 10
+                rect.top - 10,
               );
             }}
             onMouseLeave={handleTooltipHide}
@@ -1555,7 +1561,7 @@ const SavedDataTable = memo(function SavedDataTable({
           </div>
         </div>
       );
-    }
+    },
   );
 
   // 주소 버튼 컴포넌트 메모이제이션
@@ -1602,7 +1608,7 @@ const SavedDataTable = memo(function SavedDataTable({
                   ? cellValue
                   : "주소 없음 (클릭 불가)",
                 rect.left + rect.width / 2,
-                rect.top - 10
+                rect.top - 10,
               );
             }}
             onMouseLeave={handleTooltipHide}
@@ -1612,7 +1618,7 @@ const SavedDataTable = memo(function SavedDataTable({
           </div>
         </div>
       );
-    }
+    },
   );
 
   // 운송장번호 버튼 컴포넌트 메모이제이션
@@ -1659,7 +1665,7 @@ const SavedDataTable = memo(function SavedDataTable({
               handleTooltipShow(
                 hasValue ? cellValue : "운송장번호 없음 (클릭 불가)",
                 rect.left + rect.width / 2,
-                rect.top - 10
+                rect.top - 10,
               );
             }}
             onMouseLeave={handleTooltipHide}
@@ -1669,7 +1675,7 @@ const SavedDataTable = memo(function SavedDataTable({
           </div>
         </div>
       );
-    }
+    },
   );
 
   // 택배사 운송장번호 버튼 컴포넌트 메모이제이션
@@ -1717,7 +1723,7 @@ const SavedDataTable = memo(function SavedDataTable({
             handleTooltipShow(
               hasValue ? trackingNumber : "운송장번호 없음 (클릭 불가)",
               rect.left + rect.width / 2,
-              rect.top - 10
+              rect.top - 10,
             );
           }}
           onMouseLeave={handleTooltipHide}
@@ -1726,7 +1732,7 @@ const SavedDataTable = memo(function SavedDataTable({
           {carrierName || "택배사"}
         </div>
       );
-    }
+    },
   );
 
   // 운송장 입력 필드 컴포넌트 (uncontrolled input 사용)
@@ -1740,7 +1746,7 @@ const SavedDataTable = memo(function SavedDataTable({
     handleDeliveryDataChange: (
       rowId: number,
       field: string,
-      value: string
+      value: string,
     ) => void;
   }) => (
     <div className="flex flex-col gap-1">
@@ -1787,7 +1793,7 @@ const SavedDataTable = memo(function SavedDataTable({
   TableRow.displayName = "TableRow";
   const orderStatusIdx = useMemo(
     () => headers.findIndex((h) => h === "주문상태"),
-    [headers]
+    [headers],
   );
 
   // 적용된 필터 목록 생성 (업로드 일자는 맨 앞에)
@@ -1965,8 +1971,8 @@ const SavedDataTable = memo(function SavedDataTable({
               {isConfirmingDelivery
                 ? "저장 중..."
                 : selectedRows.size > 0
-                ? `${selectedRows.size}건 확정`
-                : "전체 확정"}
+                  ? `${selectedRows.size}건 확정`
+                  : "전체 확정"}
             </button>
           ) : (
             <>
@@ -2005,8 +2011,8 @@ const SavedDataTable = memo(function SavedDataTable({
                 {isDownloading
                   ? "다운로드 중..."
                   : selectedRows.size > 0
-                  ? `${selectedRows.size}건 다운로드`
-                  : "전체 다운로드"}
+                    ? `${selectedRows.size}건 다운로드`
+                    : "전체 다운로드"}
               </button>
             </>
           )}

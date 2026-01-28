@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
     if (!purchaseId) {
       return NextResponse.json(
         {success: false, error: "purchaseId가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
     if (purchaseResult.length === 0) {
       return NextResponse.json(
         {success: false, error: "매입처를 찾을 수 없습니다."},
-        {status: 404}
+        {status: 404},
       );
     }
 
@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
     if (ordersData.length === 0) {
       return NextResponse.json(
         {success: false, error: "다운로드할 데이터가 없습니다."},
-        {status: 404}
+        {status: 404},
       );
     }
 
@@ -210,7 +210,11 @@ export async function POST(request: NextRequest) {
 
     // 헤더 결정
     let finalHeaders: string[];
-    if (templateHeaders && Array.isArray(templateHeaders) && templateHeaders.length > 0) {
+    if (
+      templateHeaders &&
+      Array.isArray(templateHeaders) &&
+      templateHeaders.length > 0
+    ) {
       finalHeaders = getTemplateHeaderNames(templateHeaders);
     } else {
       // 기본 외주 발주서 헤더
@@ -257,7 +261,7 @@ export async function POST(request: NextRequest) {
     // 데이터 행 추가
     ordersData.forEach((order: any) => {
       const rowData = order.row_data || {};
-      
+
       // 사방넷명 추가
       if (order.sabang_name) {
         rowData["사방넷명"] = order.sabang_name;
@@ -265,9 +269,17 @@ export async function POST(request: NextRequest) {
       }
 
       let rowValues: string[];
-      if (templateHeaders && Array.isArray(templateHeaders) && templateHeaders.length > 0) {
+      if (
+        templateHeaders &&
+        Array.isArray(templateHeaders) &&
+        templateHeaders.length > 0
+      ) {
         // 매입처 템플릿으로 매핑
-        rowValues = mapRowToTemplateFormat(rowData, templateHeaders, headerAliases);
+        rowValues = mapRowToTemplateFormat(
+          rowData,
+          templateHeaders,
+          headerAliases,
+        );
       } else {
         // 기본 외주 발주서 양식 - mapDataToTemplate 사용
         rowValues = finalHeaders.map((header: string) => {
@@ -310,7 +322,8 @@ export async function POST(request: NextRequest) {
           // 주문번호인 경우 내부코드 사용 (온라인 유저는 sabang_code)
           if (header === "주문번호" || header.includes("주문번호")) {
             if (userGrade === "온라인") {
-              stringValue = rowData["sabang_code"] || rowData["주문번호"] || stringValue;
+              stringValue =
+                rowData["sabang_code"] || rowData["주문번호"] || stringValue;
             } else {
               stringValue = rowData["내부코드"] || stringValue;
             }
@@ -356,17 +369,68 @@ export async function POST(request: NextRequest) {
     // 엑셀 버퍼 생성
     const buffer = await wb.xlsx.writeBuffer();
 
-    // 발주 상태 업데이트
-    if (orderIds && orderIds.length > 0) {
+    // 발주 상태 업데이트 및 차수 정보 저장
+    const updatedOrderIds =
+      orderIds && orderIds.length > 0
+        ? orderIds
+        : ordersData.map((o: any) => o.id);
+
+    if (updatedOrderIds.length > 0) {
       try {
+        // 한국 시간 계산
+        const now = new Date();
+        const koreaTimeMs = now.getTime() + 9 * 60 * 60 * 1000; // UTC + 9시간
+        const koreaDate = new Date(koreaTimeMs);
+        const batchDate = koreaDate.toISOString().split("T")[0];
+
+        // 한국 시간을 PostgreSQL timestamp 형식으로 변환 (YYYY-MM-DD HH:mm:ss)
+        const koreaYear = koreaDate.getUTCFullYear();
+        const koreaMonth = String(koreaDate.getUTCMonth() + 1).padStart(2, "0");
+        const koreaDay = String(koreaDate.getUTCDate()).padStart(2, "0");
+        const koreaHours = String(koreaDate.getUTCHours()).padStart(2, "0");
+        const koreaMinutes = String(koreaDate.getUTCMinutes()).padStart(2, "0");
+        const koreaSeconds = String(koreaDate.getUTCSeconds()).padStart(2, "0");
+        const koreaTimestamp = `${koreaYear}-${koreaMonth}-${koreaDay} ${koreaHours}:${koreaMinutes}:${koreaSeconds}`;
+
+        // 해당 매입처의 오늘 마지막 batch_number 조회
+        const lastBatchResult = await sql`
+          SELECT COALESCE(MAX(batch_number), 0) as last_batch
+          FROM order_batches
+          WHERE company_id = ${companyId}
+            AND purchase_id = ${purchase.id}
+            AND batch_date = ${batchDate}::date
+        `;
+        const lastBatchNumber = lastBatchResult[0]?.last_batch || 0;
+        const newBatchNumber = lastBatchNumber + 1;
+
+        // 새 batch 생성 (한국 시간으로 created_at 설정)
+        const newBatchResult = await sql`
+          INSERT INTO order_batches (company_id, purchase_id, batch_number, batch_date, created_at)
+          VALUES (
+            ${companyId}, 
+            ${purchase.id}, 
+            ${newBatchNumber}, 
+            ${batchDate}::date,
+            ${koreaTimestamp}::timestamp
+          )
+          RETURNING id
+        `;
+        const newBatchId = newBatchResult[0]?.id;
+
+        // upload_rows 업데이트 (is_ordered = true, order_batch_id 설정)
         await sql`
           UPDATE upload_rows ur
-          SET is_ordered = true
+          SET is_ordered = true,
+              order_batch_id = ${newBatchId}
           FROM uploads u
           WHERE ur.upload_id = u.id 
             AND u.company_id = ${companyId}
-            AND ur.id = ANY(${orderIds})
+            AND ur.id = ANY(${updatedOrderIds})
         `;
+
+        console.log(
+          `[DOWNLOAD] ${purchase.name}: ${newBatchNumber}차 발주 (${updatedOrderIds.length}건)`,
+        );
       } catch (updateError) {
         console.error("발주 상태 업데이트 실패:", updateError);
       }
@@ -374,17 +438,25 @@ export async function POST(request: NextRequest) {
 
     const today = new Date().toISOString().split("T")[0];
     const fileName = `${today}_${purchase.name}_발주서.xlsx`;
-    const encodedFileName = encodeURIComponent(fileName);
+
+    // Windows에서 한글 파일명 깨짐 방지를 위한 RFC 5987 형식 인코딩
+    // HTTP 헤더는 ASCII만 허용하므로 filename에는 ASCII fallback 추가
+    const asciiFallbackBase =
+      fileName
+        .replace(/\.xlsx$/, "")
+        .replace(/[^\x00-\x7F]/g, "")
+        .replace(/\s+/g, "_") || "download";
+    const safeFileName = `${asciiFallbackBase}.xlsx`; // ASCII fallback
+    const encodedFileName = encodeURIComponent(fileName); // UTF-8 인코딩
+    // filename* 우선, filename ASCII fallback 병행
+    const contentDisposition = `attachment; filename="${safeFileName}"; filename*=UTF-8''${encodedFileName}`;
 
     const responseHeaders = new Headers();
     responseHeaders.set(
       "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     );
-    responseHeaders.set(
-      "Content-Disposition",
-      `attachment; filename="${fileName}"; filename*=UTF-8''${encodedFileName}`
-    );
+    responseHeaders.set("Content-Disposition", contentDisposition);
 
     return new Response(Buffer.from(buffer), {
       headers: responseHeaders,
@@ -393,7 +465,7 @@ export async function POST(request: NextRequest) {
     console.error("다운로드 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
     );
   }
 }

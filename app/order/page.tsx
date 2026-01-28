@@ -262,7 +262,7 @@ function OrderPageContent() {
   const handleRemoveFilter = (filterType: string) => {
     const today = new Date();
     const todayStr = `${today.getFullYear()}-${String(
-      today.getMonth() + 1
+      today.getMonth() + 1,
     ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
     switch (filterType) {
@@ -335,6 +335,7 @@ function OrderPageContent() {
     setProductCodeMap,
     setHeaderIndex,
     fileId: currentFileId,
+    userGrade: user?.grade, // 온라인 유저는 상품명 기반 자동 매핑 스킵
   });
 
   // ============================================================
@@ -344,7 +345,7 @@ function OrderPageContent() {
     (
       file: any,
       codesData: any[],
-      globalProductCodeMap: {[key: string]: string}
+      globalProductCodeMap: {[key: string]: string},
     ) => {
       if (!file.tableData || !file.tableData.length) return null;
       if (!file.headerIndex || typeof file.headerIndex.nameIdx !== "number")
@@ -367,7 +368,7 @@ function OrderPageContent() {
             h &&
             typeof h === "string" &&
             h.replace(/\s+/g, "").toLowerCase() ===
-              "상품코드(사방넷)".replace(/\s+/g, "").toLowerCase()
+              "상품코드(사방넷)".replace(/\s+/g, "").toLowerCase(),
         );
       }
 
@@ -394,7 +395,7 @@ function OrderPageContent() {
               if (cleanedCode) {
                 // codes에서 코드로 상품 찾기 (정확 매칭)
                 const matchedProduct = codesData.find(
-                  (p: any) => p.code && String(p.code).trim() === cleanedCode
+                  (p: any) => p.code && String(p.code).trim() === cleanedCode,
                 );
                 if (matchedProduct && file.tableData[i]) {
                   const row = file.tableData[i];
@@ -407,14 +408,14 @@ function OrderPageContent() {
                         fileProductIdMap[name] = matchedProduct.id;
                       }
                       console.log(
-                        `✅ [온라인] 상품코드(사방넷) 자동 매핑: "${name}" → "${matchedProduct.code}" (원본 코드: ${sabangnetCode} → ${cleanedCode})`
+                        `✅ [온라인] 상품코드(사방넷) 자동 매핑: "${name}" → "${matchedProduct.code}" (원본 코드: ${sabangnetCode} → ${cleanedCode})`,
                       );
                     }
                   }
                 } else if (!matchedProduct && i <= 3) {
                   // 일치하는 매핑코드가 없으면 자동 매핑하지 않음 (로그만 출력)
                   console.log(
-                    `ℹ️ [온라인] 상품코드(사방넷) "${cleanedCode}" 일치하는 매핑코드 없음 - 자동 매핑 스킵`
+                    `ℹ️ [온라인] 상품코드(사방넷) "${cleanedCode}" 일치하는 매핑코드 없음 - 자동 매핑 스킵`,
                   );
                 }
               }
@@ -452,7 +453,7 @@ function OrderPageContent() {
         // 매핑코드가 있는 경우에만 내외주, 택배사 업데이트
         if (codeVal) {
           const matchedProduct = codesData.find(
-            (p: any) => p.code && String(p.code).trim() === codeVal
+            (p: any) => p.code && String(p.code).trim() === codeVal,
           );
           if (matchedProduct) {
             if (
@@ -495,7 +496,7 @@ function OrderPageContent() {
 
       return null;
     },
-    []
+    [],
   );
 
   // ============================================================
@@ -505,7 +506,7 @@ function OrderPageContent() {
     (
       file: any,
       codesData: any[],
-      globalProductCodeMap: {[key: string]: string}
+      globalProductCodeMap: {[key: string]: string},
     ) => {
       if (!file.tableData || !file.tableData.length) return null;
       if (!file.headerIndex || typeof file.headerIndex.nameIdx !== "number")
@@ -528,7 +529,7 @@ function OrderPageContent() {
             h &&
             typeof h === "string" &&
             h.replace(/\s+/g, "").toLowerCase() ===
-              "상품코드(사방넷)".replace(/\s+/g, "").toLowerCase()
+              "상품코드(사방넷)".replace(/\s+/g, "").toLowerCase(),
         );
       }
 
@@ -554,7 +555,7 @@ function OrderPageContent() {
               if (cleanedCode) {
                 // codes에서 코드로 상품 찾기
                 const matchedProduct = codesData.find(
-                  (p: any) => p.code && String(p.code).trim() === cleanedCode
+                  (p: any) => p.code && String(p.code).trim() === cleanedCode,
                 );
                 if (matchedProduct && file.tableData[i]) {
                   const row = file.tableData[i];
@@ -567,7 +568,7 @@ function OrderPageContent() {
                         fileProductIdMap[name] = matchedProduct.id;
                       }
                       console.log(
-                        `✅ [일반] 상품코드(사방넷) 자동 매핑: "${name}" → "${matchedProduct.code}" (원본 코드: ${sabangnetCode} → ${cleanedCode})`
+                        `✅ [일반] 상품코드(사방넷) 자동 매핑: "${name}" → "${matchedProduct.code}" (원본 코드: ${sabangnetCode} → ${cleanedCode})`,
                       );
                     }
                   }
@@ -596,11 +597,12 @@ function OrderPageContent() {
         // 일반 유저: 상품명으로 codes에서 자동 매칭
         const productsWithPostType = codesData.filter(
           (c: any) =>
-            c.name === name && c.postType && String(c.postType).trim() !== ""
+            c.name === name && c.postType && String(c.postType).trim() !== "",
         );
         const productsWithoutPostType = codesData.filter(
           (c: any) =>
-            c.name === name && (!c.postType || String(c.postType).trim() === "")
+            c.name === name &&
+            (!c.postType || String(c.postType).trim() === ""),
         );
         const found =
           productsWithPostType.length > 0
@@ -674,7 +676,7 @@ function OrderPageContent() {
 
       return null;
     },
-    []
+    [],
   );
 
   // ============================================================
@@ -720,7 +722,7 @@ function OrderPageContent() {
         const autoMessageTableData = generateAutoDeliveryMessage(
           result.updatedTableData,
           originalMessagesRef,
-          user?.grade
+          user?.grade,
         );
 
         const updatedFile = {
@@ -734,7 +736,7 @@ function OrderPageContent() {
         try {
           sessionStorage.setItem(
             `uploadedFile_${file.id}`,
-            JSON.stringify(updatedFile)
+            JSON.stringify(updatedFile),
           );
         } catch (error) {
           console.error("sessionStorage 업데이트 실패:", error);
@@ -975,7 +977,7 @@ function OrderPageContent() {
 
   // 사방넷 파일 업로드 핸들러
   const handleSabangnetFileChange = async (
-    event: React.ChangeEvent<HTMLInputElement>
+    event: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -1013,7 +1015,7 @@ function OrderPageContent() {
 
       if (result.success) {
         alert(
-          `사방넷 코드 업로드가 완료되었습니다.\n처리된 항목: ${result.updatedCount}개`
+          `사방넷 코드 업로드가 완료되었습니다.\n처리된 항목: ${result.updatedCount}개`,
         );
         fetchSavedData(); // 데이터 새로고침
       } else {

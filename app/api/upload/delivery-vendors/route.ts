@@ -4,9 +4,10 @@ import {getCompanyIdFromRequest, getUserIdFromRequest} from "@/lib/company";
 
 /**
  * GET /api/upload/delivery-vendors
- * 어제~오늘 업로드한 업체 리스트와 통계 조회
+ * 지정 기간 업로드한 업체 리스트와 통계 조회
  * - 일반 유저: assigned_vendor_ids에 있는 업체만
- * - 관리자: 어제~오늘 저장된 주문의 모든 업체
+ * - 관리자: 지정 기간 저장된 주문의 모든 업체
+ * 쿼리 파라미터: startDate, endDate (YYYY-MM-DD 형식)
  */
 export async function GET(request: NextRequest) {
   try {
@@ -21,6 +22,11 @@ export async function GET(request: NextRequest) {
 
     // user_id 추출
     const userId = await getUserIdFromRequest(request);
+
+    // 쿼리 파라미터에서 날짜 범위 추출
+    const {searchParams} = new URL(request.url);
+    const startDateParam = searchParams.get("startDate");
+    const endDateParam = searchParams.get("endDate");
 
     // 사용자 정보 조회 (grade, assigned_vendor_ids)
     let userGrade: string | null = null;
@@ -58,24 +64,40 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 3일전~오늘 날짜 계산 (한국 시간 기준)
+    // 날짜 범위 계산 (한국 시간 기준)
     const today = new Date();
     const koreaTime = new Date(today.getTime() + 9 * 60 * 60 * 1000); // UTC+9
 
-    // 3일전 시작 시간 (00:00:00)
-    const threeDaysAgoStart = new Date(koreaTime);
-    threeDaysAgoStart.setDate(threeDaysAgoStart.getDate() - 3);
-    threeDaysAgoStart.setHours(0, 0, 0, 0);
+    let dateFromUTC: Date;
+    let dateToUTC: Date;
 
-    // 오늘 종료 시간 (23:59:59)
-    const todayEnd = new Date(koreaTime);
-    todayEnd.setHours(23, 59, 59, 999);
+    if (startDateParam && endDateParam) {
+      // 쿼리 파라미터에서 날짜 범위 지정
+      // 한국 시간으로 시작일 00:00:00, 종료일 23:59:59를 UTC로 변환
+      // 예: 한국 시간 2026-01-28 00:00:00 = UTC 2026-01-27 15:00:00
+      // 예: 한국 시간 2026-01-28 23:59:59 = UTC 2026-01-28 14:59:59
+      
+      // ISO 8601 형식으로 한국 시간대(+09:00) 지정하여 파싱
+      const startKoreaStr = `${startDateParam}T00:00:00+09:00`;
+      const endKoreaStr = `${endDateParam}T23:59:59.999+09:00`;
+      
+      const startKoreaDate = new Date(startKoreaStr);
+      const endKoreaDate = new Date(endKoreaStr);
+      
+      // UTC로 변환 (toISOString()은 UTC로 변환)
+      dateFromUTC = new Date(startKoreaDate.toISOString());
+      dateToUTC = new Date(endKoreaDate.toISOString());
+    } else {
+      // 기본값: 오늘만 조회
+      const todayStart = new Date(koreaTime);
+      todayStart.setHours(0, 0, 0, 0);
 
-    // UTC로 변환
-    const threeDaysAgoStartUTC = new Date(
-      threeDaysAgoStart.getTime() - 9 * 60 * 60 * 1000,
-    );
-    const todayEndUTC = new Date(todayEnd.getTime() - 9 * 60 * 60 * 1000);
+      const todayEnd = new Date(koreaTime);
+      todayEnd.setHours(23, 59, 59, 999);
+
+      dateFromUTC = new Date(todayStart.getTime() - 9 * 60 * 60 * 1000);
+      dateToUTC = new Date(todayEnd.getTime() - 9 * 60 * 60 * 1000);
+    }
 
     // 금일 업로드된 주문에서 업체명 추출
     let vendorsQuery;
@@ -88,8 +110,8 @@ export async function GET(request: NextRequest) {
         FROM upload_rows ur
         INNER JOIN uploads u ON ur.upload_id = u.id
         WHERE u.company_id = ${companyId}
-          AND u.created_at >= ${threeDaysAgoStartUTC.toISOString()}
-          AND u.created_at <= ${todayEndUTC.toISOString()}
+          AND u.created_at >= ${dateFromUTC.toISOString()}
+          AND u.created_at <= ${dateToUTC.toISOString()}
           AND ur.row_data->>'업체명' IS NOT NULL
           AND ur.row_data->>'업체명' != ''
         ORDER BY vendor_name
@@ -126,8 +148,8 @@ export async function GET(request: NextRequest) {
         FROM upload_rows ur
         INNER JOIN uploads u ON ur.upload_id = u.id
         WHERE u.company_id = ${companyId}
-          AND u.created_at >= ${threeDaysAgoStartUTC.toISOString()}
-          AND u.created_at <= ${todayEndUTC.toISOString()}
+          AND u.created_at >= ${dateFromUTC.toISOString()}
+          AND u.created_at <= ${dateToUTC.toISOString()}
           AND ur.row_data->>'업체명' = ANY(${vendorNames})
           AND ur.row_data->>'업체명' IS NOT NULL
           AND ur.row_data->>'업체명' != ''
@@ -159,14 +181,14 @@ export async function GET(request: NextRequest) {
           FROM upload_rows ur
           INNER JOIN uploads u ON ur.upload_id = u.id
           WHERE u.company_id = ${companyId}
-            AND u.created_at >= ${threeDaysAgoStartUTC.toISOString()}
-            AND u.created_at <= ${todayEndUTC.toISOString()}
+            AND u.created_at >= ${dateFromUTC.toISOString()}
+            AND u.created_at <= ${dateToUTC.toISOString()}
             AND ur.row_data->>'업체명' = ${vendorName}
           GROUP BY u.id, u.file_name, u.created_at
           ORDER BY u.created_at DESC
         `;
 
-        // 해당 업체의 sabang_code 통계 조회 (어제~오늘 전체)
+        // 해당 업체의 sabang_code 통계 조회 (지정 기간 전체)
         const sabangCodeStatsResult = await sql`
           SELECT 
             COUNT(*) FILTER (
@@ -177,8 +199,8 @@ export async function GET(request: NextRequest) {
           FROM upload_rows ur
           INNER JOIN uploads u ON ur.upload_id = u.id
           WHERE u.company_id = ${companyId}
-            AND u.created_at >= ${threeDaysAgoStartUTC.toISOString()}
-            AND u.created_at <= ${todayEndUTC.toISOString()}
+            AND u.created_at >= ${dateFromUTC.toISOString()}
+            AND u.created_at <= ${dateToUTC.toISOString()}
             AND ur.row_data->>'업체명' = ${vendorName}
         `;
 

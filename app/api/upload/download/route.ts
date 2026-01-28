@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     if (!templateId) {
       return NextResponse.json(
         {success: false, error: "템플릿 ID가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
     if (!templateResult.length) {
       return NextResponse.json(
         {success: false, error: "템플릿을 찾을 수 없습니다."},
-        {status: 404}
+        {status: 404},
       );
     }
 
@@ -163,7 +163,7 @@ export async function POST(request: NextRequest) {
     if (!columnOrder || columnOrder.length === 0) {
       return NextResponse.json(
         {success: false, error: "템플릿의 컬럼 순서가 설정되지 않았습니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -207,7 +207,7 @@ export async function POST(request: NextRequest) {
           return isInhouse && allowedCodes.includes(mappingCode);
         });
         console.log(
-          `CJ외주 발주서 선택 다운로드: ${rowData.length}건 중 ${rowIdsWithData.length}건 필터링됨`
+          `CJ외주 발주서 선택 다운로드: ${rowData.length}건 중 ${rowIdsWithData.length}건 필터링됨`,
         );
       }
 
@@ -331,7 +331,7 @@ export async function POST(request: NextRequest) {
         }
         if (uploadTimeTo) {
           conditions.push(
-            sql`u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')`
+            sql`u.created_at < (${uploadTimeTo}::date + INTERVAL '1 day')`,
           );
         }
 
@@ -464,7 +464,7 @@ export async function POST(request: NextRequest) {
             ORDER BY u.created_at DESC, ur.id DESC
           `;
           console.log(
-            `CJ외주 발주서 전체 다운로드: ${allData.length}건 조회됨`
+            `CJ외주 발주서 전체 다운로드: ${allData.length}건 조회됨`,
           );
         } else {
           // grade별 필터링 조건 구성
@@ -546,15 +546,23 @@ export async function POST(request: NextRequest) {
       rows = rows.filter(
         (row: any) =>
           row.내외주?.trim() === "내주" &&
-          !cjOutsourceCodes.includes(String(row.매핑코드 || "").trim())
+          !cjOutsourceCodes.includes(String(row.매핑코드 || "").trim()),
       );
 
       if (rows.length === 0) {
         return NextResponse.json(
           {success: false, error: "내주 데이터가 없습니다."},
-          {status: 404}
+          {status: 404},
         );
       }
+    }
+
+    // CJ외주 발주서인 경우: 빈 데이터 체크
+    if (isCJOutsource && rows.length === 0) {
+      return NextResponse.json(
+        {success: false, error: "CJ외주 데이터가 없습니다."},
+        {status: 404},
+      );
     }
 
     // 상품 정보 조회: productId가 있으면 ID로, 없으면 매핑코드로 조회
@@ -565,7 +573,7 @@ export async function POST(request: NextRequest) {
       ...new Set(
         rows
           .filter((row: any) => !row.productId && row.매핑코드)
-          .map((row: any) => row.매핑코드)
+          .map((row: any) => row.매핑코드),
       ),
     ];
     const productPriceMap: {[code: string]: number | null} = {};
@@ -748,7 +756,7 @@ export async function POST(request: NextRequest) {
           preferSabangName:
             preferSabangName !== undefined ? preferSabangName : true,
         });
-        
+
         // 수취인명인 경우 앞에 ★ 붙이기
         if (
           headerStr === "수취인명" ||
@@ -762,7 +770,7 @@ export async function POST(request: NextRequest) {
             value = "★" + stringValue;
           }
         }
-        
+
         return value;
       });
     });
@@ -799,7 +807,7 @@ export async function POST(request: NextRequest) {
       } catch (bufferError: any) {
         console.error("Base64 디코딩 실패:", bufferError);
         throw new Error(
-          `원본 파일을 디코딩할 수 없습니다: ${bufferError.message}`
+          `원본 파일을 디코딩할 수 없습니다: ${bufferError.message}`,
         );
       }
 
@@ -844,7 +852,7 @@ export async function POST(request: NextRequest) {
       } else {
         // 워크시트가 없으면 새로 생성 (원본 파일이 손상되었을 수 있음)
         console.warn(
-          "원본 파일에 워크시트가 없습니다. 새 워크시트를 생성합니다."
+          "원본 파일에 워크시트가 없습니다. 새 워크시트를 생성합니다.",
         );
         tempWorksheet = workbook.addWorksheet(originalSheetName || "Sheet1");
         hasOriginalWorksheet = false;
@@ -890,7 +898,7 @@ export async function POST(request: NextRequest) {
               (cell, colNumber) => {
                 // 원본 셀 객체를 저장 (데이터 삭제 전이므로 참조가 유효함)
                 dataCells[colNumber] = cell;
-              }
+              },
             );
           }
         }
@@ -995,7 +1003,7 @@ export async function POST(request: NextRequest) {
         // 원본 워크시트가 없으면 헤더 행만 업데이트
         if (worksheet.rowCount === 0) {
           const normalizedHeaders = columnOrder.map((h: any) =>
-            prepareExcelCellValue(h, false)
+            prepareExcelCellValue(h, false),
           );
           worksheet.addRow(normalizedHeaders);
         } else {
@@ -1042,7 +1050,7 @@ export async function POST(request: NextRequest) {
 
       // 헤더 행 추가 (값 정규화)
       const normalizedHeaders = columnOrder.map((h: any) =>
-        prepareExcelCellValue(h, false)
+        prepareExcelCellValue(h, false),
       );
       worksheet.addRow(normalizedHeaders);
 
@@ -1053,7 +1061,7 @@ export async function POST(request: NextRequest) {
       // 데이터 행 추가 (값 정규화)
       excelData.forEach((rowData) => {
         const normalizedRowData = rowData.map((cellValue: any) =>
-          prepareExcelCellValue(cellValue, false)
+          prepareExcelCellValue(cellValue, false),
         );
         const addedRow = worksheet.addRow(normalizedRowData);
 
@@ -1181,7 +1189,7 @@ export async function POST(request: NextRequest) {
     const responseHeaders = new Headers();
     responseHeaders.set(
       "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     );
     // ASCII만 포함된 헤더 값 사용
     responseHeaders.set("Content-Disposition", contentDisposition);
@@ -1194,7 +1202,7 @@ export async function POST(request: NextRequest) {
     console.error("엑셀 다운로드 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
     );
   }
 }

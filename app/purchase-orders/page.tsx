@@ -234,17 +234,22 @@ export default function PurchaseOrdersPage() {
     [],
   );
 
-  // 전체 전송 (미발주 건만)
+  // 전체 전송 (미발주 건만) - 선택된 매입처만 또는 전체
   const handleSendAll = useCallback(async () => {
-    if (
-      !confirm(
-        "모든 매입처의 미발주 주문을 해당 전송 방법(카카오톡/이메일)으로 전송하시겠습니까?",
-      )
-    ) {
+    const selectedCount = selectedPurchaseIds.size;
+    const confirmMessage =
+      selectedCount > 0
+        ? `선택된 ${selectedCount}개 매입처의 미발주 주문을 해당 전송 방법(카카오톡/이메일)으로 전송하시겠습니까?`
+        : "모든 매입처의 미발주 주문을 해당 전송 방법(카카오톡/이메일)으로 전송하시겠습니까?";
+
+    if (!confirm(confirmMessage)) {
       return;
     }
 
-    startLoading("전체 전송", "미발주 주문을 전송 중입니다...");
+    startLoading(
+      selectedCount > 0 ? `${selectedCount}건 전송` : "전체 전송",
+      "미발주 주문을 전송 중입니다...",
+    );
 
     try {
       const response = await fetch("/api/purchase-orders/send-all", {
@@ -253,6 +258,8 @@ export default function PurchaseOrdersPage() {
         body: JSON.stringify({
           startDate,
           endDate,
+          purchaseIds:
+            selectedCount > 0 ? Array.from(selectedPurchaseIds) : undefined,
         }),
       });
 
@@ -271,6 +278,7 @@ export default function PurchaseOrdersPage() {
   }, [
     startDate,
     endDate,
+    selectedPurchaseIds,
     getAuthHeaders,
     startLoading,
     stopLoading,
@@ -415,7 +423,9 @@ export default function PurchaseOrdersPage() {
                   onClick={handleSendAll}
                   disabled={purchases.length === 0}
                 >
-                  전체 전송
+                  {selectedPurchaseIds.size > 0
+                    ? `${selectedPurchaseIds.size}건 전송`
+                    : "전체 전송"}
                 </button>
                 <button
                   className="px-4 py-2 bg-indigo-500 text-white text-sm rounded hover:bg-indigo-600"

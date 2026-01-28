@@ -40,12 +40,12 @@ function formatPhoneNumber(phoneNumber: string): string {
     if (numOnly.length === 9) {
       // 02-XXX-XXXX
       return `${numOnly.slice(0, 2)}-${numOnly.slice(2, 5)}-${numOnly.slice(
-        5
+        5,
       )}`;
     } else if (numOnly.length === 10) {
       // 02-XXXX-XXXX
       return `${numOnly.slice(0, 2)}-${numOnly.slice(2, 6)}-${numOnly.slice(
-        6
+        6,
       )}`;
     }
   }
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
     if (!templateId) {
       return NextResponse.json(
         {success: false, error: "템플릿 ID가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -165,7 +165,7 @@ export async function POST(request: NextRequest) {
     if (!templateResult.length) {
       return NextResponse.json(
         {success: false, error: "템플릿을 찾을 수 없습니다."},
-        {status: 404}
+        {status: 404},
       );
     }
 
@@ -211,7 +211,7 @@ export async function POST(request: NextRequest) {
     if (!columnOrder || columnOrder.length === 0) {
       return NextResponse.json(
         {success: false, error: "템플릿의 컬럼 순서가 설정되지 않았습니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -351,7 +351,7 @@ export async function POST(request: NextRequest) {
         filtersWithoutDate as UploadFilters,
         {
           companyId,
-        }
+        },
       );
 
       // 조건 로깅
@@ -658,9 +658,9 @@ export async function POST(request: NextRequest) {
               {
                 expectedDate,
                 actualDates: allUploadDates.map(
-                  (d: any) => d.upload_date.toISOString().split("T")[0]
+                  (d: any) => d.upload_date.toISOString().split("T")[0],
                 ),
-              }
+              },
             );
           } else {
             console.log("✅ 기간 필터 정상 작동");
@@ -823,7 +823,7 @@ export async function POST(request: NextRequest) {
           });
           console.log(
             "🔍 필터가 없어서 외주 조건으로 필터링:",
-            filteredRowsWithIds.length
+            filteredRowsWithIds.length,
           );
         }
         // 전화번호 필드들에 하이픈 추가 가공 (ID 유지)
@@ -833,14 +833,14 @@ export async function POST(request: NextRequest) {
           // 수취인 전화번호 가공
           if (processedRow["수취인 전화번호"]) {
             processedRow["수취인 전화번호"] = formatPhoneNumber(
-              processedRow["수취인 전화번호"]
+              processedRow["수취인 전화번호"],
             );
           }
 
           // 주문자 전화번호 가공
           if (processedRow["주문자 전화번호"]) {
             processedRow["주문자 전화번호"] = formatPhoneNumber(
-              processedRow["주문자 전화번호"]
+              processedRow["주문자 전화번호"],
             );
           }
 
@@ -857,14 +857,14 @@ export async function POST(request: NextRequest) {
           // 전화번호2 가공
           if (processedRow["전화번호2"]) {
             processedRow["전화번호2"] = formatPhoneNumber(
-              processedRow["전화번호2"]
+              processedRow["전화번호2"],
             );
           }
 
           // 전화번호 가공
           if (processedRow["전화번호"]) {
             processedRow["전화번호"] = formatPhoneNumber(
-              processedRow["전화번호"]
+              processedRow["전화번호"],
             );
           }
 
@@ -902,14 +902,14 @@ export async function POST(request: NextRequest) {
           // 수취인 전화번호 가공
           if (processedRow["수취인 전화번호"]) {
             processedRow["수취인 전화번호"] = formatPhoneNumber(
-              processedRow["수취인 전화번호"]
+              processedRow["수취인 전화번호"],
             );
           }
 
           // 주문자 전화번호 가공
           if (processedRow["주문자 전화번호"]) {
             processedRow["주문자 전화번호"] = formatPhoneNumber(
-              processedRow["주문자 전화번호"]
+              processedRow["주문자 전화번호"],
             );
           }
 
@@ -926,14 +926,14 @@ export async function POST(request: NextRequest) {
           // 전화번호2 가공
           if (processedRow["전화번호2"]) {
             processedRow["전화번호2"] = formatPhoneNumber(
-              processedRow["전화번호2"]
+              processedRow["전화번호2"],
             );
           }
 
           // 전화번호 가공
           if (processedRow["전화번호"]) {
             processedRow["전화번호"] = formatPhoneNumber(
-              processedRow["전화번호"]
+              processedRow["전화번호"],
             );
           }
 
@@ -944,7 +944,7 @@ export async function POST(request: NextRequest) {
       if (dataRows.length === 0) {
         return NextResponse.json(
           {success: false, error: "외주 데이터가 없습니다."},
-          {status: 404}
+          {status: 404},
         );
       }
 
@@ -956,7 +956,7 @@ export async function POST(request: NextRequest) {
         ...new Set(
           dataRows
             .filter((row: any) => !row.productId && row.매핑코드)
-            .map((row: any) => row.매핑코드)
+            .map((row: any) => row.매핑코드),
         ),
       ];
       const productSalePriceMap: {[code: string]: number | null} = {};
@@ -1104,6 +1104,9 @@ export async function POST(request: NextRequest) {
       const seenOrders = new Map<string, any>(); // 중복 주문 추적 (내부코드 또는 주문번호 사용)
       const processedDataRows: any[] = [];
 
+      // 디버깅: 매입처 분류 통계
+      const vendorClassificationStats: {[key: string]: number} = {};
+
       dataRows.forEach((row: any) => {
         // 내주는 제외 (외주만 처리)
         // 내외주 필드에 공백이 있을 수 있으므로 trim() 처리
@@ -1113,18 +1116,37 @@ export async function POST(request: NextRequest) {
         }
 
         // productId 또는 매핑코드를 통해 매입처명 가져오기
+        // 우선순위: productId > 매핑코드 > row.업체명(기존값) > "매입처미지정"
         let vendor = "매입처미지정";
+        let classificationSource = "none";
+
         if (row.productId && productVendorNameMapById[row.productId]) {
           const vendorName = productVendorNameMapById[row.productId];
           if (vendorName && typeof vendorName === "string") {
             vendor = vendorName;
+            classificationSource = "productId";
           }
         } else if (row.매핑코드) {
           const vendorName = productVendorNameMap[row.매핑코드];
           if (vendorName && typeof vendorName === "string") {
             vendor = vendorName;
+            classificationSource = "mappingCode";
+          } else {
+            // 매핑코드가 있지만 products 테이블에서 찾지 못한 경우
+            console.log(
+              `[경고] 매핑코드 '${row.매핑코드}'에 해당하는 상품을 찾을 수 없음 (주문번호: ${row.내부코드 || row.주문번호 || "N/A"})`,
+            );
+            classificationSource = "mappingCode_notFound";
           }
+        } else if (row.업체명 && row.업체명 !== "매입처미지정") {
+          // 기존 row에 업체명이 있으면 그대로 사용 (주문 업로드 시 저장된 값)
+          vendor = row.업체명;
+          classificationSource = "existing";
         }
+
+        // 통계 수집
+        vendorClassificationStats[classificationSource] =
+          (vendorClassificationStats[classificationSource] || 0) + 1;
 
         // 업체명 설정
         row.업체명 = vendor;
@@ -1134,16 +1156,17 @@ export async function POST(request: NextRequest) {
           return;
         }
 
-        // 중복 주문 제거 (내부코드 또는 주문번호로 확인)
-        // 주문번호 또는 내부코드로 중복 확인 (상품명/사방넷명과 무관하게 주문 단위로 중복 제거)
+        // 중복 제거 (주문번호 + 상품(매핑코드) 단위로 확인)
+        // 같은 주문의 다른 상품들은 모두 포함되어야 함
         const orderIdentifier = row["내부코드"] || row["주문번호"];
-        // 주문 단위로만 중복 제거 (매핑코드 제외하여 같은 주문의 다른 상품도 중복으로 처리)
+        const productIdentifier = row["매핑코드"] || row["상품명"] || "";
+        // 주문+상품 단위로 중복 제거 (같은 주문의 다른 상품도 포함)
         const orderKey = orderIdentifier
-          ? `${vendor}_${orderIdentifier}`
-          : `${vendor}_${row["수취인명"]}_${row["주소"]}`;
+          ? `${vendor}_${orderIdentifier}_${productIdentifier}`
+          : `${vendor}_${row["수취인명"]}_${row["주소"]}_${productIdentifier}`;
 
         if (seenOrders.has(orderKey)) {
-          // 이미 처리된 주문이면 건너뛰기 (사방넷명이 있는 경우 우선, 없으면 상품명 사용)
+          // 이미 처리된 주문+상품이면 건너뛰기 (사방넷명이 있는 경우 우선)
           const existingRow = seenOrders.get(orderKey);
           const hasSabangName =
             row["사방넷명"] || row["sabangName"] || row["sabang_name"];
@@ -1166,16 +1189,17 @@ export async function POST(request: NextRequest) {
                 }
               }
               const rOrderIdentifier = r["내부코드"] || r["주문번호"];
+              const rProductIdentifier = r["매핑코드"] || r["상품명"] || "";
               const rOrderKey = rOrderIdentifier
-                ? `${rVendor}_${rOrderIdentifier}`
-                : `${rVendor}_${r["수취인명"]}_${r["주소"]}`;
+                ? `${rVendor}_${rOrderIdentifier}_${rProductIdentifier}`
+                : `${rVendor}_${r["수취인명"]}_${r["주소"]}_${rProductIdentifier}`;
               return rOrderKey === orderKey;
             });
             if (index !== -1) {
               processedDataRows[index] = row;
             }
           }
-          return; // 이미 처리된 주문은 건너뛰기
+          return; // 이미 처리된 주문+상품은 건너뛰기
         }
         seenOrders.set(orderKey, row);
         processedDataRows.push(row);
@@ -1190,6 +1214,18 @@ export async function POST(request: NextRequest) {
         }
         vendorGroups[vendor].push(row);
       });
+
+      // 디버깅: 매입처 분류 통계 로깅
+      console.log(
+        `[외주 발주서 다운로드] 매입처 분류 통계:`,
+        vendorClassificationStats,
+      );
+      console.log(
+        `[외주 발주서 다운로드] 매입처별 주문 수:`,
+        Object.entries(vendorGroups)
+          .map(([v, r]) => `${v}: ${r.length}건`)
+          .join(", "),
+      );
 
       // 헤더 Alias 조회 (모든 매입처에서 공통으로 사용)
       let headerAliases: Array<{column_key: string; aliases: string[]}> = [];
@@ -1378,7 +1414,7 @@ export async function POST(request: NextRequest) {
                 };
               }
               return header;
-            }
+            },
           );
 
           // purchase 템플릿 사용
@@ -1387,12 +1423,12 @@ export async function POST(request: NextRequest) {
             const mappedRow = mapRowToTemplateFormat(
               row,
               updatedTemplateHeaders,
-              headerAliases
+              headerAliases,
             );
 
             // 배송희망일 값이 빈 값인 경우 오늘 날짜로 강제 설정
             const deliveryDateIndex = updatedTemplateHeaders.findIndex(
-              (h) => h.column_key === "__delivery_date__"
+              (h) => h.column_key === "__delivery_date__",
             );
             if (
               deliveryDateIndex !== -1 &&
@@ -1419,7 +1455,9 @@ export async function POST(request: NextRequest) {
               }
 
               // 수취인명인지 확인 (더 엄격한 조건: 주소, 전화, 우편, 연락 등이 포함되면 수취인명이 아님)
-              const displayNameNormalized = header.display_name.replace(/\s+/g, "").toLowerCase();
+              const displayNameNormalized = header.display_name
+                .replace(/\s+/g, "")
+                .toLowerCase();
               const isReceiverName =
                 header.column_key === "receiverName" ||
                 header.display_name === "수취인명" ||
@@ -1625,7 +1663,9 @@ export async function POST(request: NextRequest) {
               let stringValue = value != null ? String(value) : "";
 
               // 수취인명인지 확인 (더 엄격한 조건: 주소, 전화, 우편, 연락 등이 포함되면 수취인명이 아님)
-              const headerStrNormalized = headerStr.replace(/\s+/g, "").toLowerCase();
+              const headerStrNormalized = headerStr
+                .replace(/\s+/g, "")
+                .toLowerCase();
               const isReceiverName =
                 headerStr === "수취인명" ||
                 headerStr === "수취인" ||
@@ -1788,20 +1828,20 @@ export async function POST(request: NextRequest) {
             h === "수취인명" ||
             h === "수취인" ||
             h === "받는사람" ||
-            h.includes("받는사람")
+            h.includes("받는사람"),
         );
         const phone1Index = finalHeaders.findIndex(
           (h: string) =>
             h === "전화번호1" ||
             h.includes("전화번호1") ||
-            (h.includes("전화") && h.includes("1"))
+            (h.includes("전화") && h.includes("1")),
         );
         const addressIndex = finalHeaders.findIndex(
           (h: string) =>
             h.includes("주소") ||
             h === "주소" ||
             h.includes("수취인주소") ||
-            h.includes("받는사람주소")
+            h.includes("받는사람주소"),
         );
 
         // 중복값 찾기: 각 필드별로 값과 행 인덱스 매핑
@@ -1982,7 +2022,7 @@ export async function POST(request: NextRequest) {
       ...new Set(
         dataRows
           .filter((row: any) => !row.productId && row.매핑코드)
-          .map((row: any) => row.매핑코드)
+          .map((row: any) => row.매핑코드),
       ),
     ];
     const productSalePriceMap: {[code: string]: number | null} = {};
@@ -2113,14 +2153,14 @@ export async function POST(request: NextRequest) {
       // 수취인 전화번호 가공
       if (processedRow["수취인 전화번호"]) {
         processedRow["수취인 전화번호"] = formatPhoneNumber(
-          processedRow["수취인 전화번호"]
+          processedRow["수취인 전화번호"],
         );
       }
 
       // 주문자 전화번호 가공
       if (processedRow["주문자 전화번호"]) {
         processedRow["주문자 전화번호"] = formatPhoneNumber(
-          processedRow["주문자 전화번호"]
+          processedRow["주문자 전화번호"],
         );
       }
 
@@ -2137,7 +2177,7 @@ export async function POST(request: NextRequest) {
       // 전화번호2 가공
       if (processedRow["전화번호2"]) {
         processedRow["전화번호2"] = formatPhoneNumber(
-          processedRow["전화번호2"]
+          processedRow["전화번호2"],
         );
       }
 
@@ -2287,7 +2327,7 @@ export async function POST(request: NextRequest) {
     const responseHeaders = new Headers();
     responseHeaders.set(
       "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     );
     responseHeaders.set("Content-Disposition", contentDisposition);
 

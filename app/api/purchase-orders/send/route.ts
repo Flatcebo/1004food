@@ -13,14 +13,14 @@ export async function POST(request: NextRequest) {
     if (!purchaseId || !sendType) {
       return NextResponse.json(
         {success: false, error: "purchaseId와 sendType이 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
     if (!["kakaotalk", "email"].includes(sendType)) {
       return NextResponse.json(
         {success: false, error: "유효하지 않은 sendType입니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     if (purchaseResult.length === 0) {
       return NextResponse.json(
         {success: false, error: "매입처를 찾을 수 없습니다."},
-        {status: 404}
+        {status: 404},
       );
     }
 
@@ -53,14 +53,14 @@ export async function POST(request: NextRequest) {
     if (sendType === "kakaotalk" && !purchase.kakaotalk) {
       return NextResponse.json(
         {success: false, error: "카카오톡 정보가 등록되지 않았습니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
     if (sendType === "email" && !purchase.email) {
       return NextResponse.json(
         {success: false, error: "이메일 정보가 등록되지 않았습니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
     if (ordersData.length === 0) {
       return NextResponse.json(
         {success: false, error: "전송할 주문이 없습니다."},
-        {status: 404}
+        {status: 404},
       );
     }
 
@@ -114,21 +114,69 @@ export async function POST(request: NextRequest) {
     // 현재는 전송 시뮬레이션만 수행
     console.log(`[${sendType.toUpperCase()}] 전송 시작`);
     console.log(`매입처: ${purchase.name}`);
-    console.log(`전송 대상: ${sendType === "kakaotalk" ? purchase.kakaotalk : purchase.email}`);
+    console.log(
+      `전송 대상: ${sendType === "kakaotalk" ? purchase.kakaotalk : purchase.email}`,
+    );
     console.log(`주문 건수: ${ordersData.length}건`);
 
-    // 발주 상태 업데이트
+    // 발주 상태 업데이트 및 차수 정보 저장
     const updatedOrderIds = ordersData.map((o: any) => o.id);
     if (updatedOrderIds.length > 0) {
       try {
+        // 한국 시간 계산
+        const now = new Date();
+        const koreaTimeMs = now.getTime() + 9 * 60 * 60 * 1000; // UTC + 9시간
+        const koreaDate = new Date(koreaTimeMs);
+        const batchDate = koreaDate.toISOString().split("T")[0];
+
+        // 한국 시간을 PostgreSQL timestamp 형식으로 변환 (YYYY-MM-DD HH:mm:ss)
+        const koreaYear = koreaDate.getUTCFullYear();
+        const koreaMonth = String(koreaDate.getUTCMonth() + 1).padStart(2, "0");
+        const koreaDay = String(koreaDate.getUTCDate()).padStart(2, "0");
+        const koreaHours = String(koreaDate.getUTCHours()).padStart(2, "0");
+        const koreaMinutes = String(koreaDate.getUTCMinutes()).padStart(2, "0");
+        const koreaSeconds = String(koreaDate.getUTCSeconds()).padStart(2, "0");
+        const koreaTimestamp = `${koreaYear}-${koreaMonth}-${koreaDay} ${koreaHours}:${koreaMinutes}:${koreaSeconds}`;
+
+        // 해당 매입처의 오늘 마지막 batch_number 조회
+        const lastBatchResult = await sql`
+          SELECT COALESCE(MAX(batch_number), 0) as last_batch
+          FROM order_batches
+          WHERE company_id = ${companyId}
+            AND purchase_id = ${purchase.id}
+            AND batch_date = ${batchDate}::date
+        `;
+        const lastBatchNumber = lastBatchResult[0]?.last_batch || 0;
+        const newBatchNumber = lastBatchNumber + 1;
+
+        // 새 batch 생성 (한국 시간으로 created_at 설정)
+        const newBatchResult = await sql`
+          INSERT INTO order_batches (company_id, purchase_id, batch_number, batch_date, created_at)
+          VALUES (
+            ${companyId}, 
+            ${purchase.id}, 
+            ${newBatchNumber}, 
+            ${batchDate}::date,
+            ${koreaTimestamp}::timestamp
+          )
+          RETURNING id
+        `;
+        const newBatchId = newBatchResult[0]?.id;
+
+        // upload_rows 업데이트 (is_ordered = true, order_batch_id 설정)
         await sql`
           UPDATE upload_rows ur
-          SET is_ordered = true
+          SET is_ordered = true,
+              order_batch_id = ${newBatchId}
           FROM uploads u
           WHERE ur.upload_id = u.id 
             AND u.company_id = ${companyId}
             AND ur.id = ANY(${updatedOrderIds})
         `;
+
+        console.log(
+          `[${sendType.toUpperCase()}] ${purchase.name}: ${newBatchNumber}차 발주 (${updatedOrderIds.length}건)`,
+        );
       } catch (updateError) {
         console.error("발주 상태 업데이트 실패:", updateError);
       }
@@ -144,7 +192,7 @@ export async function POST(request: NextRequest) {
     console.error("전송 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
     );
   }
 }

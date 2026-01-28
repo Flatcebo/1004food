@@ -3,6 +3,7 @@
 import {useState, useEffect, useMemo} from "react";
 import {getAuthHeaders} from "@/utils/api";
 import {IoDownload, IoClose, IoSearch, IoTimeOutline} from "react-icons/io5";
+import {getTodayDate} from "@/utils/date";
 
 interface FileStat {
   uploadId: number;
@@ -45,9 +46,10 @@ export default function DeliveryDownloadModal({
     string | null
   >(null);
   const [downloadingAllSabangnet, setDownloadingAllSabangnet] = useState(false);
-  const [dateFilter, setDateFilter] = useState<
-    "3days_ago" | "yesterday" | "today" | "all"
-  >("all");
+  // 기간 선택 (시작일, 종료일)
+  const [startDate, setStartDate] = useState<string>(getTodayDate());
+  const [endDate, setEndDate] = useState<string>(getTodayDate());
+  const [isSearched, setIsSearched] = useState(false); // 조회 버튼 클릭 여부
   const [vendorSearchQuery, setVendorSearchQuery] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [downloadHistory, setDownloadHistory] = useState<DownloadHistory[]>([]);
@@ -133,19 +135,33 @@ export default function DeliveryDownloadModal({
   // 업체 리스트 조회
   useEffect(() => {
     if (open) {
-      fetchVendors();
+      // 모달이 열릴 때 날짜를 오늘로 초기화하고 자동 조회
+      const today = getTodayDate();
+      setStartDate(today);
+      setEndDate(today);
       setVendorSearchQuery(""); // 모달이 열릴 때 검색어 초기화
+      setIsSearched(false); // 조회 상태 초기화
+      // 오늘 날짜로 자동 조회
+      fetchVendors(today, today);
+      setIsSearched(true);
     } else {
       setVendors([]);
       setVendorSearchQuery(""); // 모달이 닫힐 때 검색어 초기화
+      setIsSearched(false);
     }
   }, [open]);
 
-  const fetchVendors = async () => {
+  const fetchVendors = async (fromDate?: string, toDate?: string) => {
     setLoading(true);
     try {
       const headers = getAuthHeaders();
-      const response = await fetch("/api/upload/delivery-vendors", {
+      // 기간 파라미터를 쿼리스트링으로 전달
+      const params = new URLSearchParams();
+      if (fromDate) params.append("startDate", fromDate);
+      if (toDate) params.append("endDate", toDate);
+
+      const url = `/api/upload/delivery-vendors${params.toString() ? `?${params.toString()}` : ""}`;
+      const response = await fetch(url, {
         headers,
       });
       const result = await response.json();
@@ -162,6 +178,20 @@ export default function DeliveryDownloadModal({
     } finally {
       setLoading(false);
     }
+  };
+
+  // 조회 버튼 클릭 핸들러
+  const handleSearch = () => {
+    if (!startDate || !endDate) {
+      alert("시작일과 종료일을 선택해주세요.");
+      return;
+    }
+    if (startDate > endDate) {
+      alert("시작일이 종료일보다 늦을 수 없습니다.");
+      return;
+    }
+    fetchVendors(startDate, endDate);
+    setIsSearched(true);
   };
 
   const handleDownload = async (
@@ -226,10 +256,7 @@ export default function DeliveryDownloadModal({
     }
   };
 
-  const handleDownloadSabangnetAB = async (
-    vendorName: string,
-    currentDateFilter: "3days_ago" | "yesterday" | "today" | "all",
-  ) => {
+  const handleDownloadSabangnetAB = async (vendorName: string) => {
     const downloadKey = `sabangnet_${vendorName}`;
     setDownloadingSabangnet(downloadKey);
     try {
@@ -242,7 +269,8 @@ export default function DeliveryDownloadModal({
         body: JSON.stringify({
           vendorName,
           allVendors: false,
-          dateFilter: currentDateFilter,
+          startDate,
+          endDate,
         }),
       });
 
@@ -253,15 +281,7 @@ export default function DeliveryDownloadModal({
       const checkResult = await checkResponse.json();
 
       if (!checkResult.hasData) {
-        const dateFilterLabel =
-          currentDateFilter === "3days_ago"
-            ? "3일전"
-            : currentDateFilter === "yesterday"
-              ? "어제"
-              : currentDateFilter === "today"
-                ? "오늘"
-                : "전체";
-        alert(`${dateFilterLabel} 기간에 다운로드할 데이터가 없습니다.`);
+        alert(`${startDate} ~ ${endDate} 기간에 다운로드할 데이터가 없습니다.`);
         return;
       }
 
@@ -272,7 +292,8 @@ export default function DeliveryDownloadModal({
         body: JSON.stringify({
           vendorName,
           allVendors: false,
-          dateFilter: currentDateFilter,
+          startDate,
+          endDate,
         }),
       });
 
@@ -351,7 +372,8 @@ export default function DeliveryDownloadModal({
         body: JSON.stringify({
           allVendors: true,
           activeVendorNames: activeVendorNames,
-          dateFilter: dateFilter,
+          startDate,
+          endDate,
         }),
       });
 
@@ -596,31 +618,37 @@ export default function DeliveryDownloadModal({
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <select
-                        value={dateFilter}
-                        onChange={(e) =>
-                          setDateFilter(
-                            e.target.value as
-                              | "3days_ago"
-                              | "yesterday"
-                              | "today"
-                              | "all",
-                          )
-                        }
-                        className="px-4 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      <input
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                      <span className="text-gray-500">~</span>
+                      <input
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                      <button
+                        onClick={handleSearch}
+                        disabled={loading}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-semibold transition-colors disabled:bg-gray-400"
                       >
-                        <option value="all">전체</option>
-                        <option value="3days_ago">3일전</option>
-                        <option value="yesterday">어제</option>
-                        <option value="today">오늘</option>
-                      </select>
+                        {loading ? "조회 중..." : "조회"}
+                      </button>
                       <button
                         onClick={handleDownloadAllSabangnetAB}
                         disabled={
-                          downloadingAllSabangnet || !hasActiveSabangnetButton
+                          downloadingAllSabangnet ||
+                          !hasActiveSabangnetButton ||
+                          !isSearched
                         }
                         className={`px-6 py-2 rounded-md text-sm font-semibold transition-colors flex items-center gap-2 ${
-                          downloadingAllSabangnet || !hasActiveSabangnetButton
+                          downloadingAllSabangnet ||
+                          !hasActiveSabangnetButton ||
+                          !isSearched
                             ? "bg-gray-400 cursor-not-allowed text-white"
                             : "bg-green-600 hover:bg-green-700 text-white"
                         }`}
@@ -692,14 +720,12 @@ export default function DeliveryDownloadModal({
                         return (
                           <button
                             onClick={() =>
-                              handleDownloadSabangnetAB(
-                                vendor.vendorName,
-                                dateFilter,
-                              )
+                              handleDownloadSabangnetAB(vendor.vendorName)
                             }
                             disabled={
                               downloadingSabangnet === sabangDownloadKey ||
-                              !canDownloadSabang
+                              !canDownloadSabang ||
+                              !isSearched
                             }
                             className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors flex items-center gap-2 ${
                               downloadingSabangnet === sabangDownloadKey
