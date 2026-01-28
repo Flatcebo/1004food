@@ -16,6 +16,26 @@ function getKoreaTime(): Date {
   return koreaTime;
 }
 
+// 배송메시지에서 ★ 뒤의 숫자를 추출하는 함수
+// ★ 뒤에는 무조건 숫자만 있음 (예: ★123456)
+function extractOrderNumberFromDeliveryMessage(message: string): string | null {
+  if (!message || typeof message !== "string") {
+    return null;
+  }
+
+  const trimmedMessage = message.trim();
+
+  // ★ 뒤에 오는 모든 숫자 추출
+  // ★123456 또는 ★ 123456 같은 형식
+  const pattern = /★\s*(\d+)/;
+  const match = trimmedMessage.match(pattern);
+  if (match && match[1]) {
+    return match[1];
+  }
+
+  return null;
+}
+
 export async function POST(request: NextRequest) {
   try {
     // company_id 추출
@@ -23,7 +43,7 @@ export async function POST(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -33,7 +53,7 @@ export async function POST(request: NextRequest) {
     if (!file) {
       return NextResponse.json(
         {success: false, error: "파일이 제공되지 않았습니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -45,7 +65,7 @@ export async function POST(request: NextRequest) {
     if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
       return NextResponse.json(
         {success: false, error: "워크시트가 없습니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -62,7 +82,7 @@ export async function POST(request: NextRequest) {
     if (!raw.length || raw[0].length === 0) {
       return NextResponse.json(
         {success: false, error: "파일이 비어있거나 헤더가 없습니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -93,12 +113,12 @@ export async function POST(request: NextRequest) {
     const headerRowIndex = detectHeaderRowByRequiredHeaders(
       raw,
       requiredHeaders,
-      6
+      6,
     );
     const headers = raw[headerRowIndex] as string[];
 
     console.log(
-      `헤더 행 감지: ${headerRowIndex + 1}행 (인덱스: ${headerRowIndex})`
+      `헤더 행 감지: ${headerRowIndex + 1}행 (인덱스: ${headerRowIndex})`,
     );
     console.log("엑셀 헤더:", headers);
 
@@ -106,18 +126,35 @@ export async function POST(request: NextRequest) {
     let orderNumberIdx = -1;
     let trackingNumberIdx = -1;
     let carrierIdx = -1;
+    let deliveryMessageIdx = -1; // 배송메시지 헤더 인덱스
 
     // 첫 번째 패스: 정확한 매칭 우선 (운송장번호, 주문번호 등)
     headers.forEach((header, index) => {
       const headerStr = String(header).trim();
       const normalized = normalizeHeader(headerStr);
 
+      // 배송메시지 정확한 매칭
+      if (deliveryMessageIdx === -1) {
+        if (
+          normalized === "배송메시지" ||
+          normalized === "배송메세지" ||
+          normalized === "배송요청" ||
+          normalized === "요청사항" ||
+          normalized === "배송요청사항"
+        ) {
+          deliveryMessageIdx = index;
+          console.log(
+            `배송메시지 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`,
+          );
+        }
+      }
+
       // 주문번호 정확한 매칭
       if (orderNumberIdx === -1) {
         if (normalized === "주문번호" || normalized === "ordernumber") {
           orderNumberIdx = index;
           console.log(
-            `주문번호 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`
+            `주문번호 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`,
           );
         }
       }
@@ -132,7 +169,7 @@ export async function POST(request: NextRequest) {
         ) {
           trackingNumberIdx = index;
           console.log(
-            `운송장번호 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`
+            `운송장번호 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`,
           );
         }
       }
@@ -142,7 +179,7 @@ export async function POST(request: NextRequest) {
         if (normalized === "택배사" || normalized === "carrier") {
           carrierIdx = index;
           console.log(
-            `택배사 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`
+            `택배사 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`,
           );
         }
       }
@@ -153,6 +190,21 @@ export async function POST(request: NextRequest) {
       const headerStr = String(header).trim();
       const normalized = normalizeHeader(headerStr);
 
+      // 배송메시지 포함 검사
+      if (deliveryMessageIdx === -1) {
+        if (
+          (normalized.includes("배송") && normalized.includes("메시지")) ||
+          (normalized.includes("배송") && normalized.includes("메세지")) ||
+          normalized.includes("배송요청") ||
+          normalized.includes("요청사항")
+        ) {
+          deliveryMessageIdx = index;
+          console.log(
+            `배송메시지 헤더 발견 (포함 검사): "${headerStr}" (인덱스: ${index})`,
+          );
+        }
+      }
+
       // 주문번호 포함 검사
       if (orderNumberIdx === -1) {
         if (
@@ -161,7 +213,7 @@ export async function POST(request: NextRequest) {
         ) {
           orderNumberIdx = index;
           console.log(
-            `주문번호 헤더 발견 (포함 검사): "${headerStr}" (인덱스: ${index})`
+            `주문번호 헤더 발견 (포함 검사): "${headerStr}" (인덱스: ${index})`,
           );
         }
       }
@@ -179,7 +231,7 @@ export async function POST(request: NextRequest) {
         ) {
           trackingNumberIdx = index;
           console.log(
-            `운송장 헤더 발견 (포함 검사): "${headerStr}" (인덱스: ${index})`
+            `운송장 헤더 발견 (포함 검사): "${headerStr}" (인덱스: ${index})`,
           );
         }
       }
@@ -193,24 +245,24 @@ export async function POST(request: NextRequest) {
         ) {
           carrierIdx = index;
           console.log(
-            `택배사 헤더 발견 (포함 검사): "${headerStr}" (인덱스: ${index})`
+            `택배사 헤더 발견 (포함 검사): "${headerStr}" (인덱스: ${index})`,
           );
         }
       }
     });
 
-    // 필수 헤더 검증
-    if (orderNumberIdx === -1) {
+    // 필수 헤더 검증: 배송메시지 또는 주문번호 중 하나는 필수
+    if (deliveryMessageIdx === -1 && orderNumberIdx === -1) {
       return NextResponse.json(
         {
           success: false,
-          error: `주문번호 헤더를 찾을 수 없습니다. '주문번호' 헤더가 필요합니다.\n발견된 헤더: ${headers.join(
-            ", "
+          error: `주문번호 또는 배송메시지 헤더를 찾을 수 없습니다. '주문번호' 또는 '배송메시지' 헤더 중 하나가 필요합니다.\n발견된 헤더: ${headers.join(
+            ", ",
           )}`,
           foundHeaders: headers,
-          missingHeaders: ["주문번호"],
+          missingHeaders: ["주문번호", "배송메시지"],
         },
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -219,12 +271,12 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error: `운송장 헤더를 찾을 수 없습니다. '운송장', '운송장번호', 또는 '등기번호' 헤더가 필요합니다.\n발견된 헤더: ${headers.join(
-            ", "
+            ", ",
           )}`,
           foundHeaders: headers,
           missingHeaders: ["운송장", "운송장번호", "등기번호"],
         },
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -233,17 +285,19 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           error: `택배사 헤더를 찾을 수 없습니다. '택배사' 헤더가 필요합니다.\n발견된 헤더: ${headers.join(
-            ", "
+            ", ",
           )}`,
           foundHeaders: headers,
           missingHeaders: ["택배사"],
         },
-        {status: 400}
+        {status: 400},
       );
     }
 
     console.log("헤더 매핑 완료:", {
-      주문번호: headers[orderNumberIdx],
+      배송메시지:
+        deliveryMessageIdx !== -1 ? headers[deliveryMessageIdx] : "없음",
+      주문번호: orderNumberIdx !== -1 ? headers[orderNumberIdx] : "없음",
       운송장: headers[trackingNumberIdx],
       택배사: headers[carrierIdx],
     });
@@ -259,17 +313,36 @@ export async function POST(request: NextRequest) {
       const row = raw[i];
       if (!row || row.length === 0) continue;
 
-      const orderNumber = String(row[orderNumberIdx] || "").trim();
+      // 1순위: 배송메시지에서 ★주문번호 또는 ★내부코드 추출
+      let orderNumber = "";
+      if (deliveryMessageIdx !== -1) {
+        const deliveryMessage = String(row[deliveryMessageIdx] || "").trim();
+        const extractedNumber =
+          extractOrderNumberFromDeliveryMessage(deliveryMessage);
+        if (extractedNumber) {
+          orderNumber = extractedNumber;
+          console.log(
+            `행 ${i + 1}: 배송메시지에서 주문번호 추출: "${extractedNumber}" (원본: "${deliveryMessage}")`,
+          );
+        }
+      }
+
+      // 2순위: 주문번호 헤더에서 읽기 (배송메시지에서 추출하지 못한 경우)
+      if (!orderNumber && orderNumberIdx !== -1) {
+        orderNumber = String(row[orderNumberIdx] || "").trim();
+      }
+
       const trackingNumber = String(row[trackingNumberIdx] || "").trim();
       const carrier = normalizeCarrierName(
-        String(row[carrierIdx] || "").trim()
+        String(row[carrierIdx] || "").trim(),
       );
 
       // 필수 값 검증
       if (!orderNumber) {
         errors.push({
           row: i + 1,
-          error: "주문번호가 비어있습니다.",
+          error:
+            "주문번호를 찾을 수 없습니다. (배송메시지 또는 주문번호 헤더에서)",
         });
         continue;
       }
@@ -305,7 +378,7 @@ export async function POST(request: NextRequest) {
           error: "처리할 유효한 데이터가 없습니다.",
           errors,
         },
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -338,10 +411,10 @@ export async function POST(request: NextRequest) {
 
       // 배치 조회: 내부코드로 한 번에 조회 (주문번호로 찾지 못한 항목만)
       const foundOrderNumbers = new Set(
-        ordersByOrderNumber.map((o: any) => o.order_number)
+        ordersByOrderNumber.map((o: any) => o.order_number),
       );
       const notFoundByOrderNumber = orderNumbers.filter(
-        (on) => !foundOrderNumbers.has(on)
+        (on) => !foundOrderNumbers.has(on),
       );
 
       let ordersByInternalCode: any[] = [];
@@ -501,7 +574,7 @@ export async function POST(request: NextRequest) {
         if (trackingNumber) {
           trackingNumberCounts.set(
             trackingNumber,
-            (trackingNumberCounts.get(trackingNumber) || 0) + 1
+            (trackingNumberCounts.get(trackingNumber) || 0) + 1,
           );
         }
       });
@@ -532,7 +605,7 @@ export async function POST(request: NextRequest) {
     console.error("운송장 업로드 처리 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
     );
   }
 }
