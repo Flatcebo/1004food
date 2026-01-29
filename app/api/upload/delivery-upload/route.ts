@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
     const requiredHeaders = [
       {
         name: "주문번호",
-        aliases: ["주문번호", "ordernumber", "고객주문번호"],
+        aliases: ["주문번호", "ordernumber", "고객주문번호", "자체주문번호"],
       },
       {
         name: "운송장번호",
@@ -151,7 +151,12 @@ export async function POST(request: NextRequest) {
 
       // 주문번호 정확한 매칭
       if (orderNumberIdx === -1) {
-        if (normalized === "주문번호" || normalized === "ordernumber") {
+        if (
+          normalized === "주문번호" ||
+          normalized === "ordernumber" ||
+          normalized === "자체주문번호" ||
+          normalized === "고객주문번호"
+        ) {
           orderNumberIdx = index;
           console.log(
             `주문번호 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`,
@@ -165,6 +170,8 @@ export async function POST(request: NextRequest) {
           normalized === "운송장번호" ||
           normalized === "송장번호" ||
           normalized === "등기번호" ||
+          normalized === "등기번호/송장번호" ||
+          normalized === "송장번호/등기번호" ||
           normalized === "trackingnumber"
         ) {
           trackingNumberIdx = index;
@@ -209,7 +216,9 @@ export async function POST(request: NextRequest) {
       if (orderNumberIdx === -1) {
         if (
           normalized.includes("주문번호") ||
-          normalized.includes("ordernumber")
+          normalized.includes("ordernumber") ||
+          normalized.includes("자체주문번호") ||
+          normalized.includes("고객주문번호")
         ) {
           orderNumberIdx = index;
           console.log(
@@ -226,6 +235,8 @@ export async function POST(request: NextRequest) {
           normalized.includes("송장") ||
           normalized.includes("등기번호") ||
           normalized.includes("등기") ||
+          normalized.includes("등기번호/송장번호") ||
+          normalized.includes("송장번호/등기번호") ||
           normalized.includes("trackingnumber") ||
           normalized.includes("tracking")
         ) {

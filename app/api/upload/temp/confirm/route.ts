@@ -357,8 +357,7 @@ export async function POST(request: NextRequest) {
       if (shouldFindMallIdPerRow) {
         // 온라인 유저 확인
         const isOnlineUserForMall =
-          userGrade === "온라인" ||
-          String(userGrade || "").trim() === "온라인";
+          userGrade === "온라인" || String(userGrade || "").trim() === "온라인";
 
         // 업체명 또는 쇼핑몰명 컬럼 인덱스 찾기
         const vendorIdx = headerRow.findIndex(
@@ -708,40 +707,64 @@ export async function POST(request: NextRequest) {
           rowObj["주문상태"] = "공급중";
         }
 
-        // 매핑코드 및 productId 추가 (productCodeMap, productIdMap에서 가져오기)
-        if (nameIdx !== -1) {
-          const productName = String(row[nameIdx] || "").trim();
-          if (productName) {
-            // 매핑코드 추가
-            if (productCodeMap[productName]) {
-              rowObj["매핑코드"] = productCodeMap[productName];
-            }
-            // productId 추가 (productIdMap에서 가져오기)
-            // 여러 키 변형으로 시도 (정확한 매칭, 공백 제거 등)
-            let productId = null;
+        // 매핑코드 및 productId 추가
+        // 온라인 유저: 파일에 있는 매핑코드만 사용 (상품명 기반 매핑 안 함)
+        // 일반 유저: productCodeMap, productIdMap에서 가져오기
 
-            // 1순위: 정확한 상품명으로 매칭
-            if (productIdMap[productName]) {
-              productId = productIdMap[productName];
-            } else {
-              // 2순위: 공백 제거한 상품명으로 매칭
-              const trimmedName = productName.replace(/\s+/g, "");
-              if (productIdMap[trimmedName]) {
-                productId = productIdMap[trimmedName];
+        // 매핑코드 컬럼 인덱스 찾기
+        const mappingCodeIdx = headerRow.findIndex(
+          (h: any) => h && typeof h === "string" && h === "매핑코드",
+        );
+
+        if (isOnlineUser) {
+          // 온라인 유저: 파일에 있는 매핑코드만 사용
+          // 매핑코드 컬럼이 있고 값이 있으면 그대로 사용
+          if (mappingCodeIdx !== -1) {
+            const fileMappingCode = String(row[mappingCodeIdx] || "").trim();
+            if (fileMappingCode) {
+              rowObj["매핑코드"] = fileMappingCode;
+              // productId는 나중에 DB에서 매핑코드로 조회하여 채움 (아래 배치 조회에서 처리)
+              // 상품명 기반 매핑은 하지 않음 - 2순위 없음
+            }
+            // 매핑코드가 비어있으면 자동 매핑 안 함 (productId, purchase_id 모두 null)
+          }
+          // 매핑코드 컬럼이 없으면 자동 매핑 안 함
+        } else {
+          // 일반 유저: 기존 로직 유지 (상품명 기반 매핑)
+          if (nameIdx !== -1) {
+            const productName = String(row[nameIdx] || "").trim();
+            if (productName) {
+              // 매핑코드 추가
+              if (productCodeMap[productName]) {
+                rowObj["매핑코드"] = productCodeMap[productName];
+              }
+              // productId 추가 (productIdMap에서 가져오기)
+              // 여러 키 변형으로 시도 (정확한 매칭, 공백 제거 등)
+              let productId = null;
+
+              // 1순위: 정확한 상품명으로 매칭
+              if (productIdMap[productName]) {
+                productId = productIdMap[productName];
               } else {
-                // 3순위: productIdMap의 모든 키를 순회하며 부분 매칭 시도
-                for (const [key, value] of Object.entries(productIdMap)) {
-                  const trimmedKey = key.replace(/\s+/g, "");
-                  if (trimmedKey === trimmedName || key === productName) {
-                    productId = value;
-                    break;
+                // 2순위: 공백 제거한 상품명으로 매칭
+                const trimmedName = productName.replace(/\s+/g, "");
+                if (productIdMap[trimmedName]) {
+                  productId = productIdMap[trimmedName];
+                } else {
+                  // 3순위: productIdMap의 모든 키를 순회하며 부분 매칭 시도
+                  for (const [key, value] of Object.entries(productIdMap)) {
+                    const trimmedKey = key.replace(/\s+/g, "");
+                    if (trimmedKey === trimmedName || key === productName) {
+                      productId = value;
+                      break;
+                    }
                   }
                 }
               }
-            }
 
-            if (productId) {
-              rowObj["productId"] = productId;
+              if (productId) {
+                rowObj["productId"] = productId;
+              }
             }
           }
         }
@@ -1206,15 +1229,19 @@ export async function POST(request: NextRequest) {
       // purchase_id 조회를 위한 캐시 (성능 최적화)
       const purchaseCache: {[key: string]: number | null} = {};
 
+      // 온라인 유저: 매핑코드로 productId 조회하기 위한 캐시
+      const productIdByCodeCache: {[code: string]: number | null} = {};
+
       // 모든 productId와 매핑코드를 수집하여 배치로 purchase 조회
       const productIds = new Set<number>();
       const mappingCodes = new Set<string>();
-      
+
       rowObjects.forEach((rowObj: any) => {
         if (rowObj.productId) {
-          const productId = typeof rowObj.productId === "string" 
-            ? parseInt(rowObj.productId) 
-            : rowObj.productId;
+          const productId =
+            typeof rowObj.productId === "string"
+              ? parseInt(rowObj.productId)
+              : rowObj.productId;
           if (!isNaN(productId) && productId > 0) {
             productIds.add(productId);
           }
@@ -1227,10 +1254,49 @@ export async function POST(request: NextRequest) {
         }
       });
 
+      // 온라인 유저: 매핑코드로 DB에서 상품 조회하여 productId 채우기
+      // 매핑코드가 DB에 없으면 자동 매핑 안 함 (productId null, 2순위 없음)
+      if (isOnlineUser && mappingCodes.size > 0) {
+        try {
+          const mappingCodesArray = Array.from(mappingCodes);
+          const productsByCodeForId = await sql`
+            SELECT id, code, purchase
+            FROM products
+            WHERE code = ANY(${mappingCodesArray}) AND company_id = ${companyId}
+          `;
+
+          // 매핑코드 -> productId 캐시 구축
+          productsByCodeForId.forEach((product: any) => {
+            const code = String(product.code).trim();
+            productIdByCodeCache[code] = product.id;
+          });
+
+          // rowObjects에 productId 채우기 (매핑코드가 DB에 있는 경우만)
+          rowObjects.forEach((rowObj: any) => {
+            if (rowObj.매핑코드 && !rowObj.productId) {
+              const code = String(rowObj.매핑코드).trim();
+              const productId = productIdByCodeCache[code];
+              if (productId) {
+                rowObj.productId = productId;
+                // productIds Set에도 추가 (purchase 조회에 사용)
+                productIds.add(productId);
+              }
+              // 매핑코드가 DB에 없으면 productId는 null로 유지 (자동 매핑 안 함)
+            }
+          });
+
+          console.log(
+            `🔍 [온라인 유저 매핑] 매핑코드 ${mappingCodesArray.length}개 중 ${Object.keys(productIdByCodeCache).length}개 DB 매칭 완료`,
+          );
+        } catch (error) {
+          console.error("온라인 유저 매핑코드로 productId 조회 실패:", error);
+        }
+      }
+
       // 배치로 purchase 조회
       if (productIds.size > 0 || mappingCodes.size > 0) {
         try {
-          // productId로 조회
+          // productId로 조회 (온라인 유저의 경우 위에서 채운 productId도 포함)
           if (productIds.size > 0) {
             const productIdsArray = Array.from(productIds);
             const productsResult = await sql`
@@ -1238,7 +1304,7 @@ export async function POST(request: NextRequest) {
               FROM products pr
               WHERE pr.id = ANY(${productIdsArray}) AND pr.company_id = ${companyId}
             `;
-            
+
             for (const product of productsResult) {
               if (product.purchase) {
                 const purchaseResult = await sql`
@@ -1247,13 +1313,14 @@ export async function POST(request: NextRequest) {
                   LIMIT 1
                 `;
                 if (purchaseResult.length > 0) {
-                  purchaseCache[`productId:${product.id}`] = purchaseResult[0].id;
+                  purchaseCache[`productId:${product.id}`] =
+                    purchaseResult[0].id;
                 }
               }
             }
           }
 
-          // 매핑코드로 조회
+          // 매핑코드로 조회 (온라인 유저의 경우에도 매핑코드 기반 purchase 조회)
           if (mappingCodes.size > 0) {
             const mappingCodesArray = Array.from(mappingCodes);
             const productsByCodeResult = await sql`
@@ -1261,7 +1328,7 @@ export async function POST(request: NextRequest) {
               FROM products pr
               WHERE pr.code = ANY(${mappingCodesArray}) AND pr.company_id = ${companyId}
             `;
-            
+
             for (const product of productsByCodeResult) {
               if (product.purchase) {
                 const purchaseResult = await sql`
@@ -1498,9 +1565,10 @@ export async function POST(request: NextRequest) {
         // purchase_id 조회 (매핑된 상품의 매입처)
         let purchaseId: number | null = null;
         if (rowObj.productId) {
-          const productId = typeof rowObj.productId === "string" 
-            ? parseInt(rowObj.productId) 
-            : rowObj.productId;
+          const productId =
+            typeof rowObj.productId === "string"
+              ? parseInt(rowObj.productId)
+              : rowObj.productId;
           if (!isNaN(productId) && productId > 0) {
             purchaseId = purchaseCache[`productId:${productId}`] || null;
           }
