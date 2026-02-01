@@ -979,20 +979,14 @@ export async function POST(request: NextRequest) {
 
         productsById.forEach((p: any) => {
           if (p.id) {
-            // 숫자와 문자열 키 모두 저장 (타입 불일치 방지)
-            const numId = p.id;
-            const strId = String(p.id);
             if (p.sale_price !== null && p.sale_price !== undefined) {
-              productSalePriceMapById[numId] = p.sale_price;
-              productSalePriceMapById[strId] = p.sale_price;
+              productSalePriceMapById[p.id] = p.sale_price;
             }
             if (p.sabangName !== undefined) {
-              productSabangNameMapById[numId] = p.sabangName;
-              productSabangNameMapById[strId] = p.sabangName;
+              productSabangNameMapById[p.id] = p.sabangName;
             }
             if (p.vendorName !== undefined) {
-              productVendorNameMapById[numId] = p.vendorName;
-              productVendorNameMapById[strId] = p.vendorName;
+              productVendorNameMapById[p.id] = p.vendorName;
             }
           }
         });
@@ -1102,10 +1096,6 @@ export async function POST(request: NextRequest) {
             delete row["사방넷명"];
             delete row["sabangName"];
             delete row["sabang_name"];
-          }
-          // 매입처(업체명) 업데이트 - 매핑코드로 조회한 경우에도 적용
-          if (productVendorNameMap[row.매핑코드] !== undefined) {
-            row.업체명 = productVendorNameMap[row.매핑코드] || "매입처미지정";
           }
         }
       });
@@ -1226,16 +1216,16 @@ export async function POST(request: NextRequest) {
       });
 
       // 디버깅: 매입처 분류 통계 로깅
-      console.log(
-        `[외주 발주서 다운로드] 매입처 분류 통계:`,
-        vendorClassificationStats,
-      );
-      console.log(
-        `[외주 발주서 다운로드] 매입처별 주문 수:`,
-        Object.entries(vendorGroups)
-          .map(([v, r]) => `${v}: ${r.length}건`)
-          .join(", "),
-      );
+      // console.log(
+      //   `[외주 발주서 다운로드] 매입처 분류 통계:`,
+      //   vendorClassificationStats,
+      // );
+      // console.log(
+      //   `[외주 발주서 다운로드] 매입처별 주문 수:`,
+      //   Object.entries(vendorGroups)
+      //     .map(([v, r]) => `${v}: ${r.length}건`)
+      //     .join(", "),
+      // );
 
       // 헤더 Alias 조회 (모든 매입처에서 공통으로 사용)
       let headerAliases: Array<{column_key: string; aliases: string[]}> = [];
@@ -2052,20 +2042,14 @@ export async function POST(request: NextRequest) {
 
       productsById.forEach((p: any) => {
         if (p.id) {
-          // 숫자와 문자열 키 모두 저장 (타입 불일치 방지)
-          const numId = p.id;
-          const strId = String(p.id);
           if (p.sale_price !== null && p.sale_price !== undefined) {
-            productSalePriceMapById[numId] = p.sale_price;
-            productSalePriceMapById[strId] = p.sale_price;
+            productSalePriceMapById[p.id] = p.sale_price;
           }
           if (p.sabangName !== undefined) {
-            productSabangNameMapById[numId] = p.sabangName;
-            productSabangNameMapById[strId] = p.sabangName;
+            productSabangNameMapById[p.id] = p.sabangName;
           }
           if (p.vendorName !== undefined) {
-            productVendorNameMapById[numId] = p.vendorName;
-            productVendorNameMapById[strId] = p.vendorName;
+            productVendorNameMapById[p.id] = p.vendorName;
           }
         }
       });

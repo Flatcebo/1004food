@@ -22,7 +22,7 @@ interface OrderModalContentProps {
   handleDragLeave: (event: React.DragEvent<HTMLDivElement>) => void;
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   handleDeliveryFileChange: (
-    event: React.ChangeEvent<HTMLInputElement>
+    event: React.ChangeEvent<HTMLInputElement>,
   ) => void;
   handleDeliveryDrop: (event: React.DragEvent<HTMLDivElement>) => void;
   handleDeliveryDragOver: (event: React.DragEvent<HTMLDivElement>) => void;
@@ -52,7 +52,7 @@ interface OrderModalContentProps {
   handleSelectSuggest: (
     selectedName: string,
     selectedCode: string,
-    selectedItem?: any
+    selectedItem?: any,
   ) => void;
   onCloseRecommend: () => void;
 
@@ -145,7 +145,7 @@ export default function OrderModalContent({
           />
 
           {/* 테이블 데이터 표시 */}
-          {uploadedFiles.length === 0 && (
+          {/* {uploadedFiles.length === 0 && (
             <DataTable
               tableData={tableData}
               fileName={fileName}
@@ -168,7 +168,7 @@ export default function OrderModalContent({
               }}
               onCloseRecommend={onCloseRecommend}
             />
-          )}
+          )} */}
         </>
       )}
 
@@ -181,12 +181,12 @@ export default function OrderModalContent({
               isDragOver
                 ? "border-blue-600 bg-blue-100 shadow-lg scale-[1.02]"
                 : dragActive
-                ? "border-blue-500 bg-blue-50"
-                : isClicked
-                ? "border-blue-600 bg-blue-100 scale-[0.98]"
-                : isHovered
-                ? "border-blue-400 bg-blue-50"
-                : "border-gray-300 bg-gray-100"
+                  ? "border-blue-500 bg-blue-50"
+                  : isClicked
+                    ? "border-blue-600 bg-blue-100 scale-[0.98]"
+                    : isHovered
+                      ? "border-blue-400 bg-blue-50"
+                      : "border-gray-300 bg-gray-100"
             }`}
             style={{
               cursor: "pointer",
@@ -230,8 +230,8 @@ export default function OrderModalContent({
                 isDragOver
                   ? "w-20 h-20 text-blue-600 animate-bounce"
                   : isHovered
-                  ? "w-18 h-18 text-blue-500"
-                  : "w-16 h-16 text-gray-400"
+                    ? "w-18 h-18 text-blue-500"
+                    : "w-16 h-16 text-gray-400"
               }`}
             />
             <div
@@ -239,8 +239,8 @@ export default function OrderModalContent({
                 isDragOver
                   ? "text-blue-700"
                   : isHovered
-                  ? "text-blue-600"
-                  : "text-gray-600"
+                    ? "text-blue-600"
+                    : "text-gray-600"
               }`}
             >
               {isDragOver
@@ -252,20 +252,19 @@ export default function OrderModalContent({
                 isDragOver
                   ? "text-blue-600"
                   : isHovered
-                  ? "text-blue-500"
-                  : "text-gray-400"
+                    ? "text-blue-500"
+                    : "text-gray-400"
               }`}
             >
-              주문번호, 운송장번호, 택배사 헤더가 포함된 엑셀 파일(.xlsx,
-              .xls)
+              주문번호, 운송장번호, 택배사 헤더가 포함된 엑셀 파일(.xlsx, .xls)
             </div>
             <div
               className={`text-xs mt-2 transition-colors duration-200 ${
                 isDragOver
                   ? "text-blue-600 font-semibold"
                   : isHovered
-                  ? "text-blue-500"
-                  : "text-gray-400"
+                    ? "text-blue-500"
+                    : "text-gray-400"
               }`}
             >
               {isDragOver
@@ -280,15 +279,15 @@ export default function OrderModalContent({
               {fileResults.map((fileResult) => {
                 // 파일별 통계 계산
                 const resultItems = fileResult.results.filter(
-                  (result: any) => result.type === "result"
+                  (result: any) => result.type === "result",
                 );
                 const fileStats = {
                   totalCount: resultItems.length,
                   successCount: resultItems.filter(
-                    (result: any) => result.success
+                    (result: any) => result.success,
                   ).length,
                   failCount: resultItems.filter(
-                    (result: any) => !result.success
+                    (result: any) => !result.success,
                   ).length,
                 };
 
@@ -347,7 +346,9 @@ export default function OrderModalContent({
                               <div className="text-lg font-bold text-blue-600">
                                 {fileResult.finalResult.totalCount}
                               </div>
-                              <div className="text-xs text-gray-600">총 건수</div>
+                              <div className="text-xs text-gray-600">
+                                총 건수
+                              </div>
                             </div>
                             <div className="text-center">
                               <div className="text-lg font-bold text-green-600">
@@ -377,52 +378,60 @@ export default function OrderModalContent({
                               처리 결과
                             </div>
                             <div className="divide-y">
-                              {fileResult.results.map((result: any, index: number) => (
-                                <div
-                                  key={index}
-                                  className="p-3 flex items-center justify-between hover:bg-gray-50"
-                                >
-                                  <div className="flex items-center space-x-3">
-                                    {result.type === "processing" && (
-                                      <IoTime className="w-5 h-5 text-blue-500" />
-                                    )}
-                                    {result.type === "result" && result.success && (
-                                      <IoCheckmarkCircle className="w-5 h-5 text-green-500" />
-                                    )}
-                                    {result.type === "result" && !result.success && (
-                                      <IoCloseCircle className="w-5 h-5 text-red-500" />
-                                    )}
-                                    <div>
-                                      {result.type === "init" ? (
-                                        <p className="text-sm text-gray-600">
-                                          {result.message}
-                                        </p>
-                                      ) : (
-                                        <>
-                                          <p className="font-medium text-sm">
-                                            {result.orderNumber || result.message}
-                                          </p>
-                                          {result.type === "result" && result.success && (
-                                            <p className="text-xs text-gray-600">
-                                              {result.carrier} / {result.trackingNumber}
-                                            </p>
-                                          )}
-                                          {result.type === "result" && !result.success && (
-                                            <p className="text-xs text-red-600">
-                                              {result.error}
-                                            </p>
-                                          )}
-                                        </>
+                              {fileResult.results.map(
+                                (result: any, index: number) => (
+                                  <div
+                                    key={index}
+                                    className="p-3 flex items-center justify-between hover:bg-gray-50"
+                                  >
+                                    <div className="flex items-center space-x-3">
+                                      {result.type === "processing" && (
+                                        <IoTime className="w-5 h-5 text-blue-500" />
                                       )}
+                                      {result.type === "result" &&
+                                        result.success && (
+                                          <IoCheckmarkCircle className="w-5 h-5 text-green-500" />
+                                        )}
+                                      {result.type === "result" &&
+                                        !result.success && (
+                                          <IoCloseCircle className="w-5 h-5 text-red-500" />
+                                        )}
+                                      <div>
+                                        {result.type === "init" ? (
+                                          <p className="text-sm text-gray-600">
+                                            {result.message}
+                                          </p>
+                                        ) : (
+                                          <>
+                                            <p className="font-medium text-sm">
+                                              {result.orderNumber ||
+                                                result.message}
+                                            </p>
+                                            {result.type === "result" &&
+                                              result.success && (
+                                                <p className="text-xs text-gray-600">
+                                                  {result.carrier} /{" "}
+                                                  {result.trackingNumber}
+                                                </p>
+                                              )}
+                                            {result.type === "result" &&
+                                              !result.success && (
+                                                <p className="text-xs text-red-600">
+                                                  {result.error}
+                                                </p>
+                                              )}
+                                          </>
+                                        )}
+                                      </div>
                                     </div>
+                                    {result.rowNumber && (
+                                      <span className="text-xs text-gray-500">
+                                        {result.rowNumber}행
+                                      </span>
+                                    )}
                                   </div>
-                                  {result.rowNumber && (
-                                    <span className="text-xs text-gray-500">
-                                      {result.rowNumber}행
-                                    </span>
-                                  )}
-                                </div>
-                              ))}
+                                ),
+                              )}
                             </div>
                           </div>
                         )}
@@ -434,7 +443,9 @@ export default function OrderModalContent({
                       <div className="p-4 bg-red-50 border-t border-red-200">
                         <div className="flex items-center">
                           <IoCloseCircle className="w-5 h-5 text-red-500 mr-2" />
-                          <p className="text-sm text-red-700">{fileResult.error}</p>
+                          <p className="text-sm text-red-700">
+                            {fileResult.error}
+                          </p>
                         </div>
                       </div>
                     )}

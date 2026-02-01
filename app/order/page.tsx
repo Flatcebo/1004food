@@ -339,7 +339,7 @@ function OrderPageContent() {
   });
 
   // ============================================================
-  // 온라인 유저용 자동 매핑 함수 (상품코드(사방넷) 정확 매칭만, 상품명 기반 자동 매핑 안 함)
+  // 온라인 유저용 자동 매핑 함수 (상품코드(사방넷) 컬럼의 매핑코드 값으로만 매칭, 상품명 기반 자동 매핑 안 함)
   // ============================================================
   const applyAutoMappingForOnlineUser = useCallback(
     (
@@ -376,8 +376,9 @@ function OrderPageContent() {
       const fileProductCodeMap = {...file.productCodeMap};
       const fileProductIdMap = {...(file.productIdMap || {})};
 
-      // 온라인 유저: 상품코드(사방넷)로만 매핑코드 자동 매칭 (정확히 일치할 때만)
+      // 온라인 유저: 상품코드(사방넷) 컬럼에 있는 매핑코드 값으로만 매칭 (정확히 일치할 때만)
       // 상품명 기반 자동 매핑은 수행하지 않음
+      // 매핑코드가 DB에 없으면 자동 매핑하지 않음 (2순위 없음)
       if (
         sabangnetCodeIdx !== -1 &&
         file.originalData &&
@@ -393,7 +394,7 @@ function OrderPageContent() {
               // "-0001" 제거
               const cleanedCode = sabangnetCode.replace(/-0001$/, "");
               if (cleanedCode) {
-                // codes에서 코드로 상품 찾기 (정확 매칭)
+                // codes에서 매핑코드로 상품 찾기 (정확 매칭만, 2순위 없음)
                 const matchedProduct = codesData.find(
                   (p: any) => p.code && String(p.code).trim() === cleanedCode,
                 );
@@ -408,14 +409,14 @@ function OrderPageContent() {
                         fileProductIdMap[name] = matchedProduct.id;
                       }
                       console.log(
-                        `✅ [온라인] 상품코드(사방넷) 자동 매핑: "${name}" → "${matchedProduct.code}" (원본 코드: ${sabangnetCode} → ${cleanedCode})`,
+                        `✅ [온라인] 상품코드(사방넷) 매핑코드 매칭: "${name}" → "${matchedProduct.code}" (원본: ${sabangnetCode})`,
                       );
                     }
                   }
                 } else if (!matchedProduct && i <= 3) {
-                  // 일치하는 매핑코드가 없으면 자동 매핑하지 않음 (로그만 출력)
+                  // 일치하는 매핑코드가 없으면 자동 매핑하지 않음 (로그만 출력, 2순위 없음)
                   console.log(
-                    `ℹ️ [온라인] 상품코드(사방넷) "${cleanedCode}" 일치하는 매핑코드 없음 - 자동 매핑 스킵`,
+                    `ℹ️ [온라인] 상품코드(사방넷) "${cleanedCode}" DB에 일치하는 매핑코드 없음 - 자동 매핑 스킵 (2순위 없음)`,
                   );
                 }
               }
@@ -424,7 +425,7 @@ function OrderPageContent() {
         }
       }
 
-      // 온라인 유저: 테이블 데이터 업데이트 (상품코드(사방넷)로 매칭된 것만 적용)
+      // 온라인 유저: 테이블 데이터 업데이트 (상품코드(사방넷)으로 매칭된 것만 적용)
       // 상품명 기반 자동 매핑은 하지 않음
       const updatedTableData = file.tableData.map((row: any[], idx: number) => {
         if (idx === 0) return row;
@@ -437,7 +438,7 @@ function OrderPageContent() {
         let rowChanged = false;
         let updatedRow = row;
 
-        // 온라인 유저: 상품코드(사방넷)로 이미 매핑된 코드만 사용 (상품명 기반 자동 매핑 안 함)
+        // 온라인 유저: 상품코드(사방넷)으로 이미 매핑된 코드만 사용 (상품명 기반 자동 매핑 안 함)
         const codeVal = fileProductCodeMap[name] || globalProductCodeMap[name];
 
         // 매핑코드가 있는 경우에만 적용

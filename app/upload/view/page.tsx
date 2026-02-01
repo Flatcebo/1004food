@@ -135,7 +135,7 @@ function FileViewContent() {
       (h: any) =>
         h &&
         typeof h === "string" &&
-        (h.includes("수취인명") || h.includes("이름"))
+        (h.includes("수취인명") || h.includes("이름")),
     );
 
     const sortedBody = [...data.slice(1)].sort((a, b) => {
@@ -167,7 +167,7 @@ function FileViewContent() {
       (h: any) =>
         h &&
         typeof h === "string" &&
-        (h.includes("수취인명") || h.includes("이름"))
+        (h.includes("수취인명") || h.includes("이름")),
     );
 
     if (qtyIdx === -1) {
@@ -218,10 +218,10 @@ function FileViewContent() {
         setFile(updatedFile);
         sessionStorage.setItem(
           `uploadedFile_${fileId}`,
-          JSON.stringify(updatedFile)
+          JSON.stringify(updatedFile),
         );
         const updatedFiles = uploadedFiles.map((f) =>
-          f.id === fileId ? updatedFile : f
+          f.id === fileId ? updatedFile : f,
         );
         setUploadedFiles(updatedFiles);
       }
@@ -405,7 +405,7 @@ function FileViewContent() {
 
         // codes에서 매칭되는 상품 찾기 (상품명이 정확히 일치하는 경우만)
         const matchedProduct = codes.find(
-          (c: any) => c.name && String(c.name).trim() === trimmedValue
+          (c: any) => c.name && String(c.name).trim() === trimmedValue,
         );
 
         console.log("matchedProduct >>>>>>>>>>>>>>>>>>>>>>>", matchedProduct);
@@ -432,7 +432,7 @@ function FileViewContent() {
 
           console.log(
             "newProductCodeMap >>>>>>>>>>>>>>>>>>>>>>>",
-            newProductCodeMap
+            newProductCodeMap,
           );
         } else {
           // 매칭되는 상품이 없을 때: 모두 공란으로 처리
@@ -468,10 +468,10 @@ function FileViewContent() {
       setFile(updatedFile);
       sessionStorage.setItem(
         `uploadedFile_${fileId}`,
-        JSON.stringify(updatedFile)
+        JSON.stringify(updatedFile),
       );
       const updatedFiles = uploadedFiles.map((f) =>
-        f.id === fileId ? updatedFile : f
+        f.id === fileId ? updatedFile : f,
       );
       setUploadedFiles(updatedFiles);
     }
@@ -497,7 +497,7 @@ function FileViewContent() {
 
     // 선택된 행을 제외한 새로운 테이블 데이터 생성
     const newTableData = tableData.filter(
-      (row, index) => index === 0 || !selectedRows.has(index)
+      (row, index) => index === 0 || !selectedRows.has(index),
     );
 
     setTableData(newTableData);
@@ -513,10 +513,10 @@ function FileViewContent() {
       setFile(updatedFile);
       sessionStorage.setItem(
         `uploadedFile_${fileId}`,
-        JSON.stringify(updatedFile)
+        JSON.stringify(updatedFile),
       );
       const updatedFiles = uploadedFiles.map((f) =>
-        f.id === fileId ? updatedFile : f
+        f.id === fileId ? updatedFile : f,
       );
       setUploadedFiles(updatedFiles);
     }
@@ -549,10 +549,10 @@ function FileViewContent() {
       setFile(updatedFile);
       sessionStorage.setItem(
         `uploadedFile_${fileId}`,
-        JSON.stringify(updatedFile)
+        JSON.stringify(updatedFile),
       );
       const updatedFiles = uploadedFiles.map((f) =>
-        f.id === fileId ? updatedFile : f
+        f.id === fileId ? updatedFile : f,
       );
       setUploadedFiles(updatedFiles);
     }
@@ -562,7 +562,7 @@ function FileViewContent() {
   const handleCellChange = (
     rowIndex: number,
     colIndex: number,
-    value: string
+    value: string,
   ) => {
     const newTableData = [...tableData];
 
@@ -576,7 +576,7 @@ function FileViewContent() {
           h === "배송메세지" ||
           h === "배송요청" ||
           h === "요청사항" ||
-          h === "배송요청사항")
+          h === "배송요청사항"),
     );
 
     // 배송메시지 컬럼은 변경하지 않음 (자동 생성된 메시지 보호)
@@ -600,7 +600,7 @@ function FileViewContent() {
 
       // codes에서 매칭되는 상품 찾기 (상품명이 정확히 일치하는 경우만)
       const matchedProduct = codes.find(
-        (c: any) => c.name && String(c.name).trim() === trimmedValue
+        (c: any) => c.name && String(c.name).trim() === trimmedValue,
       );
 
       const headerRow = newTableData[0];
@@ -689,10 +689,10 @@ function FileViewContent() {
       setFile(updatedFile);
       sessionStorage.setItem(
         `uploadedFile_${fileId}`,
-        JSON.stringify(updatedFile)
+        JSON.stringify(updatedFile),
       );
       const updatedFiles = uploadedFiles.map((f) =>
-        f.id === fileId ? updatedFile : f
+        f.id === fileId ? updatedFile : f,
       );
       setUploadedFiles(updatedFiles);
     }
@@ -703,7 +703,7 @@ function FileViewContent() {
   const updateVendorName = (newVendorName: string) => {
     const headerRow = tableData[0];
     const vendorIdx = headerRow.findIndex(
-      (h: any) => h && typeof h === "string" && h === "업체명"
+      (h: any) => h && typeof h === "string" && h === "업체명",
     );
 
     if (vendorIdx === -1) return;
@@ -717,7 +717,7 @@ function FileViewContent() {
           h === "배송메세지" ||
           h === "배송요청" ||
           h === "요청사항" ||
-          h === "배송요청사항")
+          h === "배송요청사항"),
     );
 
     const vendorStr = newVendorName.trim();
@@ -751,10 +751,10 @@ function FileViewContent() {
       setFile(updatedFile);
       sessionStorage.setItem(
         `uploadedFile_${fileId}`,
-        JSON.stringify(updatedFile)
+        JSON.stringify(updatedFile),
       );
       const updatedFiles = uploadedFiles.map((f) =>
-        f.id === fileId ? updatedFile : f
+        f.id === fileId ? updatedFile : f,
       );
       setUploadedFiles(updatedFiles);
     }
@@ -769,11 +769,11 @@ function FileViewContent() {
     setConfirmedMallId(mallId);
     if (mallId) {
       console.log(
-        `✅ 업체명 "${selectedVendorName}" 선택됨, mall_id=${mallId}`
+        `✅ 업체명 "${selectedVendorName}" 선택됨, mall_id=${mallId}`,
       );
     } else {
       console.warn(
-        `⚠️ 업체명 "${selectedVendorName}"에 해당하는 mall_id를 찾을 수 없습니다.`
+        `⚠️ 업체명 "${selectedVendorName}"에 해당하는 mall_id를 찾을 수 없습니다.`,
       );
     }
     updateVendorName(selectedVendorName);
@@ -798,7 +798,7 @@ function FileViewContent() {
     const headerRow = tableData[0];
     const nameIdx = headerIndex.nameIdx;
     const vendorIdx = headerRow.findIndex(
-      (h: any) => h === "업체명" || h === "업체"
+      (h: any) => h === "업체명" || h === "업체",
     );
     const mappingIdx = headerRow.findIndex((h: any) => h === "매핑코드");
     const dataRows = tableData.slice(1);
@@ -819,10 +819,10 @@ function FileViewContent() {
       const codeFromTable =
         mappingIdx !== -1 ? String(row[mappingIdx] || "").trim() : "";
       const codeFromCodes = codes.find(
-        (c: any) => c.name === trimmedName
+        (c: any) => c.name === trimmedName,
       )?.code;
       const codeFromOrigin = codesOriginRef.current.find(
-        (c) => c.name === trimmedName
+        (c) => c.name === trimmedName,
       )?.code;
 
       const hasMappingCode = !!(
@@ -857,7 +857,8 @@ function FileViewContent() {
       try {
         // 먼저 codes 배열에서 매핑코드로 상품 찾기
         const productFromCodes = codes.find(
-          (p: any) => String(p.code || "").trim() === String(mappingCode).trim()
+          (p: any) =>
+            String(p.code || "").trim() === String(mappingCode).trim(),
         );
 
         // codes 배열에서 찾은 상품의 ID가 있으면 ID로 조회, 없으면 매핑코드로 조회
@@ -868,7 +869,7 @@ function FileViewContent() {
           if (result.success && result.data) {
             // ID로 상품 찾기
             const product = result.data.find(
-              (p: any) => p.id === productFromCodes.id
+              (p: any) => p.id === productFromCodes.id,
             );
 
             if (product) {
@@ -906,7 +907,7 @@ function FileViewContent() {
               });
             } else {
               alert(
-                `상품 ID "${productFromCodes.id}"에 해당하는 상품을 찾을 수 없습니다.`
+                `상품 ID "${productFromCodes.id}"에 해당하는 상품을 찾을 수 없습니다.`,
               );
             }
           } else {
@@ -923,12 +924,12 @@ function FileViewContent() {
               (p: any) =>
                 String(p.code || "").trim() === String(mappingCode).trim() &&
                 p.postType &&
-                String(p.postType).trim() !== ""
+                String(p.postType).trim() !== "",
             );
             const productsWithoutPostType = result.data.filter(
               (p: any) =>
                 String(p.code || "").trim() === String(mappingCode).trim() &&
-                (!p.postType || String(p.postType).trim() === "")
+                (!p.postType || String(p.postType).trim() === ""),
             );
             const product =
               productsWithPostType.length > 0
@@ -970,7 +971,7 @@ function FileViewContent() {
               });
             } else {
               alert(
-                `매핑코드 "${mappingCode}"에 해당하는 상품을 찾을 수 없습니다.`
+                `매핑코드 "${mappingCode}"에 해당하는 상품을 찾을 수 없습니다.`,
               );
             }
           } else {
@@ -982,7 +983,7 @@ function FileViewContent() {
         alert("상품 정보를 가져오는 중 오류가 발생했습니다.");
       }
     },
-    [codes]
+    [codes],
   );
 
   // 상품 수정 모달 닫기
@@ -1003,15 +1004,14 @@ function FileViewContent() {
         values: {...prev.values, [key]: value},
       }));
     },
-    []
+    [],
   );
 
   // 상품 수정 저장
   const handleSaveProductEdit = useCallback(async () => {
     const {transformProductData} = await import("@/utils/product");
-    const {createProduct, fetchProducts, batchUpdateProducts} = await import(
-      "@/utils/api"
-    );
+    const {createProduct, fetchProducts, batchUpdateProducts} =
+      await import("@/utils/api");
     const values = productEditModal.values;
 
     // 필수값: name, code는 필수
@@ -1131,7 +1131,7 @@ function FileViewContent() {
       try {
         sessionStorage.setItem(
           `uploadedFile_${fileId}`,
-          JSON.stringify(updatedFile)
+          JSON.stringify(updatedFile),
         );
         console.log("sessionStorage 업데이트 성공");
       } catch (error) {
@@ -1141,7 +1141,7 @@ function FileViewContent() {
       }
       // store의 uploadedFiles도 업데이트
       const updatedFiles = uploadedFiles.map((f) =>
-        f.id === fileId ? updatedFile : f
+        f.id === fileId ? updatedFile : f,
       );
       setUploadedFiles(updatedFiles);
       console.log("store 업데이트 성공");
@@ -1214,7 +1214,7 @@ function FileViewContent() {
           // 이미 저장된 파일인 경우 특별 처리
           if (result.error === "ALREADY_SAVED") {
             alert(
-              "이 파일은 이미 저장되었습니다.\n저장된 데이터 목록을 확인해주세요."
+              "이 파일은 이미 저장되었습니다.\n저장된 데이터 목록을 확인해주세요.",
             );
             // sessionStorage에서 해당 파일 제거
             sessionStorage.removeItem(`uploadedFile_${fileId}`);
@@ -1226,7 +1226,7 @@ function FileViewContent() {
           // 파일을 찾을 수 없는 경우
           if (response.status === 404) {
             alert(
-              "파일을 찾을 수 없습니다.\n파일이 삭제되었거나 이미 저장되었을 수 있습니다.\n저장된 데이터 목록을 확인해주세요."
+              "파일을 찾을 수 없습니다.\n파일이 삭제되었거나 이미 저장되었을 수 있습니다.\n저장된 데이터 목록을 확인해주세요.",
             );
             // sessionStorage에서 해당 파일 제거
             sessionStorage.removeItem(`uploadedFile_${fileId}`);
@@ -1263,7 +1263,7 @@ function FileViewContent() {
             fileData: updatedFile,
             vendorName: confirmedVendorName.trim() || vendorName.trim() || null, // 업체명 명시적으로 전달 (드롭다운에서 선택한 값 우선)
           },
-          window.location.origin
+          window.location.origin,
         );
 
         // 메시지가 전송될 시간을 주고 새창 닫기
@@ -1360,13 +1360,13 @@ function FileViewContent() {
           try {
             sessionStorage.setItem(
               `uploadedFile_${fileId}`,
-              JSON.stringify(updatedFile)
+              JSON.stringify(updatedFile),
             );
           } catch (error) {
             console.error("sessionStorage 저장 실패:", error);
           }
           const updatedFiles = uploadedFiles.map((f) =>
-            f.id === fileId ? updatedFile : f
+            f.id === fileId ? updatedFile : f,
           );
           setUploadedFiles(updatedFiles);
         }
@@ -1390,7 +1390,7 @@ function FileViewContent() {
       if (hasChanges) {
         // 모든 행이 복원되었는지 확인
         const remainingConvertedRows = rowsToConvert.filter(
-          (rowIndex) => originalProductDataRef.current[rowIndex]
+          (rowIndex) => originalProductDataRef.current[rowIndex],
         );
         if (remainingConvertedRows.length === 0) {
           setIsQuantityConverted(false);
@@ -1406,13 +1406,13 @@ function FileViewContent() {
           try {
             sessionStorage.setItem(
               `uploadedFile_${fileId}`,
-              JSON.stringify(updatedFile)
+              JSON.stringify(updatedFile),
             );
           } catch (error) {
             console.error("sessionStorage 저장 실패:", error);
           }
           const updatedFiles = uploadedFiles.map((f) =>
-            f.id === fileId ? updatedFile : f
+            f.id === fileId ? updatedFile : f,
           );
           setUploadedFiles(updatedFiles);
         }
@@ -1483,14 +1483,14 @@ function FileViewContent() {
           // 2순위: 상품명으로 찾기
           if (!matchedProduct) {
             matchedProduct = codes.find(
-              (c: any) => c.name && String(c.name).trim() === productName
+              (c: any) => c.name && String(c.name).trim() === productName,
             );
           }
 
           // 3순위: 매핑코드로 찾기
           if (!matchedProduct && mappingCode) {
             matchedProduct = codes.find(
-              (c: any) => c.code && String(c.code).trim() === mappingCode
+              (c: any) => c.code && String(c.code).trim() === mappingCode,
             );
           }
 
@@ -1519,12 +1519,12 @@ function FileViewContent() {
 
     // 상품명을 정렬하여 텍스트 생성
     const sortedProducts = Object.keys(productCounts).sort((a, b) =>
-      a.localeCompare(b, "ko-KR")
+      a.localeCompare(b, "ko-KR"),
     );
 
     // 텍스트 생성: "상품명 - n" 형식으로 줄바꿈 처리
     const productLines = sortedProducts.map(
-      (productName) => `${productName} - ${productCounts[productName]}`
+      (productName) => `${productName} - ${productCounts[productName]}`,
     );
 
     // 최종 텍스트: 최상단에 월/일, 중간에 상품 목록, 최하단에 총 n건
@@ -1624,7 +1624,7 @@ function FileViewContent() {
       if (mallId) {
         setConfirmedMallId(mallId);
         console.log(
-          `✅ mallMap 로드 후 mallId 복원: vendorName="${confirmedVendorName}", mallId=${mallId}`
+          `✅ mallMap 로드 후 mallId 복원: vendorName="${confirmedVendorName}", mallId=${mallId}`,
         );
       }
     }
@@ -1681,7 +1681,7 @@ function FileViewContent() {
 
             const response = await fetch(
               `/api/upload/temp/list?sessionId=${sessionId}`,
-              {headers: listHeaders}
+              {headers: listHeaders},
             );
             const result = await response.json();
             if (result.success && result.data) {
@@ -1691,7 +1691,7 @@ function FileViewContent() {
                 // sessionStorage와 store에 저장
                 sessionStorage.setItem(
                   `uploadedFile_${fileId}`,
-                  JSON.stringify(serverFile)
+                  JSON.stringify(serverFile),
                 );
                 setUploadedFiles(result.data);
               }
@@ -1770,7 +1770,7 @@ function FileViewContent() {
                 h === "배송메세지" ||
                 h === "배송요청" ||
                 h === "요청사항" ||
-                h === "배송요청사항")
+                h === "배송요청사항"),
           );
 
           if (messageIdx !== -1) {
@@ -1793,7 +1793,7 @@ function FileViewContent() {
           let updatedTableData = generateAutoDeliveryMessage(
             parsedFile.tableData,
             originalMessagesRef.current,
-            user?.grade
+            user?.grade,
           );
 
           // productCodeMap에 있는 매핑코드를 tableData의 매핑코드 컬럼에 반영
@@ -1804,7 +1804,7 @@ function FileViewContent() {
           ) {
             const nameIdx = parsedFile.headerIndex.nameIdx;
             const mappingIdx = headerRow.findIndex(
-              (h: any) => h === "매핑코드"
+              (h: any) => h === "매핑코드",
             );
             const typeIdx = headerRow.findIndex((h: any) => h === "내외주");
             const postTypeIdx = headerRow.findIndex((h: any) => h === "택배사");
@@ -1834,12 +1834,12 @@ function FileViewContent() {
                 if (selectedProductId !== undefined) {
                   // 사용자가 선택한 상품 ID가 있으면 그것으로 정확히 찾기 (무조건 사용자가 선택한 상품만 사용)
                   matchedProduct = codesToUse.find(
-                    (c: any) => c.id === selectedProductId
+                    (c: any) => c.id === selectedProductId,
                   );
                 } else {
                   // 사용자가 선택하지 않은 경우에만 상품명이 정확히 일치할 때만 자동 매칭
                   matchedProduct = codesToUse.find(
-                    (c: any) => c.name === trimmedName
+                    (c: any) => c.name === trimmedName,
                   );
                   // 자동 매칭된 상품이 있으면 productIdMap에 저장
                   if (matchedProduct?.id) {
@@ -1855,7 +1855,7 @@ function FileViewContent() {
                 // 사용자가 선택한 상품이 있거나 상품명이 정확히 일치하는 경우에만 매핑코드 사용
                 if (mappingIdx !== -1) {
                   const currentMappingCode = String(
-                    newRow[mappingIdx] || ""
+                    newRow[mappingIdx] || "",
                   ).trim();
                   let newMappingCode = null;
 
@@ -1890,7 +1890,7 @@ function FileViewContent() {
                 }
 
                 return rowChanged ? newRow : row;
-              }
+              },
             );
           }
 
@@ -1916,7 +1916,7 @@ function FileViewContent() {
           if (parsedFile.mallId) {
             setConfirmedMallId(parsedFile.mallId);
             console.log(
-              `✅ 파일 로드 시 mallId 복원: parsedFile.mallId=${parsedFile.mallId}`
+              `✅ 파일 로드 시 mallId 복원: parsedFile.mallId=${parsedFile.mallId}`,
             );
           } else if (
             parsedFile.vendorName &&
@@ -1926,13 +1926,13 @@ function FileViewContent() {
             const foundMallId = mallMap[parsedFile.vendorName];
             setConfirmedMallId(foundMallId);
             console.log(
-              `✅ 파일 로드 시 mallMap에서 mallId 찾음: vendorName="${parsedFile.vendorName}", mallId=${foundMallId}`
+              `✅ 파일 로드 시 mallMap에서 mallId 찾음: vendorName="${parsedFile.vendorName}", mallId=${foundMallId}`,
             );
           } else if (parsedFile.vendorName) {
             console.log(
               `⚠️ 파일 로드 시 mallId를 찾을 수 없음: vendorName="${
                 parsedFile.vendorName
-              }", mallMap 크기=${Object.keys(mallMap).length}`
+              }", mallMap 크기=${Object.keys(mallMap).length}`,
             );
           }
         }
@@ -1942,8 +1942,8 @@ function FileViewContent() {
           storedFile
             ? "sessionStorage"
             : uploadedFiles.find((f) => f.id === fileId)
-            ? "store"
-            : "server"
+              ? "store"
+              : "server",
         );
       }
     };
@@ -2010,12 +2010,12 @@ function FileViewContent() {
         if (selectedProductId !== undefined) {
           // 사용자가 선택한 상품 ID가 있으면 그것으로 정확히 찾기 (무조건 사용자가 선택한 상품만 사용)
           matchedProduct = codesRef.current.find(
-            (c: any) => c.id === selectedProductId
+            (c: any) => c.id === selectedProductId,
           );
         } else {
           // 사용자가 선택하지 않은 경우에만 상품명이 정확히 일치할 때만 자동 매칭
           matchedProduct = codesRef.current.find(
-            (c: any) => c.name === trimmedName
+            (c: any) => c.name === trimmedName,
           );
           // 자동 매칭된 상품이 있으면 productIdMap에 저장
           if (matchedProduct?.id) {
@@ -2085,10 +2085,10 @@ function FileViewContent() {
         setFile(updatedFile);
         sessionStorage.setItem(
           `uploadedFile_${fileId}`,
-          JSON.stringify(updatedFile)
+          JSON.stringify(updatedFile),
         );
         const updatedFiles = uploadedFiles.map((f) =>
-          f.id === fileId ? updatedFile : f
+          f.id === fileId ? updatedFile : f,
         );
         setUploadedFiles(updatedFiles);
       }
@@ -2137,7 +2137,7 @@ function FileViewContent() {
             mappingIdx !== -1 ? String(row[mappingIdx] || "").trim() : "";
           if (!tableMappingCode) {
             const matchedProduct = codesOriginRef.current.find(
-              (c) => c.name && String(c.name).trim() === trimmedName
+              (c) => c.name && String(c.name).trim() === trimmedName,
             );
             if (matchedProduct?.code) {
               updatedProductCodeMap[trimmedName] = matchedProduct.code;
@@ -2155,12 +2155,12 @@ function FileViewContent() {
         if (selectedProductId !== undefined) {
           // 사용자가 선택한 상품 ID가 있으면 그것으로 정확히 찾기 (무조건 사용자가 선택한 상품만 사용)
           matchedProduct = codesOriginRef.current.find(
-            (c: any) => c.id === selectedProductId
+            (c: any) => c.id === selectedProductId,
           );
         } else {
           // 사용자가 선택하지 않은 경우에만 상품명이 정확히 일치할 때만 자동 매칭
           matchedProduct = codesOriginRef.current.find(
-            (c: any) => c.name === trimmedName
+            (c: any) => c.name === trimmedName,
           );
           // 자동 매칭된 상품이 있으면 productIdMap에 저장
           if (matchedProduct?.id) {
@@ -2237,10 +2237,10 @@ function FileViewContent() {
           setFile(updatedFile);
           sessionStorage.setItem(
             `uploadedFile_${fileId}`,
-            JSON.stringify(updatedFile)
+            JSON.stringify(updatedFile),
           );
           const updatedFiles = uploadedFiles.map((f) =>
-            f.id === fileId ? updatedFile : f
+            f.id === fileId ? updatedFile : f,
           );
           setUploadedFiles(updatedFiles);
         }
@@ -2450,7 +2450,7 @@ function FileViewContent() {
                     (h: any) =>
                       h &&
                       typeof h === "string" &&
-                      (h.includes("수취인명") || h.includes("이름"))
+                      (h.includes("수취인명") || h.includes("이름")),
                   );
 
                   // 편집 모드가 아닐 때만 정렬, 편집 모드일 때는 원본 순서 유지
@@ -2467,7 +2467,7 @@ function FileViewContent() {
                           const prodB = b.row[productNameIdx] || "";
                           const prodCompare = String(prodA).localeCompare(
                             String(prodB),
-                            "ko-KR"
+                            "ko-KR",
                           );
                           if (prodCompare !== 0) return prodCompare;
                           // 상품명 동일하면 수취인명 or 이름 기준
@@ -2476,33 +2476,33 @@ function FileViewContent() {
                             const recB = b.row[receiverIdx] || "";
                             return String(recA).localeCompare(
                               String(recB),
-                              "ko-KR"
+                              "ko-KR",
                             );
                           }
                           return 0;
                         });
                   const headerRow = tableData[0];
                   const mappingIdx = headerRow.findIndex(
-                    (h: any) => h === "매핑코드"
+                    (h: any) => h === "매핑코드",
                   );
                   const typeIdx = headerRow.findIndex(
-                    (h: any) => h === "내외주"
+                    (h: any) => h === "내외주",
                   );
                   const postTypeIdx = headerRow.findIndex(
-                    (h: any) => h === "택배사"
+                    (h: any) => h === "택배사",
                   );
                   const originalRowIndexIdx = headerRow.findIndex(
-                    (h: any) => h === "_originalRowIndex"
+                    (h: any) => h === "_originalRowIndex",
                   );
                   const vendorIdx = headerRow.findIndex(
-                    (h: any) => h === "업체명" || h === "업체"
+                    (h: any) => h === "업체명" || h === "업체",
                   );
                   const qtyIdx = headerRow.findIndex((h: any) => h === "수량");
                   const receiverNameIdx = headerRow.findIndex(
                     (h: any) =>
                       h &&
                       typeof h === "string" &&
-                      (h.includes("수취인명") || h === "이름")
+                      (h.includes("수취인명") || h === "이름"),
                   );
                   const ordererNameIdx = headerRow.findIndex(
                     (h: any) =>
@@ -2510,10 +2510,11 @@ function FileViewContent() {
                       typeof h === "string" &&
                       (h === "주문자명" ||
                         h === "주문자" ||
-                        h === "주문자 이름")
+                        h === "주문자 이름"),
                   );
                   const addressIdx = headerRow.findIndex(
-                    (h: any) => h && typeof h === "string" && h.includes("주소")
+                    (h: any) =>
+                      h && typeof h === "string" && h.includes("주소"),
                   );
                   const duplicateReceiverSet = (() => {
                     const set = new Set<string>();
@@ -2521,7 +2522,7 @@ function FileViewContent() {
                     const counts: {[key: string]: number} = {};
                     tableData.slice(1).forEach((row) => {
                       const receiverValue = String(
-                        row?.[receiverNameIdx] ?? ""
+                        row?.[receiverNameIdx] ?? "",
                       ).trim();
                       if (!receiverValue) return;
                       counts[receiverValue] = (counts[receiverValue] || 0) + 1;
@@ -2537,7 +2538,7 @@ function FileViewContent() {
                     const counts: {[key: string]: number} = {};
                     tableData.slice(1).forEach((row) => {
                       const addressValue = String(
-                        row?.[addressIdx] ?? ""
+                        row?.[addressIdx] ?? "",
                       ).trim();
                       if (!addressValue) return;
                       counts[addressValue] = (counts[addressValue] || 0) + 1;
@@ -2582,9 +2583,11 @@ function FileViewContent() {
                         matchedProduct =
                           codes.find((c: any) => c.id === selectedProductId) ||
                           codesOriginRef.current.find(
-                            (c: any) => c.id === selectedProductId
+                            (c: any) => c.id === selectedProductId,
                           );
                       }
+
+                      // console.log("matchedProduct", matchedProduct);
 
                       // 매핑코드 가져오기 (우선순위: productIdMap으로 찾은 상품 > productCodeMap > 테이블 컬럼 > codes)
                       if (matchedProduct?.code) {
@@ -2597,11 +2600,11 @@ function FileViewContent() {
                             : "") ||
                           codes.find(
                             (c: any) =>
-                              c.name && String(c.name).trim() === trimmedName
+                              c.name && String(c.name).trim() === trimmedName,
                           )?.code ||
                           codesOriginRef.current.find(
                             (c) =>
-                              c.name && String(c.name).trim() === trimmedName
+                              c.name && String(c.name).trim() === trimmedName,
                           )?.code ||
                           "";
                       }
@@ -2725,7 +2728,7 @@ function FileViewContent() {
                                         handleCellChange(
                                           originalIdx,
                                           j,
-                                          e.target.value
+                                          e.target.value,
                                         );
                                       }}
                                       className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs"
@@ -2744,21 +2747,21 @@ function FileViewContent() {
                                         product =
                                           codes.find(
                                             (c: any) =>
-                                              c.id === selectedProductId
+                                              c.id === selectedProductId,
                                           ) ||
                                           codesOriginRef.current.find(
                                             (c: any) =>
-                                              c.id === selectedProductId
+                                              c.id === selectedProductId,
                                           );
                                       } else if (productName) {
                                         // 사용자가 선택하지 않은 경우에만 상품명이 정확히 일치할 때만 자동 매칭
                                         // codes와 codesOriginRef.current 모두 확인
                                         product =
                                           codes.find(
-                                            (c: any) => c.name === productName
+                                            (c: any) => c.name === productName,
                                           ) ||
                                           codesOriginRef.current.find(
-                                            (c: any) => c.name === productName
+                                            (c: any) => c.name === productName,
                                           );
                                       }
                                       // 매핑코드로 자동 매칭하는 것은 하지 않음 (사용자가 선택한 상품만 사용)
@@ -2792,7 +2795,7 @@ function FileViewContent() {
                                       handleCellChange(
                                         actualRowIndex,
                                         j,
-                                        e.target.value
+                                        e.target.value,
                                       );
                                     }}
                                     className="w-full px-1 py-0.5 border border-gray-300 rounded text-xs"
@@ -2806,12 +2809,12 @@ function FileViewContent() {
                                     <div>
                                       {(() => {
                                         const productNameStr = String(
-                                          cellValue || ""
+                                          cellValue || "",
                                         );
                                         // "|n세트" 패턴 찾기
                                         const setMatch =
                                           productNameStr.match(
-                                            /^(.+)\|(\d+)세트$/
+                                            /^(.+)\|(\d+)세트$/,
                                           );
                                         if (setMatch) {
                                           const [, baseName, setCount] =
@@ -2842,21 +2845,21 @@ function FileViewContent() {
                                         product =
                                           codes.find(
                                             (c: any) =>
-                                              c.id === selectedProductId
+                                              c.id === selectedProductId,
                                           ) ||
                                           codesOriginRef.current.find(
                                             (c: any) =>
-                                              c.id === selectedProductId
+                                              c.id === selectedProductId,
                                           );
                                       } else if (productName) {
                                         // 사용자가 선택하지 않은 경우에만 상품명이 정확히 일치할 때만 자동 매칭
                                         // codes와 codesOriginRef.current 모두 확인
                                         product =
                                           codes.find(
-                                            (c: any) => c.name === productName
+                                            (c: any) => c.name === productName,
                                           ) ||
                                           codesOriginRef.current.find(
-                                            (c: any) => c.name === productName
+                                            (c: any) => c.name === productName,
                                           );
                                       }
                                       // 매핑코드로 자동 매칭하는 것은 하지 않음 (사용자가 선택한 상품만 사용)
@@ -2894,21 +2897,21 @@ function FileViewContent() {
                                         product =
                                           codes.find(
                                             (c: any) =>
-                                              c.id === selectedProductId
+                                              c.id === selectedProductId,
                                           ) ||
                                           codesOriginRef.current.find(
                                             (c: any) =>
-                                              c.id === selectedProductId
+                                              c.id === selectedProductId,
                                           );
                                       } else if (productName) {
                                         // 사용자가 선택하지 않은 경우에만 상품명이 정확히 일치할 때만 자동 매칭
                                         // codes와 codesOriginRef.current 모두 확인
                                         product =
                                           codes.find(
-                                            (c: any) => c.name === productName
+                                            (c: any) => c.name === productName,
                                           ) ||
                                           codesOriginRef.current.find(
-                                            (c: any) => c.name === productName
+                                            (c: any) => c.name === productName,
                                           );
                                       }
                                       // 매핑코드로 자동 매칭하는 것은 하지 않음 (사용자가 선택한 상품만 사용)
@@ -2948,10 +2951,10 @@ function FileViewContent() {
                                             ? String(row[mappingIdx])
                                             : "") ||
                                           codes.find(
-                                            (c: any) => c.name === productName
+                                            (c: any) => c.name === productName,
                                           )?.code ||
                                           codesOriginRef.current.find(
-                                            (c) => c.name === productName
+                                            (c) => c.name === productName,
                                           )?.code ||
                                           ""
                                         : "";
@@ -2965,21 +2968,21 @@ function FileViewContent() {
                                         product =
                                           codes.find(
                                             (c: any) =>
-                                              c.id === selectedProductId
+                                              c.id === selectedProductId,
                                           ) ||
                                           codesOriginRef.current.find(
                                             (c: any) =>
-                                              c.id === selectedProductId
+                                              c.id === selectedProductId,
                                           );
                                       } else if (productName) {
                                         // 사용자가 선택하지 않은 경우에만 상품명이 정확히 일치할 때만 자동 매칭
                                         // codes와 codesOriginRef.current 모두 확인
                                         product =
                                           codes.find(
-                                            (c: any) => c.name === productName
+                                            (c: any) => c.name === productName,
                                           ) ||
                                           codesOriginRef.current.find(
-                                            (c: any) => c.name === productName
+                                            (c: any) => c.name === productName,
                                           );
                                       }
                                       // 매핑코드로 자동 매칭하는 것은 하지 않음 (사용자가 선택한 상품만 사용)
@@ -3074,7 +3077,7 @@ function FileViewContent() {
                                     selectedName,
                                     selectedCode,
                                     selectedItem,
-                                    selectedId
+                                    selectedId,
                                   ) => {
                                     console.log(selectedId);
 
@@ -3107,20 +3110,20 @@ function FileViewContent() {
                                       codes.find(
                                         (c: any) =>
                                           c.name === selectedName &&
-                                          c.code === selectedCode
+                                          c.code === selectedCode,
                                       ) ||
                                       codesOriginRef.current.find(
                                         (c: any) =>
                                           c.name === selectedName &&
-                                          c.code === selectedCode
+                                          c.code === selectedCode,
                                       ) ||
                                       (selectedId !== undefined &&
                                       selectedId !== null
                                         ? codes.find(
-                                            (c: any) => c.id === selectedId
+                                            (c: any) => c.id === selectedId,
                                           ) ||
                                           codesOriginRef.current.find(
-                                            (c: any) => c.id === selectedId
+                                            (c: any) => c.id === selectedId,
                                           )
                                         : null);
 
@@ -3128,7 +3131,7 @@ function FileViewContent() {
                                     if (
                                       itemData &&
                                       !codes.find(
-                                        (c: any) => c.id === itemData.id
+                                        (c: any) => c.id === itemData.id,
                                       )
                                     ) {
                                       const updatedCodes = [...codes, itemData];
@@ -3139,7 +3142,7 @@ function FileViewContent() {
                                       // codes에 이미 있더라도 codesOriginRef에 확실히 포함되도록 함
                                       if (
                                         !codesOriginRef.current.find(
-                                          (c: any) => c.id === itemData.id
+                                          (c: any) => c.id === itemData.id,
                                         )
                                       ) {
                                         codesOriginRef.current = [
@@ -3168,13 +3171,13 @@ function FileViewContent() {
                                     // 매핑코드, 내외주, 택배사 실시간 업데이트
                                     const headerRow = tableData[0];
                                     const mappingIdx = headerRow.findIndex(
-                                      (h: any) => h === "매핑코드"
+                                      (h: any) => h === "매핑코드",
                                     );
                                     const typeIdx = headerRow.findIndex(
-                                      (h: any) => h === "내외주"
+                                      (h: any) => h === "내외주",
                                     );
                                     const postTypeIdx = headerRow.findIndex(
-                                      (h: any) => h === "택배사"
+                                      (h: any) => h === "택배사",
                                     );
 
                                     if (
@@ -3225,7 +3228,7 @@ function FileViewContent() {
                                             return newRow;
                                           }
                                           return row;
-                                        }
+                                        },
                                       );
                                       setTableData(updatedTable);
 
@@ -3249,11 +3252,11 @@ function FileViewContent() {
                                         setFile(updatedFile);
                                         sessionStorage.setItem(
                                           `uploadedFile_${fileId}`,
-                                          JSON.stringify(updatedFile)
+                                          JSON.stringify(updatedFile),
                                         );
                                         const updatedFiles = uploadedFiles.map(
                                           (f) =>
-                                            f.id === fileId ? updatedFile : f
+                                            f.id === fileId ? updatedFile : f,
                                         );
                                         setUploadedFiles(updatedFiles);
                                       }
@@ -3269,7 +3272,7 @@ function FileViewContent() {
                                     handleSelectSuggest(
                                       originalProductName,
                                       selectedCode,
-                                      selectedId
+                                      selectedId,
                                     );
                                   }}
                                   onClose={() => setRecommendIdx(null)}
@@ -3282,7 +3285,7 @@ function FileViewContent() {
                                         `/api/products/delete?id=${item.id}`,
                                         {
                                           method: "DELETE",
-                                        }
+                                        },
                                       );
 
                                       const result = await response.json();
@@ -3290,7 +3293,7 @@ function FileViewContent() {
                                       if (result.success) {
                                         // codes 상태에서 삭제된 상품 제거
                                         const updatedCodes = codes.filter(
-                                          (code: any) => code.id !== item.id
+                                          (code: any) => code.id !== item.id,
                                         );
                                         setCodes(updatedCodes);
                                         // productCodeMap에서도 제거 (상품명이 같은 경우)
@@ -3299,19 +3302,19 @@ function FileViewContent() {
                                         };
                                         delete updatedProductCodeMap[item.name];
                                         setProductCodeMap(
-                                          updatedProductCodeMap
+                                          updatedProductCodeMap,
                                         );
                                         alert("상품이 삭제되었습니다.");
                                         setRecommendIdx(null); // 모달 닫기
                                       } else {
                                         alert(
-                                          `상품 삭제 실패: ${result.error}`
+                                          `상품 삭제 실패: ${result.error}`,
                                         );
                                       }
                                     } catch (error) {
                                       console.error("상품 삭제 실패:", error);
                                       alert(
-                                        "상품 삭제 중 오류가 발생했습니다."
+                                        "상품 삭제 중 오류가 발생했습니다.",
                                       );
                                     }
                                   }}
@@ -3388,7 +3391,7 @@ function FileViewContent() {
 
               // 새로 불러온 codes에서 상품 찾기
               const newProduct = newCodes.find(
-                (c: any) => c.name === savedProductName
+                (c: any) => c.name === savedProductName,
               );
               if (newProduct && newProduct.type && newProduct.postType) {
                 // 상품명이 일치하는 행들의 내외주, 택배사 실시간 업데이트
@@ -3396,10 +3399,10 @@ function FileViewContent() {
                 const nameIdx = headerIndex?.nameIdx;
                 const typeIdx = headerRow.findIndex((h: any) => h === "내외주");
                 const postTypeIdx = headerRow.findIndex(
-                  (h: any) => h === "택배사"
+                  (h: any) => h === "택배사",
                 );
                 const mappingIdx = headerRow.findIndex(
-                  (h: any) => h === "매핑코드"
+                  (h: any) => h === "매핑코드",
                 );
 
                 if (
@@ -3448,10 +3451,10 @@ function FileViewContent() {
                     setFile(updatedFile);
                     sessionStorage.setItem(
                       `uploadedFile_${fileId}`,
-                      JSON.stringify(updatedFile)
+                      JSON.stringify(updatedFile),
                     );
                     const updatedFiles = uploadedFiles.map((f) =>
-                      f.id === fileId ? updatedFile : f
+                      f.id === fileId ? updatedFile : f,
                     );
                     setUploadedFiles(updatedFiles);
                   }
@@ -3475,11 +3478,11 @@ function FileViewContent() {
               return "";
 
             const trimmedProductName = String(
-              codeEditWindow.productName
+              codeEditWindow.productName,
             ).trim();
             const headerRow = tableData[0];
             const mappingIdx = headerRow.findIndex(
-              (h: any) => h === "매핑코드"
+              (h: any) => h === "매핑코드",
             );
 
             // 1순위: productCodeMap에서 찾기 (trim된 상품명으로)
@@ -3503,7 +3506,8 @@ function FileViewContent() {
 
             // 3순위: codes에서 name으로 찾기 (자동 매칭)
             const autoMatched = codes.find(
-              (c: any) => c.name && String(c.name).trim() === trimmedProductName
+              (c: any) =>
+                c.name && String(c.name).trim() === trimmedProductName,
             );
             return autoMatched?.code || "";
           })();
@@ -3523,10 +3527,10 @@ function FileViewContent() {
                 if (!codeItem) {
                   console.error(
                     "선택한 상품 정보가 전달되지 않았습니다:",
-                    code
+                    code,
                   );
                   alert(
-                    "상품 선택 정보를 찾을 수 없습니다. 다시 시도해주세요."
+                    "상품 선택 정보를 찾을 수 없습니다. 다시 시도해주세요.",
                   );
                   return;
                 }
@@ -3535,7 +3539,7 @@ function FileViewContent() {
                 const selectedName = selectedItem.name;
                 const selectedCode = code;
                 const originalProductName = String(
-                  codeEditWindow.productName
+                  codeEditWindow.productName,
                 ).trim();
 
                 // 디버깅: codeItem과 selectedItem 확인
@@ -3578,7 +3582,7 @@ function FileViewContent() {
                     // codes에 이미 있더라도 codesOriginRef에 확실히 포함되도록 함
                     if (
                       !codesOriginRef.current.find(
-                        (c: any) => c.id === codeItem.id
+                        (c: any) => c.id === codeItem.id,
                       )
                     ) {
                       codesOriginRef.current = [
@@ -3592,11 +3596,12 @@ function FileViewContent() {
                 // 매핑코드, 내외주, 택배사 실시간 업데이트
                 const headerRow = tableData[0];
                 const mappingIdx = headerRow.findIndex(
-                  (h: any) => h === "매핑코드"
+                  (h: any) => h === "매핑코드",
                 );
+
                 const typeIdx = headerRow.findIndex((h: any) => h === "내외주");
                 const postTypeIdx = headerRow.findIndex(
-                  (h: any) => h === "택배사"
+                  (h: any) => h === "택배사",
                 );
 
                 if (mappingIdx !== -1 || typeIdx !== -1 || postTypeIdx !== -1) {
@@ -3663,10 +3668,10 @@ function FileViewContent() {
                     setFile(updatedFile);
                     sessionStorage.setItem(
                       `uploadedFile_${fileId}`,
-                      JSON.stringify(updatedFile)
+                      JSON.stringify(updatedFile),
                     );
                     const updatedFiles = uploadedFiles.map((f) =>
-                      f.id === fileId ? updatedFile : f
+                      f.id === fileId ? updatedFile : f,
                     );
                     setUploadedFiles(updatedFiles);
                   }

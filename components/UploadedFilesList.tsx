@@ -24,9 +24,12 @@ export default function UploadedFilesList({
 }: UploadedFilesListProps) {
   const {isLoading} = useLoadingStore();
   const {confirmedFiles, confirmFile, unconfirmFile} = useUploadStore();
-  
+
   // confirmedFiles Set을 배열로 변환하여 React가 변경을 감지하도록 함
-  const confirmedFilesArray = useMemo(() => Array.from(confirmedFiles), [confirmedFiles]);
+  const confirmedFilesArray = useMemo(
+    () => Array.from(confirmedFiles),
+    [confirmedFiles],
+  );
 
   // 전체 체크 상태 계산
   const isAllChecked = useMemo(() => {
@@ -37,7 +40,7 @@ export default function UploadedFilesList({
   // 일부만 체크된 상태 계산
   const isIndeterminate = useMemo(() => {
     const checkedCount = uploadedFiles.filter((file) =>
-      confirmedFiles.has(file.id)
+      confirmedFiles.has(file.id),
     ).length;
     return checkedCount > 0 && checkedCount < uploadedFiles.length;
   }, [uploadedFiles, confirmedFiles]);
@@ -63,41 +66,39 @@ export default function UploadedFilesList({
         confirmFile(fileId);
       }
     },
-    [confirmedFiles, confirmFile, unconfirmFile]
+    [confirmedFiles, confirmFile, unconfirmFile],
   );
 
   // 선택된 파일 개수 계산
   const selectedFileCount = useMemo(() => {
     return confirmedFilesArray.filter((fileId) =>
-      uploadedFiles.some((file) => file.id === fileId)
+      uploadedFiles.some((file) => file.id === fileId),
     ).length;
   }, [uploadedFiles, confirmedFilesArray]);
 
   // 선택된 파일들 일괄 삭제 핸들러
   const handleDeleteSelected = useCallback(() => {
     const selectedFiles = uploadedFiles.filter((file) =>
-      confirmedFiles.has(file.id)
+      confirmedFiles.has(file.id),
     );
-    
+
     if (selectedFiles.length === 0) {
       alert("삭제할 파일을 선택해주세요.");
       return;
     }
 
     if (
-      confirm(
-        `선택된 ${selectedFiles.length}개의 파일을 삭제하시겠습니까?`
-      )
+      confirm(`선택된 ${selectedFiles.length}개의 파일을 삭제하시겠습니까?`)
     ) {
       selectedFiles.forEach((file) => {
         onFileDelete(file.id);
         // 삭제된 파일의 체크박스도 해제
         unconfirmFile(file.id);
       });
-      
+
       // 모든 파일이 삭제되면 데이터 리셋
       const remainingFiles = uploadedFiles.filter(
-        (f) => !confirmedFiles.has(f.id)
+        (f) => !confirmedFiles.has(f.id),
       );
       if (remainingFiles.length === 0) {
         onResetData();
@@ -106,7 +107,7 @@ export default function UploadedFilesList({
   }, [uploadedFiles, confirmedFiles, onFileDelete, onResetData, unconfirmFile]);
 
   if (isLoading) return <div>Loading...</div>;
-
+  console.log(uploadedFiles);
   return (
     <div className="w-full h-auto mt-4">
       <div className="font-bold text-lg mb-2 text-black flex flex-row justify-between items-center">
@@ -203,10 +204,10 @@ export default function UploadedFilesList({
                     {(() => {
                       const dateStr = file.createdAt || file.uploadTime;
                       if (!dateStr) return "-";
-                      
+
                       // UTC 시간을 한국 시간(KST)으로 변환
                       const date = new Date(dateStr);
-                      
+
                       // 한국 시간대(Asia/Seoul)로 변환하여 표시
                       return date.toLocaleString("ko-KR", {
                         year: "numeric",
@@ -274,13 +275,13 @@ export default function UploadedFilesList({
                           e.stopPropagation();
                           if (
                             confirm(
-                              `"${file.fileName}" 파일을 삭제하시겠습니까?`
+                              `"${file.fileName}" 파일을 삭제하시겠습니까?`,
                             )
                           ) {
                             onFileDelete(file.id);
                             // 모든 파일이 삭제되면 데이터 리셋
                             const remainingFiles = uploadedFiles.filter(
-                              (f) => f.id !== file.id
+                              (f) => f.id !== file.id,
                             );
                             if (remainingFiles.length === 0) {
                               onResetData();

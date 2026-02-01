@@ -263,7 +263,7 @@ export interface UploadStoreState {
 
   codes: Array<{name: string; code: string; [key: string]: any} | any>;
   setCodes: (
-    codes: Array<{name: string; code: string; [key: string]: any}>
+    codes: Array<{name: string; code: string; [key: string]: any}>,
   ) => void;
 
   productCodeMap: {[name: string]: string};
@@ -278,7 +278,7 @@ export interface UploadStoreState {
   setRecommendIdx: (idx: number | null) => void;
   recommendList: Array<{name: string; code: string; [key: string]: any}>;
   setRecommendList: (
-    list: Array<{name: string; code: string; [key: string]: any}>
+    list: Array<{name: string; code: string; [key: string]: any}>,
   ) => void;
 
   directInputModal: {
@@ -314,7 +314,7 @@ export interface UploadStoreState {
 
   handleInputCode: (name: string, code: string) => void;
   getSuggestions: (
-    inputValue: string
+    inputValue: string,
   ) => Promise<Array<{name: string; code: string; [key: string]: any}>>;
   handleRecommendClick: (rowIdx: number, value: string) => void;
   handleSelectSuggest: (name: string, code: string, id?: number) => void;
@@ -403,7 +403,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     set((state) => {
       // 파일 ID 중복 체크
       const existingFileIndex = state.uploadedFiles.findIndex(
-        (f) => f.id === file.id
+        (f) => f.id === file.id,
       );
 
       if (existingFileIndex !== -1) {
@@ -570,7 +570,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
 
       const response = await fetch(
         `/api/upload/temp/list?sessionId=${sessionId}`,
-        {headers}
+        {headers},
       );
 
       // 응답 상태 확인
@@ -585,7 +585,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
           const text = await response.text();
           console.error(
             `서버에서 파일 불러오기 실패: ${response.status} ${response.statusText}`,
-            text.substring(0, 200)
+            text.substring(0, 200),
           );
         }
         return;
@@ -616,7 +616,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
               existingVendorName: existingFile?.vendorName,
               finalVendorName:
                 trimmedVendorName || existingFile?.vendorName || undefined,
-            }
+            },
           );
 
           return {
@@ -643,11 +643,13 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
         const existingFileIds = Array.from(existingFilesMap.keys());
         existingFileIds.forEach((existingId) => {
           if (!serverFileIds.has(existingId)) {
-            console.log(`🗑️ 서버에 없는 파일 sessionStorage에서 삭제: ${existingId}`);
+            console.log(
+              `🗑️ 서버에 없는 파일 sessionStorage에서 삭제: ${existingId}`,
+            );
             sessionStorage.removeItem(`uploadedFile_${existingId}`);
           }
         });
-        
+
         // sessionStorage의 모든 uploadedFile 키를 확인하고 서버에 없는 것들 삭제
         try {
           const keysToRemove: string[] = [];
@@ -679,11 +681,11 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
           // sessionStorage에도 저장 (vendorName 포함 확인)
           try {
             console.log(
-              `💾 sessionStorage 저장: fileId=${file.id}, vendorName="${file.vendorName}"`
+              `💾 sessionStorage 저장: fileId=${file.id}, vendorName="${file.vendorName}"`,
             );
             sessionStorage.setItem(
               `uploadedFile_${file.id}`,
-              JSON.stringify(file)
+              JSON.stringify(file),
             );
           } catch (error) {
             console.error("sessionStorage 저장 실패:", error);
@@ -776,7 +778,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
                 file.size /
                 1024 /
                 1024
-              ).toFixed(1)}MB)`
+              ).toFixed(1)}MB)`,
             );
           }
 
@@ -787,7 +789,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
 
           if (!allowedExtensions.includes(fileExtension)) {
             throw new Error(
-              "지원되지 않는 파일 형식입니다. .xlsx, .xls 또는 .csv 파일만 업로드 가능합니다."
+              "지원되지 않는 파일 형식입니다. .xlsx, .xls 또는 .csv 파일만 업로드 가능합니다.",
             );
           }
 
@@ -799,7 +801,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
           // 파일 형식 기본 검증
           if (data.length < 4 && !isCsv) {
             throw new Error(
-              "파일이 너무 작습니다. 유효한 파일인지 확인해주세요."
+              "파일이 너무 작습니다. 유효한 파일인지 확인해주세요.",
             );
           }
 
@@ -813,7 +815,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             ]; // OLE2 시그니처
 
             const hasXlsxSignature = signature.every(
-              (byte, i) => byte === xlsxSignature[i]
+              (byte, i) => byte === xlsxSignature[i],
             );
             const hasXlsSignature = signature
               .slice(0, 8)
@@ -821,7 +823,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
 
             if (!hasXlsxSignature && !hasXlsSignature) {
               throw new Error(
-                "지원되지 않는 파일 형식입니다. .xlsx, .xls 또는 .csv 파일만 업로드 가능합니다."
+                "지원되지 않는 파일 형식입니다. .xlsx, .xls 또는 .csv 파일만 업로드 가능합니다.",
               );
             }
           }
@@ -843,7 +845,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
               throw new Error(
                 `CSV 파일을 읽을 수 없습니다. 파일 인코딩이 UTF-8인지 확인해주세요. (${
                   csvError.message || "알 수 없는 오류"
-                })`
+                })`,
               );
             }
           } else if (isXls) {
@@ -862,7 +864,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
               throw new Error(
                 `.xls 파일을 읽을 수 없습니다. 파일이 손상되었거나 비표준 형식일 수 있습니다. (${
                   xlsError.message || "알 수 없는 오류"
-                })`
+                })`,
               );
             }
           } else {
@@ -871,14 +873,14 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
               const ExcelJS = (await import("exceljs")).default;
               const buffer = data.buffer.slice(
                 data.byteOffset,
-                data.byteOffset + data.byteLength
+                data.byteOffset + data.byteLength,
               );
               const excelWorkbook = new ExcelJS.Workbook();
               await excelWorkbook.xlsx.load(buffer);
 
               // ExcelJS 결과를 XLSX 형식으로 변환
               const sheetNames: string[] = excelWorkbook.worksheets.map(
-                (ws) => ws.name
+                (ws) => ws.name,
               );
               const sheets: {[key: string]: XLSX.WorkSheet} = {};
 
@@ -962,7 +964,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             } catch (excelJSError: any) {
               console.warn(
                 "ExcelJS 읽기 실패, XLSX로 재시도:",
-                excelJSError.message
+                excelJSError.message,
               );
 
               // ExcelJS 실패 시 XLSX로 시도
@@ -986,14 +988,14 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
                     readError.message.includes("corrupt"))
                 ) {
                   throw new Error(
-                    "Excel 파일이 손상되었거나 비표준 형식입니다. Excel에서 파일을 열어 '다른 이름으로 저장'(Excel 통합 문서 .xlsx) 후 다시 시도해주세요."
+                    "Excel 파일이 손상되었거나 비표준 형식입니다. Excel에서 파일을 열어 '다른 이름으로 저장'(Excel 통합 문서 .xlsx) 후 다시 시도해주세요.",
                   );
                 }
 
                 throw new Error(
                   `파일을 읽을 수 없습니다. 다른 Excel 파일로 시도해주세요. (${
                     readError.message || "알 수 없는 오류"
-                  })`
+                  })`,
                 );
               }
             }
@@ -1077,7 +1079,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
 
               // 일반 값 (문자열, 숫자 등)은 그대로 반환
               return String(cell).trim();
-            })
+            }),
           );
 
           if (!raw.length) {
@@ -1095,7 +1097,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
               aliases: col.aliases,
             })),
             3, // 최소 매칭 개수
-            6 // 최대 검사 행 수 (1~6행)
+            6, // 최대 검사 행 수 (1~6행)
           );
           const rawHeader = raw[headerRowIndex] as any[];
 
@@ -1103,7 +1105,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
           const indexMap: {[key: string]: number} = {};
           const user = useAuthStore.getState().user;
           const isOnlineUser = user?.grade === "온라인";
-          
+
           internalColumns.forEach((col) => {
             // grade === "온라인"인 경우 "주문번호" 컬럼은 "주문번호(사방넷)"만 찾기
             if (col.key === "orderCode" && isOnlineUser) {
@@ -1112,53 +1114,74 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
                 return normalizedH === normalizeHeader("주문번호(사방넷)");
               });
               indexMap[col.key] = sabangnetIdx; // 없으면 -1
-            } else if ((col.key === "receiverPhone" || col.key === "ordererPhone") && isOnlineUser) {
+            } else if (
+              (col.key === "receiverPhone" || col.key === "ordererPhone") &&
+              isOnlineUser
+            ) {
               // 온라인 유저: 전화번호1을 먼저 찾고, 없으면 전화번호2 찾기
-              const phone1Key = col.key === "receiverPhone" ? "수취인전화번호1" : "주문자전화번호1";
-              const phone2Key = col.key === "receiverPhone" ? "수취인전화번호2" : "주문자전화번호2";
-              
+              const phone1Key =
+                col.key === "receiverPhone"
+                  ? "수취인전화번호1"
+                  : "주문자전화번호1";
+              const phone2Key =
+                col.key === "receiverPhone"
+                  ? "수취인전화번호2"
+                  : "주문자전화번호2";
+
               // 1순위: 전화번호1 헤더 찾기
               let idx = rawHeader.findIndex((h) => {
                 const normalizedH = normalizeHeader(String(h));
-                return normalizedH === normalizeHeader(phone1Key) || 
-                       normalizedH === normalizeHeader(phone1Key.replace("전화번호", " 전화번호"));
+                return (
+                  normalizedH === normalizeHeader(phone1Key) ||
+                  normalizedH ===
+                    normalizeHeader(phone1Key.replace("전화번호", " 전화번호"))
+                );
               });
-              
+
               // 2순위: 전화번호1이 없으면 전화번호2 헤더 찾기
               if (idx === -1) {
                 idx = rawHeader.findIndex((h) => {
                   const normalizedH = normalizeHeader(String(h));
-                  return normalizedH === normalizeHeader(phone2Key) || 
-                         normalizedH === normalizeHeader(phone2Key.replace("전화번호", " 전화번호"));
+                  return (
+                    normalizedH === normalizeHeader(phone2Key) ||
+                    normalizedH ===
+                      normalizeHeader(
+                        phone2Key.replace("전화번호", " 전화번호"),
+                      )
+                  );
                 });
               }
-              
+
               // 3순위: 전화번호1/2가 없으면 기존 aliases로 찾기
               if (idx === -1) {
                 idx = rawHeader.findIndex((h) =>
                   col.aliases.some(
-                    (al) => normalizeHeader(String(h)) === normalizeHeader(al)
-                  )
+                    (al) => normalizeHeader(String(h)) === normalizeHeader(al),
+                  ),
                 );
               }
-              
+
               indexMap[col.key] = idx; // 없으면 -1
             } else {
               // 그 외의 경우 기존 로직 사용
               const idx = rawHeader.findIndex((h) =>
                 col.aliases.some(
-                  (al) => normalizeHeader(String(h)) === normalizeHeader(al)
-                )
+                  (al) => normalizeHeader(String(h)) === normalizeHeader(al),
+                ),
               );
               indexMap[col.key] = idx; // 없으면 -1
             }
           });
-          
+
           // 디버깅: 온라인 사용자의 경우 주문번호 인덱스 확인
           if (isOnlineUser && indexMap["orderCode"] !== -1) {
-            console.log(`✅ [온라인 사용자] "주문번호(사방넷)" 헤더 발견: 인덱스 ${indexMap["orderCode"]}, 헤더명: "${rawHeader[indexMap["orderCode"]]}"`);
+            console.log(
+              `✅ [온라인 사용자] "주문번호(사방넷)" 헤더 발견: 인덱스 ${indexMap["orderCode"]}, 헤더명: "${rawHeader[indexMap["orderCode"]]}"`,
+            );
           } else if (isOnlineUser) {
-            console.warn(`⚠️ [온라인 사용자] "주문번호(사방넷)" 헤더를 찾을 수 없음`);
+            console.warn(
+              `⚠️ [온라인 사용자] "주문번호(사방넷)" 헤더를 찾을 수 없음`,
+            );
           }
 
           // 내부 절대 순서로 헤더/데이터 재구성
@@ -1173,12 +1196,24 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
                   idx >= 0 ? String(row[idx] ?? "").trim() : "";
 
                 // 온라인 유저: 전화번호1이 비어있으면 전화번호2 사용
-                if (isOnlineUser && (c.key === "receiverPhone" || c.key === "ordererPhone") && !value) {
-                  const phone2Key = c.key === "receiverPhone" ? "수취인전화번호2" : "주문자전화번호2";
+                if (
+                  isOnlineUser &&
+                  (c.key === "receiverPhone" || c.key === "ordererPhone") &&
+                  !value
+                ) {
+                  const phone2Key =
+                    c.key === "receiverPhone"
+                      ? "수취인전화번호2"
+                      : "주문자전화번호2";
                   const phone2Idx = rawHeader.findIndex((h) => {
                     const normalizedH = normalizeHeader(String(h));
-                    return normalizedH === normalizeHeader(phone2Key) || 
-                           normalizedH === normalizeHeader(phone2Key.replace("전화번호", " 전화번호"));
+                    return (
+                      normalizedH === normalizeHeader(phone2Key) ||
+                      normalizedH ===
+                        normalizeHeader(
+                          phone2Key.replace("전화번호", " 전화번호"),
+                        )
+                    );
                   });
                   if (phone2Idx >= 0) {
                     value = String(row[phone2Idx] ?? "").trim();
@@ -1224,7 +1259,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
                 }
 
                 return value;
-              })
+              }),
             );
 
           // 원본 헤더에서 "상품코드(사방넷)" 헤더 인덱스 찾기 (수량 변환 로직 전에 확인)
@@ -1235,7 +1270,8 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
                 (h: any) =>
                   h &&
                   typeof h === "string" &&
-                  normalizeHeader(String(h)) === normalizeHeader("상품코드(사방넷)")
+                  normalizeHeader(String(h)) ===
+                    normalizeHeader("상품코드(사방넷)"),
               );
             } catch (error) {
               console.warn("상품코드(사방넷) 헤더 찾기 실패:", error);
@@ -1245,11 +1281,15 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
           // 수량이 2 이상인 경우 상품명에 "|n세트" 추가
           // 단, 상품코드(사방넷) 헤더가 있는 파일은 상품명 변환하지 않음 (자동 매핑을 위해)
           const productNameIdx = internalColumns.findIndex(
-            (c) => c.key === "productName"
+            (c) => c.key === "productName",
           );
           const qtyIdx = internalColumns.findIndex((c) => c.key === "qty");
 
-          if (productNameIdx !== -1 && qtyIdx !== -1 && sabangnetCodeIdxForQtyCheck === -1) {
+          if (
+            productNameIdx !== -1 &&
+            qtyIdx !== -1 &&
+            sabangnetCodeIdxForQtyCheck === -1
+          ) {
             // 상품코드(사방넷) 헤더가 없는 경우에만 수량 변환 실행
             canonicalRows.forEach((row) => {
               const qtyValue = row[qtyIdx];
@@ -1280,7 +1320,9 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
               }
             });
           } else if (sabangnetCodeIdxForQtyCheck !== -1) {
-            console.log("✅ 상품코드(사방넷) 헤더가 있어 수량 변환 기능을 건너뜁니다.");
+            console.log(
+              "✅ 상품코드(사방넷) 헤더가 있어 수량 변환 기능을 건너뜁니다.",
+            );
           }
 
           // 원본 헤더 보존 (정규화 전 원본 엑셀 파일의 헤더)
@@ -1307,7 +1349,8 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
                 (h: any) =>
                   h &&
                   typeof h === "string" &&
-                  normalizeHeader(String(h)) === normalizeHeader("상품코드(사방넷)")
+                  normalizeHeader(String(h)) ===
+                    normalizeHeader("상품코드(사방넷)"),
               );
             } catch (error) {
               console.warn("상품코드(사방넷) 헤더 찾기 실패:", error);
@@ -1323,7 +1366,8 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
                   h &&
                   typeof h === "string" &&
                   (normalizeHeader(String(h)) === normalizeHeader("쇼핑몰명") ||
-                    normalizeHeader(String(h)) === normalizeHeader("쇼핑몰명(1)"))
+                    normalizeHeader(String(h)) ===
+                      normalizeHeader("쇼핑몰명(1)")),
               );
             } catch (error) {
               console.warn("쇼핑몰명 헤더 찾기 실패:", error);
@@ -1334,17 +1378,19 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
           let supplyPriceIdx = -1;
           if (rawHeader && Array.isArray(rawHeader)) {
             try {
-              supplyPriceIdx = rawHeader.findIndex(
-                (h: any) => {
-                  if (!h || typeof h !== "string") return false;
-                  const headerStr = String(h).trim();
-                  return headerStr === "공급단가" || 
-                         headerStr.includes("공급단가") ||
-                         normalizeHeader(headerStr) === normalizeHeader("공급단가");
-                }
-              );
+              supplyPriceIdx = rawHeader.findIndex((h: any) => {
+                if (!h || typeof h !== "string") return false;
+                const headerStr = String(h).trim();
+                return (
+                  headerStr === "공급단가" ||
+                  headerStr.includes("공급단가") ||
+                  normalizeHeader(headerStr) === normalizeHeader("공급단가")
+                );
+              });
               if (supplyPriceIdx !== -1) {
-                console.log(`✅ [공급단가] 원본 헤더에서 발견: 인덱스 ${supplyPriceIdx}, 헤더명: "${rawHeader[supplyPriceIdx]}"`);
+                console.log(
+                  `✅ [공급단가] 원본 헤더에서 발견: 인덱스 ${supplyPriceIdx}, 헤더명: "${rawHeader[supplyPriceIdx]}"`,
+                );
               }
             } catch (error) {
               console.warn("공급단가 헤더 찾기 실패:", error);
@@ -1368,11 +1414,19 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
               const originalRowIdx = headerRowIndex + i; // 원본 데이터의 행 인덱스
               if (originalRowIdx < raw.length) {
                 const originalRow = raw[originalRowIdx];
-                if (originalRow && originalRow[supplyPriceIdx] !== undefined && originalRow[supplyPriceIdx] !== null) {
-                  const supplyPriceValue = String(originalRow[supplyPriceIdx]).trim();
+                if (
+                  originalRow &&
+                  originalRow[supplyPriceIdx] !== undefined &&
+                  originalRow[supplyPriceIdx] !== null
+                ) {
+                  const supplyPriceValue = String(
+                    originalRow[supplyPriceIdx],
+                  ).trim();
                   jsonData[i].push(supplyPriceValue);
                   if (i <= 3) {
-                    console.log(`✅ [공급단가] 행 ${i}에 값 추가: "${supplyPriceValue}"`);
+                    console.log(
+                      `✅ [공급단가] 행 ${i}에 값 추가: "${supplyPriceValue}"`,
+                    );
                   }
                 } else {
                   jsonData[i].push(""); // 값이 없으면 빈 문자열
@@ -1388,7 +1442,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
           if (shopNameIdx !== -1 && jsonData.length > 1) {
             const headerRow = jsonData[0] as any[];
             const vendorIdx = headerRow.findIndex(
-              (h: any) => h && typeof h === "string" && h === "업체명"
+              (h: any) => h && typeof h === "string" && h === "업체명",
             );
 
             if (vendorIdx !== -1) {
@@ -1416,7 +1470,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
               (h: any) =>
                 h &&
                 typeof h === "string" &&
-                (h.includes("수취인명") || h === "이름")
+                (h.includes("수취인명") || h === "이름"),
             );
 
             if (receiverIdx !== -1) {
@@ -1445,7 +1499,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
               (h: any) =>
                 h &&
                 typeof h === "string" &&
-                (h === "수취인명" || h.includes("수취인명"))
+                (h === "수취인명" || h.includes("수취인명")),
             );
             const receiverPhoneIdx = headerRow.findIndex(
               (h: any) =>
@@ -1453,13 +1507,13 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
                 typeof h === "string" &&
                 (h === "수취인 전화번호" ||
                   h.includes("수취인 전화번호") ||
-                  h.includes("수취인 연락처"))
+                  h.includes("수취인 연락처")),
             );
             const ordererNameIdx = headerRow.findIndex(
               (h: any) =>
                 h &&
                 typeof h === "string" &&
-                (h === "주문자명" || h.includes("주문자명"))
+                (h === "주문자명" || h.includes("주문자명")),
             );
             const ordererPhoneIdx = headerRow.findIndex(
               (h: any) =>
@@ -1467,7 +1521,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
                 typeof h === "string" &&
                 (h === "주문자 전화번호" ||
                   h.includes("주문자 전화번호") ||
-                  h.includes("주문자 연락처"))
+                  h.includes("주문자 연락처")),
             );
 
             if (
@@ -1513,7 +1567,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
           if (jsonData.length > 0) {
             const headerRow = jsonData[0] as any[];
             headerRow.push("_originalRowIndex");
-            
+
             // 각 데이터 행에 원본 인덱스 추가 (1부터 시작, 문자열로 저장)
             for (let i = 1; i < jsonData.length; i++) {
               (jsonData[i] as any[]).push(String(i)); // 원본 순서 인덱스 (1-based, string)
@@ -1551,7 +1605,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
           // 상품명 인덱스 찾기
           const headerRow = jsonData[0] as any[];
           const nameIdx = headerRow.findIndex(
-            (h: any) => h && typeof h === "string" && h.includes("상품명")
+            (h: any) => h && typeof h === "string" && h.includes("상품명"),
           );
 
           // 쇼핑몰명이 있으면 업체명에 자동 입력
@@ -1607,7 +1661,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             tableData: jsonData as any[][],
             headerIndex: nameIdx !== -1 ? {nameIdx} : null,
             productCodeMap: {},
-            userId: useAuthStore.getState().user?.id || "temp-user-001", // 임시: 로그인 기능 미구현 시 임시 사용자 ID 사용
+            userId: useAuthStore.getState().user?.id,
             uploadTime: new Date().toISOString(),
             vendorName: vendorNameStr, // 쇼핑몰명에서 자동 입력된 업체명
             originalHeader: originalHeader, // 원본 파일의 헤더 순서 (정규화 전)
@@ -1621,8 +1675,8 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             new Error(
               `파일 처리 중 오류가 발생했습니다: ${
                 error.message || "알 수 없는 오류"
-              }`
-            )
+              }`,
+            ),
           );
         }
       };
@@ -1630,8 +1684,8 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
         console.error("파일 읽기 실패:", error);
         reject(
           new Error(
-            `파일을 읽을 수 없습니다. 파일이 손상되었거나 지원하지 않는 형식일 수 있습니다.`
-          )
+            `파일을 읽을 수 없습니다. 파일이 손상되었거나 지원하지 않는 형식일 수 있습니다.`,
+          ),
         );
       };
       reader.readAsArrayBuffer(file);
@@ -1724,7 +1778,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
 
       if (isDuplicate) {
         alert(
-          `❌ 동일한 파일명 "${file.name}"이 이미 존재합니다.\n업로드가 취소되었습니다.`
+          `❌ 동일한 파일명 "${file.name}"이 이미 존재합니다.\n업로드가 취소되었습니다.`,
         );
         // 중복 파일명인 경우에도 input value 초기화
         if (get().fileInputRef.current) {
@@ -1796,7 +1850,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
         .getState()
         .startLoading(
           "파일 업로드",
-          `${files.length}개의 파일을 처리하고 있습니다...`
+          `${files.length}개의 파일을 처리하고 있습니다...`,
         );
 
       // 중복 파일명 체크
@@ -1820,7 +1874,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
         if (validFiles.length === 0) {
           // 모든 파일이 중복인 경우
           alert(
-            `❌ 다음 파일명들이 이미 존재합니다:\n\n${duplicateList}\n\n모든 파일의 업로드가 취소되었습니다.`
+            `❌ 다음 파일명들이 이미 존재합니다:\n\n${duplicateList}\n\n모든 파일의 업로드가 취소되었습니다.`,
           );
           // 모든 파일이 중복인 경우에도 input value 초기화
           if (get().fileInputRef.current) {
@@ -1830,7 +1884,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
         } else {
           // 일부 파일만 중복인 경우
           alert(
-            `❌ 다음 파일명들이 이미 존재하여 제외되었습니다:\n\n${duplicateList}\n\n나머지 ${validFiles.length}개 파일만 업로드됩니다.`
+            `❌ 다음 파일명들이 이미 존재하여 제외되었습니다:\n\n${duplicateList}\n\n나머지 ${validFiles.length}개 파일만 업로드됩니다.`,
           );
         }
       }
@@ -1840,7 +1894,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
         useLoadingStore
           .getState()
           .updateLoadingMessage(
-            `${validFiles.length}개의 파일을 분석하고 있습니다...`
+            `${validFiles.length}개의 파일을 분석하고 있습니다...`,
           );
 
         const promises = validFiles.map((file) => get().processFile(file));
@@ -1851,7 +1905,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
           try {
             sessionStorage.setItem(
               `uploadedFile_${file.id}`,
-              JSON.stringify(file)
+              JSON.stringify(file),
             );
           } catch (error) {
             console.error("sessionStorage 저장 실패:", error);
@@ -1949,7 +2003,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     // codes에서 사용 가능한 필드 확인
     const availableFields = codes.length
       ? Object.keys(codes[0]).filter(
-          (k) => k !== "id" && k !== "createdAt" && k !== "updatedAt"
+          (k) => k !== "id" && k !== "createdAt" && k !== "updatedAt",
         )
       : [];
 
@@ -1984,7 +2038,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
 
     // 필수값: id, etc를 제외한 모든 필드는 값이 있어야 저장
     const requiredKeys = directInputModal.fields.filter(
-      (k) => k !== "id" && k !== "etc"
+      (k) => k !== "id" && k !== "etc",
     );
     const hasAllRequired = requiredKeys.every((k) => {
       const v = values[k];

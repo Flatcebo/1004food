@@ -36,29 +36,49 @@ export default function Header({
     (pathname === "/upload"
       ? "발주서 업로드"
       : pathname === "/order"
-      ? "주문 리스트"
-      : pathname === "/products"
-      ? "상품 조회"
-      : pathname === "/products/edit"
-      ? "상품 일괄 수정"
-      : pathname === "/upload/templates"
-      ? "양식 템플릿 관리"
-      : pathname === "/products/upload"
-      ? "상품 데이터 업로드"
-      : pathname === "/header-aliases"
-      ? "헤더 Alias 관리"
-      : pathname === "/users"
-      ? "회원 관리"
-      : pathname === "/vendors"
-      ? "납품업체 관리"
-      : pathname === "/profile"
-      ? "내 정보 수정"
-      : "홈");
+        ? "주문 리스트"
+        : pathname === "/products"
+          ? "상품 조회"
+          : pathname === "/products/edit"
+            ? "상품 일괄 수정"
+            : pathname === "/upload/templates"
+              ? "양식 템플릿 관리"
+              : pathname === "/products/upload"
+                ? "상품 데이터 업로드"
+                : pathname === "/header-aliases"
+                  ? "헤더 Alias 관리"
+                  : pathname === "/users"
+                    ? "회원 관리"
+                    : pathname === "/vendors"
+                      ? "납품업체 관리"
+                      : pathname === "/profile"
+                        ? "내 정보 수정"
+                        : "홈");
 
   const handleLogout = () => {
     if (confirm("로그아웃 하시겠습니까?")) {
       logout();
       router.push("/login");
+    }
+  };
+
+  const handleTest = async () => {
+    const response = await fetch("/api/test", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "test",
+        email: "test@example.com",
+        password: "test",
+      }),
+    });
+    const data = await response.json();
+    if (data.success) {
+      console.log("success");
+    } else {
+      console.error("error");
     }
   };
 
@@ -103,6 +123,13 @@ export default function Header({
           {currentMenuName}
         </h1>
       </div>
+
+      {/* <button
+        className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md text-sm font-medium transition-colors"
+        onClick={handleTest}
+      >
+        test
+      </button> */}
 
       {/* 우측: 사용자 정보 또는 로그인 버튼 */}
       <div className="flex items-center gap-4">

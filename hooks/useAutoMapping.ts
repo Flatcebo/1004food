@@ -80,11 +80,23 @@ export function useAutoMapping({
       // 코드 우선순위: 직접 입력(productCodeMap) > codes.json 자동 매칭
       let codeVal = newMap[name];
 
-      // 온라인 유저: 매핑코드로만 매칭 (상품명 기반 자동 매핑 스킵)
+      // 온라인 유저: 발주서에 이미 있는 매핑코드 사용, 상품명 기반 자동 매핑 스킵
       // 일반 유저: 상품명 기반 자동 매핑도 수행
       let found: any = null;
-      if (userGrade !== "온라인") {
-        // 택배사가 있는 상품 우선 선택 (일반 유저만)
+
+      if (userGrade === "온라인") {
+        // 온라인 유저: 발주서에 있는 매핑코드를 그대로 사용 (덮어쓰지 않음)
+        // 해당 매핑코드가 DB에 있으면 내외주/택배사만 업데이트
+        const existingMappingCode =
+          mappingIdx >= 0 ? String(row[mappingIdx] || "").trim() : "";
+        if (existingMappingCode) {
+          found = codes.find(
+            (c: any) => c.code && String(c.code).trim() === existingMappingCode,
+          );
+        }
+        // 온라인 유저는 매핑코드 컬럼을 덮어쓰지 않음 (발주서 원본 유지)
+      } else {
+        // 일반 유저: 택배사가 있는 상품 우선 선택
         const productsWithPostType = codes.filter(
           (c: any) =>
             c.name === name && c.postType && String(c.postType).trim() !== "",
@@ -99,15 +111,16 @@ export function useAutoMapping({
             ? productsWithPostType[0]
             : productsWithoutPostType[0];
         if (!codeVal && found?.code) codeVal = found.code;
-      }
 
-      if (mappingIdx >= 0 && codeVal && row[mappingIdx] !== codeVal) {
-        if (!rowChanged) {
-          updatedRow = [...row];
-          rowChanged = true;
+        // 일반 유저만 매핑코드 컬럼 업데이트
+        if (mappingIdx >= 0 && codeVal && row[mappingIdx] !== codeVal) {
+          if (!rowChanged) {
+            updatedRow = [...row];
+            rowChanged = true;
+          }
+          updatedRow[mappingIdx] = codeVal;
+          changed = true;
         }
-        updatedRow[mappingIdx] = codeVal;
-        changed = true;
       }
 
       if (found) {

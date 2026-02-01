@@ -90,37 +90,29 @@ export async function POST(request: NextRequest) {
     const requiredHeaders = [
       {
         name: "주문번호",
-        aliases: ["주문번호", "ordernumber", "고객주문번호", "자체주문번호"],
+        aliases: ["주문번호", "고객주문번호", "자체주문번호"],
       },
       {
         name: "운송장번호",
-        aliases: [
-          "운송장번호",
-          "운송장",
-          "송장번호",
-          "송장",
-          "등기번호",
-          "trackingnumber",
-          "tracking",
-        ],
+        aliases: ["운송장번호", "운송장", "송장번호", "송장", "등기번호"],
       },
       {
         name: "택배사",
-        aliases: ["택배사", "carrier", "배송사", "배송업체"],
+        aliases: ["택배사", "배송사", "배송업체"],
       },
     ];
 
     const headerRowIndex = detectHeaderRowByRequiredHeaders(
       raw,
       requiredHeaders,
-      6,
+      9,
     );
     const headers = raw[headerRowIndex] as string[];
 
-    console.log(
-      `헤더 행 감지: ${headerRowIndex + 1}행 (인덱스: ${headerRowIndex})`,
-    );
-    console.log("엑셀 헤더:", headers);
+    // console.log(
+    //   `헤더 행 감지: ${headerRowIndex + 1}행 (인덱스: ${headerRowIndex})`,
+    // );
+    // console.log("엑셀 헤더:", headers);
 
     // 헤더 파싱 및 필수 헤더 인덱스 찾기
     let orderNumberIdx = -1;
@@ -143,9 +135,9 @@ export async function POST(request: NextRequest) {
           normalized === "배송요청사항"
         ) {
           deliveryMessageIdx = index;
-          console.log(
-            `배송메시지 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`,
-          );
+          // console.log(
+          //   `배송메시지 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`,
+          // );
         }
       }
 
@@ -153,14 +145,13 @@ export async function POST(request: NextRequest) {
       if (orderNumberIdx === -1) {
         if (
           normalized === "주문번호" ||
-          normalized === "ordernumber" ||
           normalized === "자체주문번호" ||
           normalized === "고객주문번호"
         ) {
           orderNumberIdx = index;
-          console.log(
-            `주문번호 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`,
-          );
+          // console.log(
+          //   `주문번호 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`,
+          // );
         }
       }
 
@@ -169,25 +160,22 @@ export async function POST(request: NextRequest) {
         if (
           normalized === "운송장번호" ||
           normalized === "송장번호" ||
-          normalized === "등기번호" ||
-          normalized === "등기번호/송장번호" ||
-          normalized === "송장번호/등기번호" ||
-          normalized === "trackingnumber"
+          normalized === "등기번호"
         ) {
           trackingNumberIdx = index;
-          console.log(
-            `운송장번호 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`,
-          );
+          // console.log(
+          //   `운송장번호 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`,
+          // );
         }
       }
 
       // 택배사 정확한 매칭
       if (carrierIdx === -1) {
-        if (normalized === "택배사" || normalized === "carrier") {
+        if (normalized === "택배사") {
           carrierIdx = index;
-          console.log(
-            `택배사 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`,
-          );
+          // console.log(
+          //   `택배사 헤더 발견 (정확한 매칭): "${headerStr}" (인덱스: ${index})`,
+          // );
         }
       }
     });
@@ -206,9 +194,9 @@ export async function POST(request: NextRequest) {
           normalized.includes("요청사항")
         ) {
           deliveryMessageIdx = index;
-          console.log(
-            `배송메시지 헤더 발견 (포함 검사): "${headerStr}" (인덱스: ${index})`,
-          );
+          // console.log(
+          //   `배송메시지 헤더 발견 (포함 검사): "${headerStr}" (인덱스: ${index})`,
+          // );
         }
       }
 
@@ -216,14 +204,13 @@ export async function POST(request: NextRequest) {
       if (orderNumberIdx === -1) {
         if (
           normalized.includes("주문번호") ||
-          normalized.includes("ordernumber") ||
           normalized.includes("자체주문번호") ||
           normalized.includes("고객주문번호")
         ) {
           orderNumberIdx = index;
-          console.log(
-            `주문번호 헤더 발견 (포함 검사): "${headerStr}" (인덱스: ${index})`,
-          );
+          // console.log(
+          //   `주문번호 헤더 발견 (포함 검사): "${headerStr}" (인덱스: ${index})`,
+          // );
         }
       }
 
@@ -234,30 +221,22 @@ export async function POST(request: NextRequest) {
           normalized.includes("송장번호") ||
           normalized.includes("송장") ||
           normalized.includes("등기번호") ||
-          normalized.includes("등기") ||
-          normalized.includes("등기번호/송장번호") ||
-          normalized.includes("송장번호/등기번호") ||
-          normalized.includes("trackingnumber") ||
-          normalized.includes("tracking")
+          normalized.includes("등기")
         ) {
           trackingNumberIdx = index;
-          console.log(
-            `운송장 헤더 발견 (포함 검사): "${headerStr}" (인덱스: ${index})`,
-          );
+          // console.log(
+          //   `운송장 헤더 발견 (포함 검사): "${headerStr}" (인덱스: ${index})`,
+          // );
         }
       }
 
       // 택배사 포함 검사
       if (carrierIdx === -1) {
-        if (
-          normalized.includes("배송사") ||
-          normalized.includes("배송업체") ||
-          normalized.includes("carrier")
-        ) {
+        if (normalized.includes("배송사") || normalized.includes("배송업체")) {
           carrierIdx = index;
-          console.log(
-            `택배사 헤더 발견 (포함 검사): "${headerStr}" (인덱스: ${index})`,
-          );
+          // console.log(
+          //   `택배사 헤더 발견 (포함 검사): "${headerStr}" (인덱스: ${index})`,
+          // );
         }
       }
     });
@@ -305,13 +284,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log("헤더 매핑 완료:", {
-      배송메시지:
-        deliveryMessageIdx !== -1 ? headers[deliveryMessageIdx] : "없음",
-      주문번호: orderNumberIdx !== -1 ? headers[orderNumberIdx] : "없음",
-      운송장: headers[trackingNumberIdx],
-      택배사: headers[carrierIdx],
-    });
+    // console.log("헤더 매핑 완료:", {
+    //   배송메시지:
+    //     deliveryMessageIdx !== -1 ? headers[deliveryMessageIdx] : "없음",
+    //   주문번호: orderNumberIdx !== -1 ? headers[orderNumberIdx] : "없음",
+    //   운송장: headers[trackingNumberIdx],
+    //   택배사: headers[carrierIdx],
+    // });
 
     // 데이터 행 파싱 및 검증
     const deliveryUpdates = [];
@@ -332,9 +311,9 @@ export async function POST(request: NextRequest) {
           extractOrderNumberFromDeliveryMessage(deliveryMessage);
         if (extractedNumber) {
           orderNumber = extractedNumber;
-          console.log(
-            `행 ${i + 1}: 배송메시지에서 주문번호 추출: "${extractedNumber}" (원본: "${deliveryMessage}")`,
-          );
+          // console.log(
+          //   `행 ${i + 1}: 배송메시지에서 주문번호 추출: "${extractedNumber}" (원본: "${deliveryMessage}")`,
+          // );
         }
       }
 
