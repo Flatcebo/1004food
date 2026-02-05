@@ -10,6 +10,11 @@ import {
   UploadFilters,
 } from "@/utils/uploadFilters";
 import {generateDatePrefix} from "@/utils/filename";
+import {
+  getKoreaDateString,
+  isValidPromotionPeriod,
+  parseKoreaDate,
+} from "@/utils/koreaTime";
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,7 +24,7 @@ export async function POST(request: NextRequest) {
     if (!templateId) {
       return NextResponse.json(
         {success: false, error: "템플릿 ID가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -28,7 +33,7 @@ export async function POST(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -42,7 +47,7 @@ export async function POST(request: NextRequest) {
     if (!templateResult.length) {
       return NextResponse.json(
         {success: false, error: "템플릿을 찾을 수 없습니다."},
-        {status: 404}
+        {status: 404},
       );
     }
 
@@ -63,7 +68,7 @@ export async function POST(request: NextRequest) {
     if (!columnOrder || columnOrder.length === 0) {
       return NextResponse.json(
         {success: false, error: "템플릿의 컬럼 순서가 설정되지 않았습니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -132,7 +137,7 @@ export async function POST(request: NextRequest) {
         ...new Set(
           dataRows
             .filter((row: any) => !row.productId && row.매핑코드)
-            .map((row: any) => row.매핑코드)
+            .map((row: any) => row.매핑코드),
         ),
       ];
       const productSalePriceMap: {[id: string | number]: number | null} = {};
@@ -193,10 +198,10 @@ export async function POST(request: NextRequest) {
         ...new Set(
           dataRows
             .map((row: any) => row.업체명)
-            .filter((name: any) => name && String(name).trim() !== "")
+            .filter((name: any) => name && String(name).trim() !== ""),
         ),
       ];
-      
+
       // mall 테이블에서 업체명으로 mall_id 조회
       const mallMap: {[vendorName: string]: number} = {};
       if (vendorNames.length > 0) {
@@ -210,22 +215,54 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // 각 업체의 행사가 조회
-      const promotionMap: {[key: string]: {discountRate: number | null; eventPrice: number | null}} = {};
+      // 각 업체의 행사가 조회 (기간 체크 포함)
+      const promotionMap: {
+        [key: string]: {discountRate: number | null; eventPrice: number | null};
+      } = {};
+      const promotionIdsToDelete: number[] = [];
       const mallIds = Object.values(mallMap);
+      const currentDate = getKoreaDateString();
+
       if (mallIds.length > 0) {
         const promotions = await sql`
-          SELECT mall_id, product_code, discount_rate, event_price
+          SELECT id, mall_id, product_code, discount_rate, event_price, 
+                 TO_CHAR(start_date, 'YYYY-MM-DD') as start_date,
+                 TO_CHAR(end_date, 'YYYY-MM-DD') as end_date
           FROM mall_promotions
           WHERE mall_id = ANY(${mallIds})
         `;
+
         promotions.forEach((promo: any) => {
+          // 행사 기간 체크
+          const isValid = isValidPromotionPeriod(
+            promo.start_date,
+            promo.end_date,
+          );
+
+          if (!isValid) {
+            // 기간이 지났으면 삭제 대상에 추가
+            if (parseKoreaDate(promo.end_date) < parseKoreaDate(currentDate)) {
+              promotionIdsToDelete.push(promo.id);
+            }
+            // 기간이 아니면 적용하지 않음
+            return;
+          }
+
+          // 유효한 행사 기간이면 적용
           const key = `${promo.mall_id}_${promo.product_code}`;
           promotionMap[key] = {
             discountRate: promo.discount_rate,
             eventPrice: promo.event_price,
           };
         });
+
+        // 만료된 행사 삭제
+        if (promotionIdsToDelete.length > 0) {
+          await sql`
+            DELETE FROM mall_promotions
+            WHERE id = ANY(${promotionIdsToDelete})
+          `;
+        }
       }
 
       // 업체명이 없는 경우 기본값 설정 (테이블 데이터의 원래 업체명 사용)
@@ -237,7 +274,7 @@ export async function POST(request: NextRequest) {
         const vendorName = row.업체명;
         const mallId = mallMap[vendorName];
         const productCode = row.매핑코드 || (row.productId ? null : null);
-        
+
         // 행사가 확인
         let eventPrice: number | null = null;
         let discountRate: number | null = null;
@@ -267,8 +304,10 @@ export async function POST(request: NextRequest) {
 
           if (salePrice !== null) {
             // 수량을 고려한 판매가 계산: (공급가 * 수량) - (4000 * (수량 - 1))
-            const quantity = Number(row["수량"] || row["개수"] || row["quantity"] || 1) || 1;
-            const calculatedPrice = salePrice * quantity - 4000 * (quantity - 1);
+            const quantity =
+              Number(row["수량"] || row["개수"] || row["quantity"] || 1) || 1;
+            const calculatedPrice =
+              salePrice * quantity - 4000 * (quantity - 1);
             row["판매가"] = calculatedPrice;
             row["sale_price"] = calculatedPrice;
           }
@@ -313,8 +352,10 @@ export async function POST(request: NextRequest) {
 
           if (salePrice !== null) {
             // 수량을 고려한 판매가 계산: (공급가 * 수량) - (4000 * (수량 - 1))
-            const quantity = Number(row["수량"] || row["개수"] || row["quantity"] || 1) || 1;
-            const calculatedPrice = salePrice * quantity - 4000 * (quantity - 1);
+            const quantity =
+              Number(row["수량"] || row["개수"] || row["quantity"] || 1) || 1;
+            const calculatedPrice =
+              salePrice * quantity - 4000 * (quantity - 1);
             row["판매가"] = calculatedPrice;
             row["sale_price"] = calculatedPrice;
           }
@@ -424,7 +465,8 @@ export async function POST(request: NextRequest) {
 
             let value = mapDataToTemplate(row, headerStr, {
               templateName: templateData.name,
-              preferSabangName: preferSabangName !== undefined ? preferSabangName : true,
+              preferSabangName:
+                preferSabangName !== undefined ? preferSabangName : true,
             });
 
             let stringValue = value != null ? String(value) : "";
@@ -437,8 +479,9 @@ export async function POST(request: NextRequest) {
             // 배송희망일은 YYYYMMDD 형식으로 설정
             if (headerStr === "배송희망일" || headerStr.includes("배송희망")) {
               // row 데이터에 배송희망일이 있으면 사용, 없으면 오늘 날짜 사용
-              const deliveryDate = row["배송희망일"] || row["배송희망일자"] || null;
-              
+              const deliveryDate =
+                row["배송희망일"] || row["배송희망일자"] || null;
+
               if (deliveryDate) {
                 // 날짜 형식 변환 (다양한 형식 지원)
                 const date = new Date(deliveryDate);
@@ -584,7 +627,7 @@ export async function POST(request: NextRequest) {
     // 일반 다운로드 로직 (필요시 구현)
     return NextResponse.json(
       {success: false, error: "사방넷 등록 양식 템플릿이 아닙니다."},
-      {status: 400}
+      {status: 400},
     );
   } catch (error) {
     console.error(error);

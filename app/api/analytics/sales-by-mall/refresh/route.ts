@@ -1,6 +1,11 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
 import {getCompanyIdFromRequest} from "@/lib/company";
+import {
+  getKoreaDateString,
+  isValidPromotionPeriod,
+  parseKoreaDate,
+} from "@/utils/koreaTime";
 
 /**
  * POST /api/analytics/sales-by-mall/refresh
@@ -13,7 +18,7 @@ export async function POST(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -23,7 +28,7 @@ export async function POST(request: NextRequest) {
     if (!startDate || !endDate) {
       return NextResponse.json(
         {success: false, error: "시작일과 종료일이 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -47,7 +52,7 @@ export async function POST(request: NextRequest) {
     if (malls.length === 0) {
       return NextResponse.json(
         {success: false, error: "쇼핑몰 데이터가 없습니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -58,22 +63,53 @@ export async function POST(request: NextRequest) {
       const settlements = [];
       let totalOrdersCount = 0;
 
-      // 각 쇼핑몰별 행사가 조회 (한 번에 모든 쇼핑몰의 행사가 조회)
+      // 각 쇼핑몰별 행사가 조회 (한 번에 모든 쇼핑몰의 행사가 조회, 기간 체크 포함)
       const allPromotions = await sql`
-        SELECT mall_id, product_code, discount_rate, event_price
+        SELECT id, mall_id, product_code, discount_rate, event_price,
+               TO_CHAR(start_date, 'YYYY-MM-DD') as start_date,
+               TO_CHAR(end_date, 'YYYY-MM-DD') as end_date
         FROM mall_promotions
         WHERE mall_id = ANY(${malls.map((m) => m.id)})
       `;
-      
+
       // 행사가 맵 생성: {mallId_productCode: {discountRate, eventPrice}}
-      const promotionMap: {[key: string]: {discountRate: number | null; eventPrice: number | null}} = {};
+      const promotionMap: {
+        [key: string]: {discountRate: number | null; eventPrice: number | null};
+      } = {};
+      const promotionIdsToDelete: number[] = [];
+      const currentDate = getKoreaDateString();
+
       allPromotions.forEach((promo: any) => {
+        // 행사 기간 체크
+        const isValid = isValidPromotionPeriod(
+          promo.start_date,
+          promo.end_date,
+        );
+
+        if (!isValid) {
+          // 기간이 지났으면 삭제 대상에 추가
+          if (parseKoreaDate(promo.end_date) < parseKoreaDate(currentDate)) {
+            promotionIdsToDelete.push(promo.id);
+          }
+          // 기간이 아니면 적용하지 않음
+          return;
+        }
+
+        // 유효한 행사 기간이면 적용
         const key = `${promo.mall_id}_${promo.product_code}`;
         promotionMap[key] = {
           discountRate: promo.discount_rate,
           eventPrice: promo.event_price,
         };
       });
+
+      // 만료된 행사 삭제
+      if (promotionIdsToDelete.length > 0) {
+        await sql`
+          DELETE FROM mall_promotions
+          WHERE id = ANY(${promotionIdsToDelete})
+        `;
+      }
 
       // 각 쇼핑몰별로 정산 계산
       for (const mall of malls) {
@@ -129,7 +165,9 @@ export async function POST(request: NextRequest) {
 
         // 디버깅: 상품 매칭 결과 확인 (처음 3개만)
         if (orders.length > 0) {
-          console.log(`📊 [refresh] ${mallName}: 주문 ${orders.length}건 조회됨`);
+          console.log(
+            `📊 [refresh] ${mallName}: 주문 ${orders.length}건 조회됨`,
+          );
           orders.slice(0, 3).forEach((order: any, idx: number) => {
             console.log(`📊 [refresh] 샘플 ${idx + 1}:`, {
               orderId: order.id,
@@ -158,7 +196,8 @@ export async function POST(request: NextRequest) {
           const isCanceled = orderStatus === "취소";
 
           // 매핑코드 또는 productId 추출
-          const productCode = rowData["매핑코드"] || rowData["productId"] || null;
+          const productCode =
+            rowData["매핑코드"] || rowData["productId"] || null;
 
           // 행사가 확인
           let eventPrice: number | null = null;
@@ -172,7 +211,7 @@ export async function POST(request: NextRequest) {
             }
           }
 
-          // 공급가 우선순위: 
+          // 공급가 우선순위:
           // 1. 행사가 (아래에서 적용)
           // 2. upload_rows.supply_price 컬럼 (엑셀 파일에서 수집한 공급단가)
           // 3. 주문 데이터의 공급단가 (row_data["공급단가"])
@@ -186,7 +225,10 @@ export async function POST(request: NextRequest) {
             order.product_sale_price ||
             rowData["sale_price"] ||
             0;
-          let salePriceNum = typeof salePrice === "string" ? parseFloat(salePrice) : salePrice || 0;
+          let salePriceNum =
+            typeof salePrice === "string"
+              ? parseFloat(salePrice)
+              : salePrice || 0;
 
           // 행사가 적용: 행사가가 있으면 우선 사용, 없으면 할인율 적용
           if (eventPrice !== null) {
@@ -196,12 +238,17 @@ export async function POST(request: NextRequest) {
           }
 
           // 원가: products의 price
-          const costPrice = order.product_price || rowData["원가"] || rowData["가격"] || 0;
-          const costPriceNum = typeof costPrice === "string" ? parseFloat(costPrice) : costPrice || 0;
+          const costPrice =
+            order.product_price || rowData["원가"] || rowData["가격"] || 0;
+          const costPriceNum =
+            typeof costPrice === "string"
+              ? parseFloat(costPrice)
+              : costPrice || 0;
 
           // 수량 (금액 계산용)
           const quantity = rowData["수량"] || rowData["주문수량"] || 1;
-          const quantityNum = typeof quantity === "string" ? parseFloat(quantity) : quantity || 1;
+          const quantityNum =
+            typeof quantity === "string" ? parseFloat(quantity) : quantity || 1;
 
           if (isCanceled) {
             // 취소건
@@ -230,9 +277,7 @@ export async function POST(request: NextRequest) {
 
         // 총이익률 계산
         const totalProfitRate =
-          netSalesAmount > 0
-            ? (totalProfitAmount / netSalesAmount) * 100
-            : 0;
+          netSalesAmount > 0 ? (totalProfitAmount / netSalesAmount) * 100 : 0;
 
         // 판매수수료 (일단 NULL)
         const salesFeeAmount = null;
@@ -268,9 +313,9 @@ export async function POST(request: NextRequest) {
         if (existing.length > 0) {
           const existingData = existing[0];
           settlementId = existingData.id;
-          
+
           // 기존 데이터와 모든 값이 일치하는지 확인
-          isIdentical = 
+          isIdentical =
             existingData.order_quantity === orderQuantity &&
             existingData.order_amount === orderAmount &&
             existingData.cancel_quantity === cancelQuantity &&
@@ -281,7 +326,9 @@ export async function POST(request: NextRequest) {
             existingData.net_profit_amount === netProfitAmount;
 
           // 디버깅: isIdentical 상태 로그
-          console.log(`📊 [refresh] ${mallName}: 기존 데이터 있음, settlementId=${settlementId}, isIdentical=${isIdentical}`);
+          console.log(
+            `📊 [refresh] ${mallName}: 기존 데이터 있음, settlementId=${settlementId}, isIdentical=${isIdentical}`,
+          );
 
           if (!isIdentical) {
             // 값이 다르면 업데이트
@@ -303,7 +350,7 @@ export async function POST(request: NextRequest) {
                 updated_at = CURRENT_TIMESTAMP
               WHERE id = ${settlementId}
             `;
-            
+
             // 기존 주문 연결 데이터 삭제
             await sql`
               DELETE FROM mall_sales_settlement_orders
@@ -324,7 +371,6 @@ export async function POST(request: NextRequest) {
             `;
             continue;
           }
-
         } else {
           // 주문 건이 0이 아니면 삽입
           if (orderQuantity > 0 || cancelQuantity > 0) {
@@ -367,47 +413,55 @@ export async function POST(request: NextRequest) {
               RETURNING id
             `;
             settlementId = insertResult[0]?.id || null;
-            console.log(`[${mallName}] 신규 데이터 삽입 완료 (settlement_id: ${settlementId})`);
+            console.log(
+              `[${mallName}] 신규 데이터 삽입 완료 (settlement_id: ${settlementId})`,
+            );
           }
         }
 
         // 정산에 사용된 주문 데이터 전체를 중간 테이블에 저장 (기존 데이터와 동일하더라도 갱신)
         if (settlementId && orders.length > 0) {
           // 디버깅: 저장 시작 로그
-          console.log(`💾 [refresh] ${mallName}: 주문 데이터 저장 시작 (settlementId=${settlementId}, orders=${orders.length}개)`);
-          
+          console.log(
+            `💾 [refresh] ${mallName}: 주문 데이터 저장 시작 (settlementId=${settlementId}, orders=${orders.length}개)`,
+          );
+
           // 기존 주문 연결 데이터 삭제 (갱신을 위해)
           await sql`
             DELETE FROM mall_sales_settlement_orders
             WHERE settlement_id = ${settlementId}
           `;
-          console.log(`💾 [refresh] ${mallName}: 기존 주문 연결 데이터 삭제 완료`);
-          
+          console.log(
+            `💾 [refresh] ${mallName}: 기존 주문 연결 데이터 삭제 완료`,
+          );
+
           // 배치로 삽입 (배치 크기로 나눠서 처리하여 타임아웃 방지)
           try {
             const BATCH_SIZE = 100; // 배치 크기 (연결 풀 고려하여 줄임)
             const PARALLEL_SIZE = 50; // 병렬 실행 수 제한 (데이터베이스 연결 풀 보호)
-            
+
             // 주문을 배치 크기로 나눠서 처리
             for (let i = 0; i < orders.length; i += BATCH_SIZE) {
               const batch = orders.slice(i, i + BATCH_SIZE);
-              
+
               // 배치 삽입을 위한 Promise 배열 생성
-              const insertPromises = batch.map(order => {
+              const insertPromises = batch.map((order) => {
                 // 상품 정보 객체 생성 (상품이 있는 경우만)
-                const productData = order.product_id ? {
-                  id: order.product_id,
-                  code: order.product_code,
-                  name: order.product_name,
-                  price: order.product_price,
-                  sale_price: order.product_sale_price,
-                  sabang_name: order.product_sabang_name,
-                  bill_type: order.product_bill_type,
-                  post_type: order.product_post_type,
-                  category: order.product_category,
-                  product_type: order.product_product_type,
-                } : null;
-                
+                const productData = order.product_id
+                  ? {
+                      id: order.product_id,
+                      code: order.product_code,
+                      name: order.product_name,
+                      price: order.product_price,
+                      sale_price: order.product_sale_price,
+                      sabang_name: order.product_sabang_name,
+                      bill_type: order.product_bill_type,
+                      post_type: order.product_post_type,
+                      category: order.product_category,
+                      product_type: order.product_product_type,
+                    }
+                  : null;
+
                 return sql`
                   INSERT INTO mall_sales_settlement_orders (settlement_id, order_id, order_data, product_data, updated_at)
                   VALUES (
@@ -424,28 +478,38 @@ export async function POST(request: NextRequest) {
                     updated_at = CURRENT_TIMESTAMP
                 `;
               });
-              
+
               // 병렬 실행 수를 제한하여 데이터베이스 연결 풀 보호
               for (let j = 0; j < insertPromises.length; j += PARALLEL_SIZE) {
-                const parallelBatch = insertPromises.slice(j, j + PARALLEL_SIZE);
+                const parallelBatch = insertPromises.slice(
+                  j,
+                  j + PARALLEL_SIZE,
+                );
                 await Promise.all(parallelBatch);
               }
-              
+
               // 진행 상황 로그 (큰 배치의 경우)
-              if (orders.length > BATCH_SIZE && (i + BATCH_SIZE) % (BATCH_SIZE * 5) === 0) {
-                console.log(`[${mallName}] 주문 데이터 저장 진행 중: ${Math.min(i + BATCH_SIZE, orders.length)}/${orders.length}`);
+              if (
+                orders.length > BATCH_SIZE &&
+                (i + BATCH_SIZE) % (BATCH_SIZE * 5) === 0
+              ) {
+                console.log(
+                  `[${mallName}] 주문 데이터 저장 진행 중: ${Math.min(i + BATCH_SIZE, orders.length)}/${orders.length}`,
+                );
               }
             }
-            
+
             // 저장 확인
             const savedCount = await sql`
               SELECT COUNT(*) as count
               FROM mall_sales_settlement_orders
               WHERE settlement_id = ${settlementId}
             `;
-            
-            console.log(`✅ [refresh] ${mallName}: ${orders.length}개의 주문 데이터 저장 완료 (실제 저장된 개수: ${savedCount[0]?.count || 0})`);
-            
+
+            console.log(
+              `✅ [refresh] ${mallName}: ${orders.length}개의 주문 데이터 저장 완료 (실제 저장된 개수: ${savedCount[0]?.count || 0})`,
+            );
+
             // 디버깅: 저장된 데이터 샘플 확인
             const savedSample = await sql`
               SELECT order_id, order_data->>'매핑코드' as mapping_code, order_data->>'productId' as product_id,
@@ -454,23 +518,33 @@ export async function POST(request: NextRequest) {
               WHERE settlement_id = ${settlementId}
               LIMIT 3
             `;
-            console.log(`✅ [refresh] ${mallName}: 저장된 샘플 데이터:`, savedSample.map((s: any) => ({
-              order_id: s.order_id,
-              mapping_code: s.mapping_code,
-              product_id: s.product_id,
-              saved_product_id: s.saved_product_id,
-              saved_product_name: s.saved_product_name,
-            })));
+            console.log(
+              `✅ [refresh] ${mallName}: 저장된 샘플 데이터:`,
+              savedSample.map((s: any) => ({
+                order_id: s.order_id,
+                mapping_code: s.mapping_code,
+                product_id: s.product_id,
+                saved_product_id: s.saved_product_id,
+                saved_product_name: s.saved_product_name,
+              })),
+            );
           } catch (error: any) {
-            console.error(`[${mallName}] 주문 데이터 저장 중 오류 발생:`, error);
+            console.error(
+              `[${mallName}] 주문 데이터 저장 중 오류 발생:`,
+              error,
+            );
             throw error;
           }
         } else {
           if (!settlementId) {
-            console.warn(`[${mallName}] settlementId가 없어서 주문 데이터를 저장하지 않습니다.`);
+            console.warn(
+              `[${mallName}] settlementId가 없어서 주문 데이터를 저장하지 않습니다.`,
+            );
           }
           if (orders.length === 0) {
-            console.log(`[${mallName}] 주문이 없어서 주문 데이터를 저장하지 않습니다.`);
+            console.log(
+              `[${mallName}] 주문이 없어서 주문 데이터를 저장하지 않습니다.`,
+            );
           }
         }
 
@@ -512,8 +586,11 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("매출 정산 갱신 실패:", error);
     return NextResponse.json(
-      {success: false, error: error.message || "알 수 없는 오류가 발생했습니다."},
-      {status: 500}
+      {
+        success: false,
+        error: error.message || "알 수 없는 오류가 발생했습니다.",
+      },
+      {status: 500},
     );
   }
 }

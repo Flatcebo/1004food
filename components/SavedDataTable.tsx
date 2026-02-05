@@ -1344,7 +1344,9 @@ const SavedDataTable = memo(function SavedDataTable({
                   <div className="flex items-center justify-center">
                     <TableCarrierTrackingButton
                       carrierName={cellValue.split("\n")[0] || ""}
-                      trackingNumber={cellValue.split("\n")[1] || ""}
+                      trackingNumber={
+                        cellValue.split("\n")[1] || row["운송장번호"] || ""
+                      }
                       handleTooltipShow={handleTooltipShow}
                       handleTooltipHide={handleTooltipHide}
                     />
@@ -1735,7 +1737,7 @@ const SavedDataTable = memo(function SavedDataTable({
     },
   );
 
-  // 운송장 입력 필드 컴포넌트 (uncontrolled input 사용)
+  // 운송장 입력 필드 컴포넌트 (controlled input 사용)
   const TableDeliveryInputCell = ({
     rowId,
     deliveryData,
@@ -1751,7 +1753,7 @@ const SavedDataTable = memo(function SavedDataTable({
   }) => (
     <div className="flex flex-col gap-1">
       <select
-        key={`carrier-${rowId}`}
+        key={`carrier-${rowId}-${deliveryData[rowId]?.carrier || ""}`}
         className="w-full px-1 py-0.5 text-xs border border-gray-300 rounded"
         value={deliveryData[rowId]?.carrier || ""}
         onChange={(e) =>
@@ -1770,11 +1772,14 @@ const SavedDataTable = memo(function SavedDataTable({
         <option value="방문수령">방문수령</option>
       </select>
       <input
-        key={`tracking-${rowId}`}
+        key={`tracking-${rowId}-${deliveryData[rowId]?.trackingNumber || ""}`}
         type="text"
         placeholder="운송장번호"
         className="w-full px-2 py-0.5 text-xs border border-gray-300 rounded"
-        defaultValue={deliveryData[rowId]?.trackingNumber || ""}
+        value={deliveryData[rowId]?.trackingNumber || ""}
+        onChange={(e) =>
+          handleDeliveryDataChange(rowId, "trackingNumber", e.target.value)
+        }
         onBlur={(e) =>
           handleDeliveryDataChange(rowId, "trackingNumber", e.target.value)
         }

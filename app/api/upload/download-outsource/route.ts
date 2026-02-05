@@ -1446,6 +1446,37 @@ export async function POST(request: NextRequest) {
               const header = updatedTemplateHeaders[idx];
               let stringValue = value != null ? String(value) : "";
 
+              // 상품명 필드 처리: preferSabangName 옵션에 따라 사방넷명 또는 상품명 사용
+              if (
+                header.column_key === "productName" ||
+                header.display_name.includes("상품명") ||
+                header.display_name === "상품명"
+              ) {
+                const shouldUseSabangName =
+                  preferSabangName !== undefined ? preferSabangName : true;
+                if (shouldUseSabangName) {
+                  const sabangValue =
+                    row["사방넷명"] ||
+                    row["sabangName"] ||
+                    row["sabang_name"] ||
+                    "";
+                  if (
+                    sabangValue !== null &&
+                    sabangValue !== undefined &&
+                    sabangValue !== "" &&
+                    String(sabangValue).trim() !== ""
+                  ) {
+                    stringValue = String(sabangValue).trim();
+                  } else {
+                    // 사방넷명이 없으면 원래 상품명 사용
+                    stringValue = value != null ? String(value) : "";
+                  }
+                } else {
+                  // preferSabangName이 false이면 원래 상품명 사용
+                  stringValue = value != null ? String(value) : "";
+                }
+              }
+
               // 배송희망일 헤더의 경우 날짜 형식을 유지
               if (header.column_key === "__delivery_date__" && value) {
                 // 이미 YYYY-MM-DD 형식이라면 그대로 사용
@@ -1623,6 +1654,8 @@ export async function POST(request: NextRequest) {
                 let value = mapDataToTemplate(row, headerStr, {
                   templateName: templateData.name,
                   formatPhone: true, // 외주 발주서에서는 전화번호에 하이픈 추가
+                  preferSabangName:
+                    preferSabangName !== undefined ? preferSabangName : true,
                 });
                 phone1Value = value != null ? String(value) : "";
                 // formatPhoneNumber 적용
@@ -1658,6 +1691,8 @@ export async function POST(request: NextRequest) {
               let value = mapDataToTemplate(row, headerStr, {
                 templateName: templateData.name,
                 formatPhone: true, // 외주 발주서에서는 전화번호에 하이픈 추가
+                preferSabangName:
+                  preferSabangName !== undefined ? preferSabangName : true,
               });
 
               let stringValue = value != null ? String(value) : "";

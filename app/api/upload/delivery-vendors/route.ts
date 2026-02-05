@@ -65,39 +65,55 @@ export async function GET(request: NextRequest) {
     }
 
     // 날짜 범위 계산 (한국 시간 기준)
-    const today = new Date();
-    const koreaTime = new Date(today.getTime() + 9 * 60 * 60 * 1000); // UTC+9
-
     let dateFromUTC: Date;
     let dateToUTC: Date;
 
     if (startDateParam && endDateParam) {
       // 쿼리 파라미터에서 날짜 범위 지정
       // 한국 시간으로 시작일 00:00:00, 종료일 23:59:59를 UTC로 변환
-      // 예: 한국 시간 2026-01-28 00:00:00 = UTC 2026-01-27 15:00:00
-      // 예: 한국 시간 2026-01-28 23:59:59 = UTC 2026-01-28 14:59:59
-      
+      // 예: 한국 시간 2026-02-05 00:00:00 = UTC 2026-02-04 15:00:00
+      // 예: 한국 시간 2026-02-05 23:59:59 = UTC 2026-02-05 14:59:59
+
       // ISO 8601 형식으로 한국 시간대(+09:00) 지정하여 파싱
       const startKoreaStr = `${startDateParam}T00:00:00+09:00`;
       const endKoreaStr = `${endDateParam}T23:59:59.999+09:00`;
-      
+
+      // Date 객체는 자동으로 UTC로 변환됨
       const startKoreaDate = new Date(startKoreaStr);
       const endKoreaDate = new Date(endKoreaStr);
-      
-      // UTC로 변환 (toISOString()은 UTC로 변환)
-      dateFromUTC = new Date(startKoreaDate.toISOString());
-      dateToUTC = new Date(endKoreaDate.toISOString());
+
+      // 이미 UTC로 변환된 Date 객체 사용
+      dateFromUTC = startKoreaDate;
+      dateToUTC = endKoreaDate;
     } else {
-      // 기본값: 오늘만 조회
-      const todayStart = new Date(koreaTime);
-      todayStart.setHours(0, 0, 0, 0);
+      // 기본값: 오늘만 조회 (한국 시간 기준)
+      const now = new Date();
+      const utcTime = now.getTime() + now.getTimezoneOffset() * 60000;
+      const koreaTime = new Date(utcTime + 9 * 3600000);
 
-      const todayEnd = new Date(koreaTime);
-      todayEnd.setHours(23, 59, 59, 999);
+      const todayYear = koreaTime.getFullYear();
+      const todayMonth = String(koreaTime.getMonth() + 1).padStart(2, "0");
+      const todayDay = String(koreaTime.getDate()).padStart(2, "0");
+      const todayStr = `${todayYear}-${todayMonth}-${todayDay}`;
 
-      dateFromUTC = new Date(todayStart.getTime() - 9 * 60 * 60 * 1000);
-      dateToUTC = new Date(todayEnd.getTime() - 9 * 60 * 60 * 1000);
+      // 한국 시간으로 오늘 00:00:00과 23:59:59를 UTC로 변환
+      const todayStartKoreaStr = `${todayStr}T00:00:00+09:00`;
+      const todayEndKoreaStr = `${todayStr}T23:59:59.999+09:00`;
+
+      dateFromUTC = new Date(todayStartKoreaStr);
+      dateToUTC = new Date(todayEndKoreaStr);
     }
+
+    // 디버깅 로그
+    console.log(
+      `🔍 [운송장 업체 조회] startDate: ${startDateParam}, endDate: ${endDateParam}`,
+    );
+    console.log(
+      `🔍 [운송장 업체 조회] 조회 범위 (UTC): ${dateFromUTC.toISOString()} ~ ${dateToUTC.toISOString()}`,
+    );
+    console.log(
+      `🔍 [운송장 업체 조회] 조회 범위 (한국시간): ${new Date(dateFromUTC.getTime() + 9 * 3600000).toISOString()} ~ ${new Date(dateToUTC.getTime() + 9 * 3600000).toISOString()}`,
+    );
 
     // 금일 업로드된 주문에서 업체명 추출
     let vendorsQuery;

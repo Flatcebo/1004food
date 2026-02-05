@@ -17,10 +17,32 @@ export async function POST() {
         product_code VARCHAR(50) NOT NULL,
         discount_rate DECIMAL(5, 2),
         event_price INTEGER,
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(mall_id, product_code)
       )
+    `;
+
+    // 기존 테이블에 컬럼 추가 (이미 존재하는 경우)
+    await sql`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'mall_promotions' AND column_name = 'start_date'
+        ) THEN
+          ALTER TABLE mall_promotions ADD COLUMN start_date DATE;
+        END IF;
+        
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'mall_promotions' AND column_name = 'end_date'
+        ) THEN
+          ALTER TABLE mall_promotions ADD COLUMN end_date DATE;
+        END IF;
+      END $$;
     `;
 
     // 인덱스 생성
@@ -48,7 +70,7 @@ export async function POST() {
         success: false,
         error: error.message || "알 수 없는 오류가 발생했습니다.",
       },
-      {status: 500}
+      {status: 500},
     );
   }
 }

@@ -27,6 +27,8 @@ interface Promotion {
   productCode: string;
   discountRate: number | null;
   eventPrice: number | null;
+  startDate: string;
+  endDate: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -41,6 +43,8 @@ export default function MallPromotionsPage() {
   const [selectedProductCode, setSelectedProductCode] = useState<string>("");
   const [discountRate, setDiscountRate] = useState<string>("");
   const [eventPrice, setEventPrice] = useState<string>("");
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
   const [productNameSearchValue, setProductNameSearchValue] =
     useState<string>("");
   const [productCodeSearchValue, setProductCodeSearchValue] =
@@ -68,7 +72,7 @@ export default function MallPromotionsPage() {
         if (result.success) {
           // 가나다 순으로 정렬
           const sortedMalls = (result.data || []).sort((a: Mall, b: Mall) =>
-            a.name.localeCompare(b.name, "ko")
+            a.name.localeCompare(b.name, "ko"),
           );
           setMalls(sortedMalls);
         }
@@ -135,6 +139,8 @@ export default function MallPromotionsPage() {
     setSelectedProductCode("");
     setDiscountRate("");
     setEventPrice("");
+    setStartDate("");
+    setEndDate("");
     setProductNameSearchValue("");
     setProductCodeSearchValue("");
     setIsModalOpen(true);
@@ -147,6 +153,8 @@ export default function MallPromotionsPage() {
     setSelectedProductCode("");
     setDiscountRate("");
     setEventPrice("");
+    setStartDate("");
+    setEndDate("");
     setProductNameSearchValue("");
     setProductCodeSearchValue("");
   };
@@ -163,6 +171,16 @@ export default function MallPromotionsPage() {
       return;
     }
 
+    if (!startDate || !endDate) {
+      alert("시작일과 종료일을 선택해주세요.");
+      return;
+    }
+
+    if (new Date(startDate) > new Date(endDate)) {
+      alert("시작일은 종료일보다 이전이어야 합니다.");
+      return;
+    }
+
     startLoading("행사가 저장", "저장 중입니다...", "");
 
     try {
@@ -176,6 +194,8 @@ export default function MallPromotionsPage() {
           productCode: selectedProductCode,
           discountRate: discountRate ? parseFloat(discountRate) : null,
           eventPrice: eventPrice ? parseInt(eventPrice) : null,
+          startDate: startDate,
+          endDate: endDate,
         }),
       });
 
@@ -244,7 +264,7 @@ export default function MallPromotionsPage() {
         const rate = parseFloat(value);
         if (!isNaN(rate) && rate >= 0 && rate <= 100) {
           const calculatedPrice = Math.round(
-            product.salePrice * (1 - rate / 100)
+            product.salePrice * (1 - rate / 100),
           );
           setEventPrice(calculatedPrice.toString());
         }
@@ -285,7 +305,7 @@ export default function MallPromotionsPage() {
     const searchLower = debouncedProductNameSearch.toLowerCase();
     return products
       .filter((product) =>
-        product.displayName.toLowerCase().includes(searchLower)
+        product.displayName.toLowerCase().includes(searchLower),
       )
       .slice(0, 100); // 최대 100개만 표시
   }, [products, debouncedProductNameSearch]);
@@ -328,13 +348,16 @@ export default function MallPromotionsPage() {
   }, [isProductNameDropdownOpen, isProductCodeDropdownOpen]);
 
   // 업체별로 그룹화
-  const promotionsByMall = promotions.reduce((acc, promotion) => {
-    if (!acc[promotion.mallId]) {
-      acc[promotion.mallId] = [];
-    }
-    acc[promotion.mallId].push(promotion);
-    return acc;
-  }, {} as Record<number, Promotion[]>);
+  const promotionsByMall = promotions.reduce(
+    (acc, promotion) => {
+      if (!acc[promotion.mallId]) {
+        acc[promotion.mallId] = [];
+      }
+      acc[promotion.mallId].push(promotion);
+      return acc;
+    },
+    {} as Record<number, Promotion[]>,
+  );
 
   // 업체 검색 필터링 (가나다 순 유지)
   const filteredMalls = useMemo(() => {
@@ -430,6 +453,12 @@ export default function MallPromotionsPage() {
                                 행사가
                               </th>
                               <th className="border border-gray-300 px-2 py-1.5 text-left text-xs font-medium">
+                                시작일
+                              </th>
+                              <th className="border border-gray-300 px-2 py-1.5 text-left text-xs font-medium">
+                                종료일
+                              </th>
+                              <th className="border border-gray-300 px-2 py-1.5 text-left text-xs font-medium">
                                 작업
                               </th>
                             </tr>
@@ -437,7 +466,7 @@ export default function MallPromotionsPage() {
                           <tbody>
                             {mallPromotions.map((promotion) => {
                               const product = products.find(
-                                (p) => p.code === promotion.productCode
+                                (p) => p.code === promotion.productCode,
                               );
                               const displayName =
                                 product?.displayName || promotion.productCode;
@@ -473,6 +502,20 @@ export default function MallPromotionsPage() {
                                     ) : (
                                       "-"
                                     )}
+                                  </td>
+                                  <td className="border border-gray-300 px-2 py-1.5">
+                                    {promotion.startDate
+                                      ? new Date(
+                                          promotion.startDate,
+                                        ).toLocaleDateString("ko-KR")
+                                      : "-"}
+                                  </td>
+                                  <td className="border border-gray-300 px-2 py-1.5">
+                                    {promotion.endDate
+                                      ? new Date(
+                                          promotion.endDate,
+                                        ).toLocaleDateString("ko-KR")
+                                      : "-"}
                                   </td>
                                   <td className="border border-gray-300 px-2 py-1.5">
                                     <button
@@ -527,6 +570,36 @@ export default function MallPromotionsPage() {
                 />
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                {/* 시작일 */}
+                <div>
+                  <label className="block text-xs font-medium mb-1.5">
+                    시작일 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    required
+                  />
+                </div>
+
+                {/* 종료일 */}
+                <div>
+                  <label className="block text-xs font-medium mb-1.5">
+                    종료일 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
               {/* 상품 선택 */}
               <div>
                 <label className="block text-xs font-medium mb-1.5">
@@ -560,7 +633,7 @@ export default function MallPromotionsPage() {
                                 onClick={() => {
                                   setSelectedProductCode(product.code);
                                   setProductNameSearchValue(
-                                    product.displayName
+                                    product.displayName,
                                   );
                                   setProductCodeSearchValue(product.code);
                                   setIsProductNameDropdownOpen(false);
@@ -611,7 +684,7 @@ export default function MallPromotionsPage() {
                                 onClick={() => {
                                   setSelectedProductCode(product.code);
                                   setProductNameSearchValue(
-                                    product.displayName
+                                    product.displayName,
                                   );
                                   setProductCodeSearchValue(product.code);
                                   setIsProductCodeDropdownOpen(false);

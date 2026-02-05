@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
           FROM users
           WHERE id = ${userId} AND company_id = ${companyId}
         `;
-        
+
         if (userResult.length > 0) {
           userGrade = userResult[0].grade;
         }
@@ -44,13 +44,14 @@ export async function GET(request: NextRequest) {
         mp.product_code as "productCode",
         mp.discount_rate as "discountRate",
         mp.event_price as "eventPrice",
+        TO_CHAR(mp.start_date, 'YYYY-MM-DD') as "startDate",
+        TO_CHAR(mp.end_date, 'YYYY-MM-DD') as "endDate",
         mp.created_at as "createdAt",
         mp.updated_at as "updatedAt"
       FROM mall_promotions mp
       INNER JOIN mall m ON mp.mall_id = m.id
       WHERE 1=1
     `;
-
 
     if (mallId) {
       query = sql`${query} AND mp.mall_id = ${parseInt(mallId)}`;
@@ -71,7 +72,7 @@ export async function GET(request: NextRequest) {
     console.error("행사가 목록 조회 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
     );
   }
 }
@@ -83,20 +84,40 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const {mallId, productCode, discountRate, eventPrice} = body;
+    const {mallId, productCode, discountRate, eventPrice, startDate, endDate} =
+      body;
 
     if (!mallId || !productCode) {
       return NextResponse.json(
         {success: false, error: "mallId와 productCode는 필수입니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
     // discountRate와 eventPrice 중 하나는 필수
     if (discountRate === null && eventPrice === null) {
       return NextResponse.json(
-        {success: false, error: "할인율 또는 행사가 중 하나는 입력해야 합니다."},
-        {status: 400}
+        {
+          success: false,
+          error: "할인율 또는 행사가 중 하나는 입력해야 합니다.",
+        },
+        {status: 400},
+      );
+    }
+
+    // startDate와 endDate는 필수
+    if (!startDate || !endDate) {
+      return NextResponse.json(
+        {success: false, error: "시작일과 종료일은 필수입니다."},
+        {status: 400},
+      );
+    }
+
+    // 시작일이 종료일보다 늦으면 안됨
+    if (new Date(startDate) > new Date(endDate)) {
+      return NextResponse.json(
+        {success: false, error: "시작일은 종료일보다 이전이어야 합니다."},
+        {status: 400},
       );
     }
 
@@ -105,16 +126,22 @@ export async function POST(request: NextRequest) {
         mall_id,
         product_code,
         discount_rate,
-        event_price
+        event_price,
+        start_date,
+        end_date
       ) VALUES (
         ${mallId},
         ${productCode},
         ${discountRate || null},
-        ${eventPrice || null}
+        ${eventPrice || null},
+        ${startDate}::date,
+        ${endDate}::date
       )
       ON CONFLICT (mall_id, product_code) DO UPDATE SET
         discount_rate = EXCLUDED.discount_rate,
         event_price = EXCLUDED.event_price,
+        start_date = EXCLUDED.start_date,
+        end_date = EXCLUDED.end_date,
         updated_at = CURRENT_TIMESTAMP
       RETURNING 
         id,
@@ -122,6 +149,8 @@ export async function POST(request: NextRequest) {
         product_code as "productCode",
         discount_rate as "discountRate",
         event_price as "eventPrice",
+        TO_CHAR(start_date, 'YYYY-MM-DD') as "startDate",
+        TO_CHAR(end_date, 'YYYY-MM-DD') as "endDate",
         created_at as "createdAt",
         updated_at as "updatedAt"
     `;
@@ -134,7 +163,7 @@ export async function POST(request: NextRequest) {
     console.error("행사가 생성 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
     );
   }
 }
@@ -151,7 +180,7 @@ export async function DELETE(request: NextRequest) {
     if (!id) {
       return NextResponse.json(
         {success: false, error: "id는 필수입니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -168,7 +197,7 @@ export async function DELETE(request: NextRequest) {
     console.error("행사가 삭제 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
     );
   }
 }

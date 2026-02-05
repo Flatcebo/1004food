@@ -1,6 +1,11 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
 import {getCompanyIdFromRequest} from "@/lib/company";
+import {
+  getKoreaDateString,
+  isValidPromotionPeriod,
+  parseKoreaDate,
+} from "@/utils/koreaTime";
 
 /**
  * 매입처별 매출 정산 갱신 API
@@ -12,7 +17,7 @@ export async function POST(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -22,7 +27,7 @@ export async function POST(request: NextRequest) {
     if (!startDate || !endDate) {
       return NextResponse.json(
         {success: false, error: "startDate와 endDate가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -73,19 +78,62 @@ export async function POST(request: NextRequest) {
       `;
     }
 
+    // 행사가 조회 및 기간 체크 (한 번에 모든 행사가 조회)
+    const allPromotions = await sql`
+      SELECT id, mall_id, product_code, discount_rate, event_price,
+             TO_CHAR(start_date, 'YYYY-MM-DD') as start_date,
+             TO_CHAR(end_date, 'YYYY-MM-DD') as end_date
+      FROM mall_promotions
+    `;
+
+    const promotionMap: {
+      [key: string]: {discountRate: number | null; eventPrice: number | null};
+    } = {};
+    const promotionIdsToDelete: number[] = [];
+    const currentDate = getKoreaDateString();
+
+    allPromotions.forEach((promo: any) => {
+      // 행사 기간 체크
+      const isValid = isValidPromotionPeriod(promo.start_date, promo.end_date);
+
+      if (!isValid) {
+        // 기간이 지났으면 삭제 대상에 추가
+        if (parseKoreaDate(promo.end_date) < parseKoreaDate(currentDate)) {
+          promotionIdsToDelete.push(promo.id);
+        }
+        // 기간이 아니면 적용하지 않음
+        return;
+      }
+
+      // 유효한 행사 기간이면 적용
+      const key = `${promo.mall_id}_${promo.product_code}`;
+      promotionMap[key] = {
+        discountRate: promo.discount_rate,
+        eventPrice: promo.event_price,
+      };
+    });
+
+    // 만료된 행사 삭제
+    if (promotionIdsToDelete.length > 0) {
+      await sql`
+        DELETE FROM mall_promotions
+        WHERE id = ANY(${promotionIdsToDelete})
+      `;
+    }
+
     let processedCount = 0;
 
     // 각 매입처별로 정산 데이터 계산
     for (const purchase of purchases) {
-      // 주문 데이터 집계 (중복 제거를 위해 DISTINCT ON 사용)
-      const orderStats = await sql`
-        SELECT 
-          COUNT(DISTINCT ur.id) as order_count,
-          SUM(COALESCE((ur.row_data->>'수량')::numeric, 1)) as total_quantity,
-          SUM(
-            COALESCE((ur.row_data->>'수량')::numeric, 1) * 
-            COALESCE(pr.sale_price, 0)
-          ) as total_amount
+      // 주문 데이터 집계 (행사가 적용 포함)
+      // 각 주문의 mall_id와 product_code를 사용하여 행사가 확인
+      const orderData = await sql`
+        SELECT DISTINCT ON (ur.id)
+          ur.id,
+          ur.mall_id,
+          ur.row_data,
+          pr.sale_price as product_sale_price,
+          pr.code as product_code
         FROM upload_rows ur
         INNER JOIN uploads u ON ur.upload_id = u.id AND u.company_id = ${companyId}
         LEFT JOIN LATERAL (
@@ -105,15 +153,14 @@ export async function POST(request: NextRequest) {
           AND DATE(ur.created_at) < (${endDate}::date + INTERVAL '1 day')
       `;
 
-      // 취소 데이터 집계 (중복 제거를 위해 DISTINCT ON 사용)
-      const cancelStats = await sql`
-        SELECT 
-          COUNT(DISTINCT ur.id) as cancel_count,
-          SUM(COALESCE((ur.row_data->>'수량')::numeric, 1)) as total_quantity,
-          SUM(
-            COALESCE((ur.row_data->>'수량')::numeric, 1) * 
-            COALESCE(pr.sale_price, 0)
-          ) as total_amount
+      // 취소 데이터 집계 (행사가 적용 포함)
+      const cancelData = await sql`
+        SELECT DISTINCT ON (ur.id)
+          ur.id,
+          ur.mall_id,
+          ur.row_data,
+          pr.sale_price as product_sale_price,
+          pr.code as product_code
         FROM upload_rows ur
         INNER JOIN uploads u ON ur.upload_id = u.id AND u.company_id = ${companyId}
         LEFT JOIN LATERAL (
@@ -133,16 +180,74 @@ export async function POST(request: NextRequest) {
           AND DATE(ur.created_at) < (${endDate}::date + INTERVAL '1 day')
       `;
 
-      const orderQuantity = parseInt(orderStats[0]?.total_quantity) || 0;
-      const orderAmount = parseFloat(orderStats[0]?.total_amount) || 0;
-      const cancelQuantity = parseInt(cancelStats[0]?.total_quantity) || 0;
-      const cancelAmount = parseFloat(cancelStats[0]?.total_amount) || 0;
+      // 주문 금액 계산 (행사가 적용)
+      let orderQuantity = 0;
+      let orderAmount = 0;
+      for (const order of orderData) {
+        const rowData = order.row_data || {};
+        const quantity =
+          parseFloat(rowData["수량"] || rowData["주문수량"] || "1") || 1;
+        const productCode =
+          rowData["매핑코드"] || rowData["productId"] || order.product_code;
+
+        // 행사가 확인
+        let salePrice = order.product_sale_price || 0;
+        if (order.mall_id && productCode) {
+          const promoKey = `${order.mall_id}_${productCode}`;
+          const promotion = promotionMap[promoKey];
+          if (promotion) {
+            // 행사가 적용: 행사가가 있으면 우선 사용, 없으면 할인율 적용
+            if (promotion.eventPrice !== null) {
+              salePrice = promotion.eventPrice;
+            } else if (promotion.discountRate !== null && salePrice > 0) {
+              salePrice = Math.round(
+                salePrice * (1 - promotion.discountRate / 100),
+              );
+            }
+          }
+        }
+
+        orderQuantity += quantity;
+        orderAmount += salePrice * quantity;
+      }
+
+      // 취소 금액 계산 (행사가 적용)
+      let cancelQuantity = 0;
+      let cancelAmount = 0;
+      for (const cancel of cancelData) {
+        const rowData = cancel.row_data || {};
+        const quantity =
+          parseFloat(rowData["수량"] || rowData["주문수량"] || "1") || 1;
+        const productCode =
+          rowData["매핑코드"] || rowData["productId"] || cancel.product_code;
+
+        // 행사가 확인
+        let salePrice = cancel.product_sale_price || 0;
+        if (cancel.mall_id && productCode) {
+          const promoKey = `${cancel.mall_id}_${productCode}`;
+          const promotion = promotionMap[promoKey];
+          if (promotion) {
+            // 행사가 적용: 행사가가 있으면 우선 사용, 없으면 할인율 적용
+            if (promotion.eventPrice !== null) {
+              salePrice = promotion.eventPrice;
+            } else if (promotion.discountRate !== null && salePrice > 0) {
+              salePrice = Math.round(
+                salePrice * (1 - promotion.discountRate / 100),
+              );
+            }
+          }
+        }
+
+        cancelQuantity += quantity;
+        cancelAmount += salePrice * quantity;
+      }
       const netSalesQuantity = orderQuantity - cancelQuantity;
       const netSalesAmount = orderAmount - cancelAmount;
-      
+
       // 총이익 계산 (매입가 정보가 없으므로 일단 0으로 설정)
       const totalProfitAmount = 0;
-      const totalProfitRate = netSalesAmount > 0 ? (totalProfitAmount / netSalesAmount) * 100 : 0;
+      const totalProfitRate =
+        netSalesAmount > 0 ? (totalProfitAmount / netSalesAmount) * 100 : 0;
 
       // 정산 데이터 저장 (UPSERT)
       await sql`
@@ -200,7 +305,7 @@ export async function POST(request: NextRequest) {
     console.error("매입처별 정산 갱신 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
     );
   }
 }
