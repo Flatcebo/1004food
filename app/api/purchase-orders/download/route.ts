@@ -286,7 +286,7 @@ export async function POST(request: NextRequest) {
       });
 
       // 엑셀 버퍼 생성
-      buffer = await wb.xlsx.writeBuffer();
+      buffer = (await wb.xlsx.writeBuffer()) as unknown as Buffer;
     } else {
       // 템플릿이 없는 경우 외주 발주서 양식 사용
       // 외주 발주서 기본 컬럼 순서: 보내는 분, 전화번호, 주소, 받는사람, 전화번호1, 전화번호2, 우편번호, 주소, 비어있는 열, 상품명, 배송메시지, 박스, 업체명
@@ -408,7 +408,8 @@ export async function POST(request: NextRequest) {
       if (outsourceWorkbook.worksheets.length > 0) {
         outsourceWorkbook.worksheets[0].name = purchase.name;
       }
-      buffer = await outsourceWorkbook.xlsx.writeBuffer();
+      buffer =
+        (await outsourceWorkbook.xlsx.writeBuffer()) as unknown as Buffer;
     }
 
     // 발주 상태 업데이트 및 차수 정보 저장
