@@ -321,6 +321,7 @@ const SavedDataTable = memo(function SavedDataTable({
   const [selectedTemplate, setSelectedTemplate] = useState<number | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [useSabangName, setUseSabangName] = useState<boolean>(true);
+  const [perOrderShippingFee, setPerOrderShippingFee] = useState<boolean>(true);
   const [deliveryData, setDeliveryData] = useState<{
     [key: number]: {carrier: string; trackingNumber: string};
   }>({});
@@ -383,6 +384,12 @@ const SavedDataTable = memo(function SavedDataTable({
       return;
     }
 
+    // 체크된 항목이 없으면 다운로드 불가
+    if (selectedRows.size === 0) {
+      alert("다운로드할 항목을 선택해주세요.");
+      return;
+    }
+
     // 템플릿 종류 미리 확인 (list API 호출 전에 type 필터 결정 필요)
     const selectedTemplateObjForFilter = templates.find(
       (t) => t.id === selectedTemplate,
@@ -395,85 +402,12 @@ const SavedDataTable = memo(function SavedDataTable({
       templateNameForFilter.includes("외주") && !isCJOutsourceForFilter;
     const isInhouseForFilter = templateNameForFilter.includes("내주");
 
-    // 체크박스 선택 여부에 따라 다운로드 방식 결정
-    // - 체크박스가 선택되지 않으면: 필터링된 전체 데이터의 ID를 API에서 가져와서 다운로드
-    // - 체크박스가 선택되면: 선택된 항목만 다운로드 (rowIds 전달)
-    let rowIdsToDownload: number[] | null = null;
-    if (selectedRows.size > 0) {
-      // 체크박스가 선택된 경우: 선택된 행 ID만 사용
-      rowIdsToDownload = Array.from(selectedRows);
-    } else {
-      // 체크박스가 선택되지 않은 경우: 필터링된 전체 데이터의 ID를 API에서 가져오기
-      try {
-        const params = new URLSearchParams();
-        // 외주/내주 발주서인 경우: 해당 type 필터를 자동으로 설정 (전체 다운로드시 올바른 데이터만 가져오기)
-        if (isOutsourceForFilter || isCJOutsourceForFilter) {
-          // 외주 발주서: 외주 데이터만 가져오기
-          params.append("type", "외주");
-        } else if (isInhouseForFilter) {
-          // 내주 발주서: 내주 데이터만 가져오기
-          params.append("type", "내주");
-        } else if (appliedType) {
-          // 일반 발주서: 사용자가 적용한 필터 사용
-          params.append("type", appliedType);
-        }
-        if (appliedPostType) params.append("postType", appliedPostType);
-        if (appliedCompany && appliedCompany.length > 0) {
-          appliedCompany.forEach((c) => params.append("company", c));
-        }
-        if (appliedVendor && appliedVendor.length > 0) {
-          appliedVendor.forEach((v) => params.append("vendor", v));
-        }
-        if (appliedOrderStatus)
-          params.append("orderStatus", appliedOrderStatus);
-        if (appliedSearchField && appliedSearchValue) {
-          params.append("searchField", appliedSearchField);
-          params.append("searchValue", appliedSearchValue);
-        }
-        if (appliedUploadTimeFrom)
-          params.append("uploadTimeFrom", appliedUploadTimeFrom);
-        if (appliedUploadTimeTo)
-          params.append("uploadTimeTo", appliedUploadTimeTo);
-
-        // 필터링된 전체 데이터를 한 번에 가져오기 (limit을 totalCount로 설정)
-        // totalCount가 0이거나 없으면 1000으로 제한 (너무 큰 경우 방지)
-        const limit = totalCount > 0 ? Math.min(totalCount, 10000) : 1000;
-        params.append("page", "1");
-        params.append("limit", limit.toString());
-
-        const listResponse = await fetch(
-          `/api/upload/list?${params.toString()}`,
-          {
-            headers: getAuthHeaders(),
-          },
-        );
-        const listResult = await listResponse.json();
-
-        if (listResult.success && listResult.data) {
-          rowIdsToDownload = listResult.data
-            .map((row: any) => row.id)
-            .filter((id: any) => id != null);
-        } else {
-          // API 호출 실패 시 현재 페이지의 데이터 ID만 사용
-          rowIdsToDownload = tableRows
-            .map((row: any) => row.id)
-            .filter((id: any) => id != null);
-          console.warn(
-            "⚠️ 필터링된 전체 데이터 ID 수집 실패, 현재 페이지 데이터만 사용",
-          );
-        }
-      } catch (error) {
-        console.error("필터링된 데이터 ID 수집 실패:", error);
-        // 에러 발생 시 현재 페이지의 데이터 ID만 사용
-        rowIdsToDownload = tableRows
-          .map((row: any) => row.id)
-          .filter((id: any) => id != null);
-      }
-    }
+    // 체크박스가 선택된 경우: 선택된 행 ID만 사용
+    const rowIdsToDownload = Array.from(selectedRows);
 
     // 다운로드할 데이터가 없으면 알림 후 중단
     if (!rowIdsToDownload || rowIdsToDownload.length === 0) {
-      alert("다운로드할 데이터가 없습니다. 필터 조건을 확인해주세요.");
+      alert("다운로드할 데이터가 없습니다. 항목을 선택해주세요.");
       return;
     }
 
@@ -529,26 +463,17 @@ const SavedDataTable = memo(function SavedDataTable({
       const headers = getAuthHeaders();
 
       // 다운로드 요청 본문 구성
-      // - rowIdsToDownload가 있으면: rowIds만 전달 (필터링된 데이터의 ID 또는 선택된 ID)
-      // - rowIdsToDownload가 없으면: filters 전달 (필터가 없는 경우)
+      // 체크된 항목만 다운로드 (rowIds 전달)
       const requestBody: any = {
         templateId: selectedTemplate,
         preferSabangName: useSabangName,
+        perOrderShippingFee: perOrderShippingFee,
+        rowIds: rowIdsToDownload,
       };
 
-      if (rowIdsToDownload && rowIdsToDownload.length > 0) {
-        // 필터링된 데이터의 ID 또는 선택된 ID로 다운로드
-        requestBody.rowIds = rowIdsToDownload;
-        requestBody.filters = undefined;
-        console.log("📤 다운로드 요청: rowIds로 전달", {
-          rowIdsCount: rowIdsToDownload.length,
-        });
-      } else {
-        // 필터가 없는 경우에만 filters 전달
-        requestBody.rowIds = null;
-        requestBody.filters = undefined;
-        console.log("📤 다운로드 요청: filters 없음 (모든 데이터)");
-      }
+      console.log("📤 다운로드 요청: rowIds로 전달", {
+        rowIdsCount: rowIdsToDownload.length,
+      });
 
       const response = await fetch(apiUrl, {
         method: "POST",
@@ -606,15 +531,7 @@ const SavedDataTable = memo(function SavedDataTable({
     templates,
     onDataUpdate,
     useSabangName,
-    appliedType,
-    appliedPostType,
-    appliedCompany,
-    appliedVendor,
-    appliedOrderStatus,
-    appliedSearchField,
-    appliedSearchValue,
-    appliedUploadTimeFrom,
-    appliedUploadTimeTo,
+    perOrderShippingFee,
   ]);
 
   // 운송장 입력 확정
@@ -1992,6 +1909,15 @@ const SavedDataTable = memo(function SavedDataTable({
                     />
                     <span>사방넷명 사용</span>
                   </label>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={perOrderShippingFee}
+                      onChange={(e) => setPerOrderShippingFee(e.target.checked)}
+                      className="w-4 h-4"
+                    />
+                    <span>건당 배송비</span>
+                  </label>
                   <select
                     value={selectedTemplate || ""}
                     onChange={(e) =>
@@ -2009,7 +1935,9 @@ const SavedDataTable = memo(function SavedDataTable({
               )}
               <button
                 onClick={handleDownload}
-                disabled={isDownloading || !selectedTemplate}
+                disabled={
+                  isDownloading || !selectedTemplate || selectedRows.size === 0
+                }
                 className="px-4 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm
                 font-bold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -2017,7 +1945,7 @@ const SavedDataTable = memo(function SavedDataTable({
                   ? "다운로드 중..."
                   : selectedRows.size > 0
                     ? `${selectedRows.size}건 다운로드`
-                    : "전체 다운로드"}
+                    : "다운로드"}
               </button>
             </>
           )}

@@ -7,6 +7,7 @@ import {
   mapRowToTemplateFormat,
 } from "@/utils/purchaseTemplateMapping";
 import {mapDataToTemplate} from "@/utils/excelDataMapping";
+import {createCJOutsourceTemplate} from "@/libs/cj-outsource-template";
 
 // 전화번호에 하이픈을 추가하여 형식 맞춤
 function formatPhoneNumber(phoneNumber: string): string {
@@ -208,166 +209,207 @@ export async function POST(request: NextRequest) {
     const wb = new Excel.Workbook();
     const sheet = wb.addWorksheet(purchase.name);
 
-    // 헤더 결정
+    // 헤더 결정 및 엑셀 파일 생성
     let finalHeaders: string[];
+    let buffer: Buffer;
+
     if (
       templateHeaders &&
       Array.isArray(templateHeaders) &&
       templateHeaders.length > 0
     ) {
+      // 매입처 템플릿이 있는 경우 기존 로직 사용
       finalHeaders = getTemplateHeaderNames(templateHeaders);
-    } else {
-      // 기본 외주 발주서 헤더
-      finalHeaders = [
-        "주문번호",
-        "상품명",
-        "수량",
-        "수취인명",
-        "전화번호1",
-        "전화번호2",
-        "우편번호",
-        "주소",
-        "배송메시지",
-      ];
-    }
 
-    // 헤더 행 추가
-    const headerRow = sheet.addRow(finalHeaders);
-    headerRow.height = 30;
+      // 헤더 행 추가
+      const headerRow = sheet.addRow(finalHeaders);
+      headerRow.height = 30;
 
-    // 헤더 스타일
-    headerRow.eachCell((cell) => {
-      cell.fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: {argb: "FFE0E0E0"},
-      };
-      cell.border = {
-        top: {style: "thin"},
-        left: {style: "thin"},
-        bottom: {style: "thin"},
-        right: {style: "thin"},
-      };
-      cell.font = {
-        bold: true,
-        size: 11,
-      };
-      cell.alignment = {
-        vertical: "middle",
-        horizontal: "center",
-      };
-    });
-
-    // 데이터 행 추가
-    ordersData.forEach((order: any) => {
-      const rowData = order.row_data || {};
-
-      // 사방넷명 추가
-      if (order.sabang_name) {
-        rowData["사방넷명"] = order.sabang_name;
-        rowData["sabangName"] = order.sabang_name;
-      }
-
-      let rowValues: string[];
-      if (
-        templateHeaders &&
-        Array.isArray(templateHeaders) &&
-        templateHeaders.length > 0
-      ) {
-        // 매입처 템플릿으로 매핑
-        rowValues = mapRowToTemplateFormat(
-          rowData,
-          templateHeaders,
-          headerAliases,
-        );
-      } else {
-        // 기본 외주 발주서 양식 - mapDataToTemplate 사용
-        rowValues = finalHeaders.map((header: string) => {
-          let value = mapDataToTemplate(rowData, header, {
-            formatPhone: true, // 외주 발주서에서는 전화번호에 하이픈 추가
-          });
-
-          let stringValue = value != null ? String(value) : "";
-
-          // 수취인명인지 확인
-          const headerStrNormalized = header.replace(/\s+/g, "").toLowerCase();
-          const isReceiverName =
-            header === "수취인명" ||
-            header === "수취인" ||
-            header === "받는사람" ||
-            (header.includes("수취인") &&
-              !headerStrNormalized.includes("전화") &&
-              !headerStrNormalized.includes("주소") &&
-              !headerStrNormalized.includes("우편") &&
-              !headerStrNormalized.includes("연락"));
-
-          // 배송메시지 필드인지 확인
-          const isDeliveryMessageField =
-            header.includes("배송") ||
-            header.includes("메시지") ||
-            header.includes("배메") ||
-            header === "배송메시지" ||
-            header === "배송 메시지";
-
-          // 수취인명이 아닌 필드에서는 별 제거 (배송메시지 제외)
-          if (!isReceiverName && !isDeliveryMessageField) {
-            stringValue = stringValue.replace(/^★/, "").trim();
-          }
-
-          // 수취인명인 경우 앞에 ★ 붙이기
-          if (isReceiverName) {
-            stringValue = "★" + stringValue.replace(/^★/, "").trim();
-          }
-
-          // 주문번호인 경우 내부코드 사용 (온라인 유저는 sabang_code)
-          if (header === "주문번호" || header.includes("주문번호")) {
-            if (userGrade === "온라인") {
-              stringValue =
-                rowData["sabang_code"] || rowData["주문번호"] || stringValue;
-            } else {
-              stringValue = rowData["내부코드"] || stringValue;
-            }
-          }
-
-          // 전화번호 포맷팅
-          if (header === "전화번호1" || header.includes("전화번호1")) {
-            let phone1Value = stringValue;
-            if (phone1Value) {
-              phone1Value = formatPhoneNumber(phone1Value);
-              // grade가 "온라인"인 경우 공백 추가
-              if (userGrade === "온라인") {
-                phone1Value = formatPhoneNumber1ForOnline(phone1Value);
-              }
-              stringValue = phone1Value;
-            }
-          }
-
-          return stringValue;
-        });
-      }
-
-      const dataRow = sheet.addRow(rowValues);
-      dataRow.eachCell((cell) => {
+      // 헤더 스타일
+      headerRow.eachCell((cell) => {
+        cell.fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: {argb: "FFE0E0E0"},
+        };
         cell.border = {
           top: {style: "thin"},
           left: {style: "thin"},
           bottom: {style: "thin"},
           right: {style: "thin"},
         };
+        cell.font = {
+          bold: true,
+          size: 11,
+        };
         cell.alignment = {
           vertical: "middle",
+          horizontal: "center",
         };
       });
-    });
 
-    // 열 너비 자동 조절
-    finalHeaders.forEach((_, index) => {
-      const column = sheet.getColumn(index + 1);
-      column.width = 15;
-    });
+      // 데이터 행 추가
+      ordersData.forEach((order: any) => {
+        const rowData = order.row_data || {};
 
-    // 엑셀 버퍼 생성
-    const buffer = await wb.xlsx.writeBuffer();
+        // 사방넷명 추가
+        if (order.sabang_name) {
+          rowData["사방넷명"] = order.sabang_name;
+          rowData["sabangName"] = order.sabang_name;
+        }
+
+        // 매입처 템플릿으로 매핑
+        const rowValues = mapRowToTemplateFormat(
+          rowData,
+          templateHeaders,
+          headerAliases,
+        );
+
+        const dataRow = sheet.addRow(rowValues);
+        dataRow.eachCell((cell) => {
+          cell.border = {
+            top: {style: "thin"},
+            left: {style: "thin"},
+            bottom: {style: "thin"},
+            right: {style: "thin"},
+          };
+          cell.alignment = {
+            vertical: "middle",
+          };
+        });
+      });
+
+      // 열 너비 자동 조절
+      finalHeaders.forEach((_, index) => {
+        const column = sheet.getColumn(index + 1);
+        column.width = 15;
+      });
+
+      // 엑셀 버퍼 생성
+      buffer = await wb.xlsx.writeBuffer();
+    } else {
+      // 템플릿이 없는 경우 외주 발주서 양식 사용
+      // 외주 발주서 기본 컬럼 순서: 보내는 분, 전화번호, 주소, 받는사람, 전화번호1, 전화번호2, 우편번호, 주소, 비어있는 열, 상품명, 배송메시지, 박스, 업체명
+      const outsourceColumnOrder = [
+        "보내는 분",
+        "전화번호",
+        "주소",
+        "받는사람",
+        "전화번호1",
+        "전화번호2",
+        "우편번호",
+        "주소",
+        "", // 비어있는 열
+        "상품명",
+        "배송메시지",
+        "박스",
+        "업체명",
+      ];
+
+      // 데이터를 2차원 배열로 변환
+      const excelData: any[][] = ordersData.map((order: any) => {
+        const rowData = order.row_data || {};
+
+        // 사방넷명 추가
+        if (order.sabang_name) {
+          rowData["사방넷명"] = order.sabang_name;
+          rowData["sabangName"] = order.sabang_name;
+        }
+
+        return outsourceColumnOrder.map((header: string, colIdx: number) => {
+          if (header === "") return "";
+
+          let value: any = "";
+
+          // 각 헤더에 맞는 데이터 매핑
+          switch (header) {
+            case "보내는 분":
+              value = purchase.name || "";
+              break;
+            case "전화번호":
+              value = "";
+              break;
+            case "받는사람":
+              value = mapDataToTemplate(rowData, "수취인명", {
+                formatPhone: false,
+              });
+              // 수취인명 앞에 ★ 붙이기
+              let receiverName = value != null ? String(value) : "";
+              receiverName = "★" + receiverName.replace(/^★/, "").trim();
+              value = receiverName;
+              break;
+            case "전화번호1":
+              value = mapDataToTemplate(rowData, "전화번호1", {
+                formatPhone: true,
+              });
+              let phone1Value = value != null ? String(value) : "";
+              if (phone1Value) {
+                phone1Value = formatPhoneNumber(phone1Value);
+                if (userGrade === "온라인") {
+                  phone1Value = formatPhoneNumber1ForOnline(phone1Value);
+                }
+                value = phone1Value;
+              }
+              break;
+            case "전화번호2":
+              value = mapDataToTemplate(rowData, "전화번호2", {
+                formatPhone: true,
+              });
+              break;
+            case "우편번호":
+              value = mapDataToTemplate(rowData, "우편번호", {
+                formatPhone: false,
+              });
+              break;
+            case "주소":
+              // 첫 번째 주소(인덱스 2)는 빈 값, 두 번째 주소(인덱스 7)는 실제 주소
+              const addressIndices = outsourceColumnOrder
+                .map((h, idx) => (h === "주소" ? idx : -1))
+                .filter((idx) => idx !== -1);
+              const isFirstAddress = colIdx === addressIndices[0];
+              value = isFirstAddress
+                ? ""
+                : mapDataToTemplate(rowData, "주소", {
+                    formatPhone: false,
+                  });
+              break;
+            case "상품명":
+              value = mapDataToTemplate(rowData, "상품명", {
+                formatPhone: false,
+              });
+              break;
+            case "배송메시지":
+              value = mapDataToTemplate(rowData, "배송메시지", {
+                formatPhone: false,
+              });
+              break;
+            case "박스":
+              value = "";
+              break;
+            case "업체명":
+              value = purchase.name || "";
+              break;
+            default:
+              value = mapDataToTemplate(rowData, header, {
+                formatPhone: false,
+              });
+          }
+
+          return value != null ? String(value) : "";
+        });
+      });
+
+      // 외주 발주서 템플릿 사용
+      const outsourceWorkbook = createCJOutsourceTemplate(
+        outsourceColumnOrder,
+        excelData,
+      );
+      // 워크시트 이름을 매입처 이름으로 변경
+      if (outsourceWorkbook.worksheets.length > 0) {
+        outsourceWorkbook.worksheets[0].name = purchase.name;
+      }
+      buffer = await outsourceWorkbook.xlsx.writeBuffer();
+    }
 
     // 발주 상태 업데이트 및 차수 정보 저장
     const updatedOrderIds =

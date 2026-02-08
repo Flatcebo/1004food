@@ -10,12 +10,16 @@ import JSZip from "jszip";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const {settlementIds} = body;
+    const {settlementIds, perOrderShippingFee} = body;
 
-    if (!settlementIds || !Array.isArray(settlementIds) || settlementIds.length === 0) {
+    if (
+      !settlementIds ||
+      !Array.isArray(settlementIds) ||
+      settlementIds.length === 0
+    ) {
       return NextResponse.json(
         {success: false, error: "settlementIds가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -24,7 +28,7 @@ export async function POST(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -53,7 +57,7 @@ export async function POST(request: NextRequest) {
     if (settlements.length === 0) {
       return NextResponse.json(
         {success: false, error: "정산 데이터를 찾을 수 없습니다."},
-        {status: 404}
+        {status: 404},
       );
     }
 
@@ -106,7 +110,11 @@ export async function POST(request: NextRequest) {
         ["취소", settlement.cancel_quantity, settlement.cancel_amount],
         ["순매출", settlement.net_sales_quantity, settlement.net_sales_amount],
         ["총이익", "-", settlement.total_profit_amount],
-        ["이익률", "-", `${parseFloat(settlement.total_profit_rate).toFixed(2)}%`],
+        [
+          "이익률",
+          "-",
+          `${parseFloat(settlement.total_profit_rate).toFixed(2)}%`,
+        ],
       ];
 
       dataRows.forEach((row) => {
@@ -148,7 +156,7 @@ export async function POST(request: NextRequest) {
     responseHeaders.set("Content-Type", "application/zip");
     responseHeaders.set(
       "Content-Disposition",
-      `attachment; filename="purchase_settlement.zip"; filename*=UTF-8''${encodedZipFileName}`
+      `attachment; filename="purchase_settlement.zip"; filename*=UTF-8''${encodedZipFileName}`,
     );
 
     return new Response(Buffer.from(zipBuffer), {
@@ -158,7 +166,7 @@ export async function POST(request: NextRequest) {
     console.error("정산서 다운로드 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
     );
   }
 }

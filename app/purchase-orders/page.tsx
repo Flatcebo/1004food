@@ -30,6 +30,12 @@ export default function PurchaseOrdersPage() {
   const [selectedPurchaseNames, setSelectedPurchaseNames] = useState<string[]>(
     [],
   );
+  const [orderFilter, setOrderFilter] = useState<
+    "all" | "ordered" | "unordered"
+  >("unordered");
+  const [appliedOrderFilter, setAppliedOrderFilter] = useState<
+    "all" | "ordered" | "unordered"
+  >("unordered");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>("");
   const {
@@ -135,6 +141,9 @@ export default function PurchaseOrdersPage() {
       return;
     }
 
+    // 조회 버튼 클릭 시 선택된 주문 필터 적용
+    setAppliedOrderFilter(orderFilter);
+
     setLoading(true);
     setError("");
 
@@ -184,7 +193,7 @@ export default function PurchaseOrdersPage() {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, getAuthHeaders]);
+  }, [startDate, endDate, orderFilter, getAuthHeaders]);
 
   // 초기 로드 시 매입처 목록만 조회 (드롭다운용)
   useEffect(() => {
@@ -197,11 +206,12 @@ export default function PurchaseOrdersPage() {
     }
   }, [mounted, user, fetchPurchaseList]);
 
-  // 숫자 포맷팅
+  // 숫자 포맷팅 (0이면 공란 반환)
   const formatNumber = (num: number | string | null | undefined): string => {
-    if (num === null || num === undefined) return "-";
+    if (num === null || num === undefined) return "";
     const numValue = typeof num === "string" ? parseFloat(num) : num;
-    if (isNaN(numValue)) return "-";
+    if (isNaN(numValue)) return "";
+    if (numValue === 0) return "";
     return new Intl.NumberFormat("ko-KR").format(numValue);
   };
 
@@ -334,6 +344,9 @@ export default function PurchaseOrdersPage() {
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
+
+      // 다운로드 성공 후 데이터 새로고침
+      await fetchPurchases();
     } catch (err: any) {
       alert(`다운로드 오류: ${err.message}`);
     } finally {
@@ -347,6 +360,7 @@ export default function PurchaseOrdersPage() {
     getAuthHeaders,
     startLoading,
     stopLoading,
+    fetchPurchases,
   ]);
 
   // 매입처명 목록 (가나다 순 정렬)
@@ -356,15 +370,31 @@ export default function PurchaseOrdersPage() {
       .map((purchase) => purchase.name);
   }, [purchases]);
 
-  // 필터링된 매입처 목록
+  // 필터링된 매입처 목록 (조회 버튼 클릭 시 적용된 필터 사용)
   const filteredPurchases = useMemo(() => {
-    if (selectedPurchaseNames.length === 0) {
-      return purchases;
+    let filtered = purchases;
+
+    // 주문 필터 적용 (조회 버튼 클릭 시 적용된 필터 사용)
+    if (appliedOrderFilter === "ordered") {
+      // 발주된 주문이 0보다 큰 것만
+      filtered = filtered.filter((purchase) => purchase.orderedCount > 0);
+    } else if (appliedOrderFilter === "unordered") {
+      // 미발주 주문이 0보다 큰 것만
+      filtered = filtered.filter((purchase) => purchase.unorderedCount > 0);
+    } else {
+      // 전체: 총 주문 건수가 0보다 큰 것만
+      filtered = filtered.filter((purchase) => purchase.totalOrders > 0);
     }
-    return purchases.filter((purchase) =>
-      selectedPurchaseNames.includes(purchase.name),
-    );
-  }, [purchases, selectedPurchaseNames]);
+
+    // 매입처명 필터 적용
+    if (selectedPurchaseNames.length > 0) {
+      filtered = filtered.filter((purchase) =>
+        selectedPurchaseNames.includes(purchase.name),
+      );
+    }
+
+    return filtered;
+  }, [purchases, selectedPurchaseNames, appliedOrderFilter]);
 
   // 합계 계산 (필터링된 목록 기준)
   const totals = useMemo(() => {
@@ -471,6 +501,23 @@ export default function PurchaseOrdersPage() {
                 enableAutocomplete={true}
                 className="w-auto"
               />
+
+              <label className="text-sm font-medium">
+                주문 필터:
+                <select
+                  value={orderFilter}
+                  onChange={(e) =>
+                    setOrderFilter(
+                      e.target.value as "all" | "ordered" | "unordered",
+                    )
+                  }
+                  className="ml-2 px-3 py-1.5 border border-gray-300 rounded text-sm"
+                >
+                  <option value="all">전체</option>
+                  <option value="ordered">발주된 주문</option>
+                  <option value="unordered">미발주 주문</option>
+                </select>
+              </label>
 
               <button
                 className="px-4 py-2 bg-green-500 text-white text-sm rounded hover:bg-green-600 disabled:bg-gray-400"
@@ -628,6 +675,7 @@ export default function PurchaseOrdersPage() {
             startDate={startDate}
             endDate={endDate}
             onClose={handleCloseModal}
+            onDataUpdate={fetchPurchases}
           />
         )}
       </div>

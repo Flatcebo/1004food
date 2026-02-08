@@ -52,7 +52,9 @@ export default function SalesByPurchasePage() {
   const [startDate, setStartDate] = useState<string>(todayDate);
   const [endDate, setEndDate] = useState<string>(todayDate);
   const [selectedPurchaseId, setSelectedPurchaseId] = useState<string>("");
-  const [selectedPurchaseNames, setSelectedPurchaseNames] = useState<string[]>([]);
+  const [selectedPurchaseNames, setSelectedPurchaseNames] = useState<string[]>(
+    [],
+  );
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [settlements, setSettlements] = useState<SettlementData[]>([]);
   const [loading, setLoading] = useState(false);
@@ -101,8 +103,11 @@ export default function SalesByPurchasePage() {
   const [ordersLoading, setOrdersLoading] = useState(false);
 
   // 체크박스 선택 상태
-  const [selectedSettlementIds, setSelectedSettlementIds] = useState<Set<number>>(new Set());
+  const [selectedSettlementIds, setSelectedSettlementIds] = useState<
+    Set<number>
+  >(new Set());
   const [downloading, setDownloading] = useState(false);
+  const [perOrderShippingFee, setPerOrderShippingFee] = useState<boolean>(true);
 
   // 인증 헤더 생성
   const getAuthHeaders = useCallback((): HeadersInit => {
@@ -167,7 +172,7 @@ export default function SalesByPurchasePage() {
         `/api/analytics/sales-by-purchase?${params.toString()}`,
         {
           headers: getAuthHeaders(),
-        }
+        },
       );
 
       const result = await response.json();
@@ -195,13 +200,17 @@ export default function SalesByPurchasePage() {
     startLoading(
       "매입처별 정산 갱신",
       "정산 데이터를 계산하고 있습니다...",
-      "잠시만 기다려주세요"
+      "잠시만 기다려주세요",
     );
 
     try {
       updateLoadingMessage("주문 데이터를 조회하고 있습니다...");
 
-      const requestBody: {startDate: string; endDate: string; purchaseId?: string} = {
+      const requestBody: {
+        startDate: string;
+        endDate: string;
+        purchaseId?: string;
+      } = {
         startDate,
         endDate,
       };
@@ -275,7 +284,7 @@ export default function SalesByPurchasePage() {
       purchaseId: number,
       purchaseName: string,
       startDate: string,
-      endDate: string
+      endDate: string,
     ) => {
       setOrdersLoading(true);
       setError("");
@@ -293,12 +302,15 @@ export default function SalesByPurchasePage() {
 
         if (result.success) {
           // 중복 제거 (같은 id를 가진 주문이 여러 개 있을 수 있음)
-          const uniqueOrders = (result.data || []).reduce((acc: OrderData[], order: OrderData) => {
-            if (!acc.find((o) => o.id === order.id)) {
-              acc.push(order);
-            }
-            return acc;
-          }, []);
+          const uniqueOrders = (result.data || []).reduce(
+            (acc: OrderData[], order: OrderData) => {
+              if (!acc.find((o) => o.id === order.id)) {
+                acc.push(order);
+              }
+              return acc;
+            },
+            [],
+          );
           setOrders(uniqueOrders);
           setOrderModalData({purchaseId, purchaseName, startDate, endDate});
           setOrderModalOpen(true);
@@ -308,14 +320,15 @@ export default function SalesByPurchasePage() {
           alert(errorMsg);
         }
       } catch (err: any) {
-        const errorMsg = err.message || "주문 목록 조회 중 오류가 발생했습니다.";
+        const errorMsg =
+          err.message || "주문 목록 조회 중 오류가 발생했습니다.";
         setError(errorMsg);
         alert(errorMsg);
       } finally {
         setOrdersLoading(false);
       }
     },
-    [getAuthHeaders]
+    [getAuthHeaders],
   );
 
   // 날짜만 추출 (YYYY-MM-DD 형식)
@@ -347,7 +360,7 @@ export default function SalesByPurchasePage() {
 
       return formatDate(new Date(dateStr));
     },
-    []
+    [],
   );
 
   // 주문 수량 셀 클릭 핸들러
@@ -385,10 +398,10 @@ export default function SalesByPurchasePage() {
         settlement.purchaseId,
         settlement.purchaseName,
         startDate,
-        endDate
+        endDate,
       );
     },
-    [fetchOrders, extractDateOnly]
+    [fetchOrders, extractDateOnly],
   );
 
   // 주문 모달 닫기
@@ -407,7 +420,7 @@ export default function SalesByPurchasePage() {
         setSelectedSettlementIds(new Set());
       }
     },
-    [settlements]
+    [settlements],
   );
 
   // 개별 체크박스 선택/해제
@@ -423,7 +436,7 @@ export default function SalesByPurchasePage() {
         return newSet;
       });
     },
-    []
+    [],
   );
 
   // 정산서 다운로드
@@ -445,8 +458,11 @@ export default function SalesByPurchasePage() {
         {
           method: "POST",
           headers: getAuthHeaders(),
-          body: JSON.stringify({settlementIds: idsToDownload}),
-        }
+          body: JSON.stringify({
+            settlementIds: idsToDownload,
+            perOrderShippingFee: perOrderShippingFee,
+          }),
+        },
       );
 
       if (!response.ok) {
@@ -462,7 +478,9 @@ export default function SalesByPurchasePage() {
       const contentDisposition = response.headers.get("Content-Disposition");
       let downloadFileName = `매입처_정산서_${new Date().toISOString().split("T")[0]}.zip`;
       if (contentDisposition) {
-        const fileNameMatch = contentDisposition.match(/filename\*=UTF-8''(.+)/);
+        const fileNameMatch = contentDisposition.match(
+          /filename\*=UTF-8''(.+)/,
+        );
         if (fileNameMatch) {
           downloadFileName = decodeURIComponent(fileNameMatch[1]);
         }
@@ -479,7 +497,7 @@ export default function SalesByPurchasePage() {
     } finally {
       setDownloading(false);
     }
-  }, [settlements, selectedSettlementIds, getAuthHeaders]);
+  }, [settlements, selectedSettlementIds, getAuthHeaders, perOrderShippingFee]);
 
   // 기간 표시 포맷팅
   const formatDateRange = useCallback(
@@ -490,7 +508,7 @@ export default function SalesByPurchasePage() {
         return `${startDate} 00:00:00 ~ ${endDate} 23:59:59`;
       }
     },
-    []
+    [],
   );
 
   useEffect(() => {
@@ -500,7 +518,11 @@ export default function SalesByPurchasePage() {
   }, [user, fetchPurchases]);
 
   // 접근 권한이 없으면 렌더링하지 않음 (클라이언트에서만 체크)
-  if (!mounted || !user || (user.grade !== "온라인" && user.grade !== "관리자")) {
+  if (
+    !mounted ||
+    !user ||
+    (user.grade !== "온라인" && user.grade !== "관리자")
+  ) {
     return null;
   }
 
@@ -518,17 +540,28 @@ export default function SalesByPurchasePage() {
             <div className="mb-4 flex gap-4 items-center justify-between">
               <h2 className="text-xl font-bold">매입처별 매출 정산</h2>
               {settlements.length > 0 && (
-                <button
-                  className="px-4 py-2 bg-indigo-500 text-white text-sm rounded hover:bg-indigo-600 disabled:bg-gray-400"
-                  onClick={handleDownloadSettlement}
-                  disabled={downloading}
-                >
-                  {downloading
-                    ? "다운로드 중..."
-                    : selectedSettlementIds.size > 0
-                    ? `${selectedSettlementIds.size}건 다운로드`
-                    : "전체 다운로드"}
-                </button>
+                <div className="flex gap-4 items-center">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={perOrderShippingFee}
+                      onChange={(e) => setPerOrderShippingFee(e.target.checked)}
+                      className="w-4 h-4"
+                    />
+                    <span>건당 배송비</span>
+                  </label>
+                  <button
+                    className="px-4 py-2 bg-indigo-500 text-white text-sm rounded hover:bg-indigo-600 disabled:bg-gray-400"
+                    onClick={handleDownloadSettlement}
+                    disabled={downloading}
+                  >
+                    {downloading
+                      ? "다운로드 중..."
+                      : selectedSettlementIds.size > 0
+                        ? `${selectedSettlementIds.size}건 다운로드`
+                        : "전체 다운로드"}
+                  </button>
+                </div>
               )}
             </div>
 
@@ -568,7 +601,7 @@ export default function SalesByPurchasePage() {
                     setSelectedPurchaseId("");
                   } else {
                     const foundPurchase = purchases.find(
-                      (p) => p.name === newValues[0]
+                      (p) => p.name === newValues[0],
                     );
                     if (foundPurchase) {
                       setSelectedPurchaseId(foundPurchase.id.toString());
@@ -614,7 +647,8 @@ export default function SalesByPurchasePage() {
               <div className="text-center py-8">조회 중...</div>
             ) : settlements.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
-                조회할 데이터가 없습니다. 기간을 선택하고 검색 버튼을 클릭하세요.
+                조회할 데이터가 없습니다. 기간을 선택하고 검색 버튼을
+                클릭하세요.
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -632,18 +666,34 @@ export default function SalesByPurchasePage() {
                           className="cursor-pointer"
                         />
                       </th>
-                      <th className="border border-gray-300 px-4 py-2 text-left">No.</th>
-                      <th className="border border-gray-300 px-4 py-2 text-left">매입처명</th>
-                      <th className="border border-gray-300 px-4 py-2 text-center" colSpan={2}>
+                      <th className="border border-gray-300 px-4 py-2 text-left">
+                        No.
+                      </th>
+                      <th className="border border-gray-300 px-4 py-2 text-left">
+                        매입처명
+                      </th>
+                      <th
+                        className="border border-gray-300 px-4 py-2 text-center"
+                        colSpan={2}
+                      >
                         주문
                       </th>
-                      <th className="border border-gray-300 px-4 py-2 text-center" colSpan={2}>
+                      <th
+                        className="border border-gray-300 px-4 py-2 text-center"
+                        colSpan={2}
+                      >
                         취소
                       </th>
-                      <th className="border border-gray-300 px-4 py-2 text-center" colSpan={2}>
+                      <th
+                        className="border border-gray-300 px-4 py-2 text-center"
+                        colSpan={2}
+                      >
                         순매출
                       </th>
-                      <th className="border border-gray-300 px-4 py-2 text-center" colSpan={2}>
+                      <th
+                        className="border border-gray-300 px-4 py-2 text-center"
+                        colSpan={2}
+                      >
                         총이익
                       </th>
                     </tr>
@@ -651,14 +701,30 @@ export default function SalesByPurchasePage() {
                       <th className="border border-gray-300 px-4 py-2"></th>
                       <th className="border border-gray-300 px-4 py-2"></th>
                       <th className="border border-gray-300 px-4 py-2"></th>
-                      <th className="border border-gray-300 px-4 py-2 text-center">수량</th>
-                      <th className="border border-gray-300 px-4 py-2 text-center">금액</th>
-                      <th className="border border-gray-300 px-4 py-2 text-center">수량</th>
-                      <th className="border border-gray-300 px-4 py-2 text-center">금액</th>
-                      <th className="border border-gray-300 px-4 py-2 text-center">수량</th>
-                      <th className="border border-gray-300 px-4 py-2 text-center">금액</th>
-                      <th className="border border-gray-300 px-4 py-2 text-center">이익액</th>
-                      <th className="border border-gray-300 px-4 py-2 text-center">이익률</th>
+                      <th className="border border-gray-300 px-4 py-2 text-center">
+                        수량
+                      </th>
+                      <th className="border border-gray-300 px-4 py-2 text-center">
+                        금액
+                      </th>
+                      <th className="border border-gray-300 px-4 py-2 text-center">
+                        수량
+                      </th>
+                      <th className="border border-gray-300 px-4 py-2 text-center">
+                        금액
+                      </th>
+                      <th className="border border-gray-300 px-4 py-2 text-center">
+                        수량
+                      </th>
+                      <th className="border border-gray-300 px-4 py-2 text-center">
+                        금액
+                      </th>
+                      <th className="border border-gray-300 px-4 py-2 text-center">
+                        이익액
+                      </th>
+                      <th className="border border-gray-300 px-4 py-2 text-center">
+                        이익률
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -669,7 +735,10 @@ export default function SalesByPurchasePage() {
                             type="checkbox"
                             checked={selectedSettlementIds.has(settlement.id)}
                             onChange={(e) =>
-                              handleSelectSettlement(settlement.id, e.target.checked)
+                              handleSelectSettlement(
+                                settlement.id,
+                                e.target.checked,
+                              )
                             }
                             className="cursor-pointer"
                           />
@@ -716,35 +785,79 @@ export default function SalesByPurchasePage() {
                   {settlements.length > 0 && (
                     <tfoot>
                       <tr className="bg-gray-100 font-bold">
-                        <td className="border border-gray-300 px-4 py-2 text-center" colSpan={3}>
+                        <td
+                          className="border border-gray-300 px-4 py-2 text-center"
+                          colSpan={3}
+                        >
                           합계
                         </td>
                         <td className="border border-gray-300 px-4 py-2 text-right">
-                          {formatNumber(settlements.reduce((sum, s) => sum + (s.orderQuantity || 0), 0))}
+                          {formatNumber(
+                            settlements.reduce(
+                              (sum, s) => sum + (s.orderQuantity || 0),
+                              0,
+                            ),
+                          )}
                         </td>
                         <td className="border border-gray-300 px-4 py-2 text-right">
-                          {formatNumber(settlements.reduce((sum, s) => sum + (s.orderAmount || 0), 0))}
+                          {formatNumber(
+                            settlements.reduce(
+                              (sum, s) => sum + (s.orderAmount || 0),
+                              0,
+                            ),
+                          )}
                         </td>
                         <td className="border border-gray-300 px-4 py-2 text-right">
-                          {formatNumber(settlements.reduce((sum, s) => sum + (s.cancelQuantity || 0), 0))}
+                          {formatNumber(
+                            settlements.reduce(
+                              (sum, s) => sum + (s.cancelQuantity || 0),
+                              0,
+                            ),
+                          )}
                         </td>
                         <td className="border border-gray-300 px-4 py-2 text-right">
-                          {formatNumber(settlements.reduce((sum, s) => sum + (s.cancelAmount || 0), 0))}
+                          {formatNumber(
+                            settlements.reduce(
+                              (sum, s) => sum + (s.cancelAmount || 0),
+                              0,
+                            ),
+                          )}
                         </td>
                         <td className="border border-gray-300 px-4 py-2 text-right">
-                          {formatNumber(settlements.reduce((sum, s) => sum + (s.netSalesQuantity || 0), 0))}
+                          {formatNumber(
+                            settlements.reduce(
+                              (sum, s) => sum + (s.netSalesQuantity || 0),
+                              0,
+                            ),
+                          )}
                         </td>
                         <td className="border border-gray-300 px-4 py-2 text-right">
-                          {formatNumber(settlements.reduce((sum, s) => sum + (s.netSalesAmount || 0), 0))}
+                          {formatNumber(
+                            settlements.reduce(
+                              (sum, s) => sum + (s.netSalesAmount || 0),
+                              0,
+                            ),
+                          )}
                         </td>
                         <td className="border border-gray-300 px-4 py-2 text-right">
-                          {formatNumber(settlements.reduce((sum, s) => sum + (s.totalProfitAmount || 0), 0))}
+                          {formatNumber(
+                            settlements.reduce(
+                              (sum, s) => sum + (s.totalProfitAmount || 0),
+                              0,
+                            ),
+                          )}
                         </td>
                         <td className="border border-gray-300 px-4 py-2 text-right">
                           {formatPercent(
-                            (settlements.reduce((sum, s) => sum + (s.totalProfitAmount || 0), 0) /
-                              (settlements.reduce((sum, s) => sum + (s.netSalesAmount || 0), 0) || 1)) *
-                              100
+                            (settlements.reduce(
+                              (sum, s) => sum + (s.totalProfitAmount || 0),
+                              0,
+                            ) /
+                              (settlements.reduce(
+                                (sum, s) => sum + (s.netSalesAmount || 0),
+                                0,
+                              ) || 1)) *
+                              100,
                           )}
                         </td>
                       </tr>
@@ -767,7 +880,12 @@ export default function SalesByPurchasePage() {
                     {orderModalData.purchaseName} - 주문 목록
                   </h2>
                   <p className="text-sm text-gray-500 mt-1">
-                    기간: {formatDateRange(orderModalData.startDate, orderModalData.endDate)} ({orders.length}건)
+                    기간:{" "}
+                    {formatDateRange(
+                      orderModalData.startDate,
+                      orderModalData.endDate,
+                    )}{" "}
+                    ({orders.length}건)
                   </p>
                 </div>
                 <button
@@ -791,22 +909,48 @@ export default function SalesByPurchasePage() {
                     <table className="w-full border-collapse border border-gray-300 text-sm">
                       <thead>
                         <tr className="bg-gray-100">
-                          <th className="border border-gray-300 px-3 py-2 text-left">No.</th>
-                          <th className="border border-gray-300 px-3 py-2 text-left">주문번호</th>
-                          <th className="border border-gray-300 px-3 py-2 text-left">주문상품명</th>
-                          <th className="border border-gray-300 px-3 py-2 text-left">매핑코드</th>
-                          <th className="border border-gray-300 px-3 py-2 text-left">내부코드</th>
-                          <th className="border border-gray-300 px-3 py-2 text-right">수량</th>
-                          <th className="border border-gray-300 px-3 py-2 text-right">공급가</th>
-                          <th className="border border-gray-300 px-3 py-2 text-right">주문금액</th>
-                          <th className="border border-gray-300 px-3 py-2 text-left">주문상태</th>
-                          <th className="border border-gray-300 px-3 py-2 text-left">등록일시</th>
+                          <th className="border border-gray-300 px-3 py-2 text-left">
+                            No.
+                          </th>
+                          <th className="border border-gray-300 px-3 py-2 text-left">
+                            주문번호
+                          </th>
+                          <th className="border border-gray-300 px-3 py-2 text-left">
+                            주문상품명
+                          </th>
+                          <th className="border border-gray-300 px-3 py-2 text-left">
+                            매핑코드
+                          </th>
+                          <th className="border border-gray-300 px-3 py-2 text-left">
+                            내부코드
+                          </th>
+                          <th className="border border-gray-300 px-3 py-2 text-right">
+                            수량
+                          </th>
+                          <th className="border border-gray-300 px-3 py-2 text-right">
+                            공급가
+                          </th>
+                          <th className="border border-gray-300 px-3 py-2 text-right">
+                            주문금액
+                          </th>
+                          <th className="border border-gray-300 px-3 py-2 text-left">
+                            주문상태
+                          </th>
+                          <th className="border border-gray-300 px-3 py-2 text-left">
+                            등록일시
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
                         {orders.map((order, index) => {
-                          const quantity = typeof order.quantity === "number" ? order.quantity : parseFloat(String(order.quantity)) || 1;
-                          const salePrice = typeof order.salePrice === "number" ? order.salePrice : parseFloat(String(order.salePrice)) || 0;
+                          const quantity =
+                            typeof order.quantity === "number"
+                              ? order.quantity
+                              : parseFloat(String(order.quantity)) || 1;
+                          const salePrice =
+                            typeof order.salePrice === "number"
+                              ? order.salePrice
+                              : parseFloat(String(order.salePrice)) || 0;
                           const orderAmount = quantity * salePrice;
 
                           return (
@@ -839,7 +983,11 @@ export default function SalesByPurchasePage() {
                                 {order.orderStatus || "-"}
                               </td>
                               <td className="border border-gray-300 px-3 py-2">
-                                {order.createdAt ? new Date(order.createdAt).toLocaleString("ko-KR") : "-"}
+                                {order.createdAt
+                                  ? new Date(order.createdAt).toLocaleString(
+                                      "ko-KR",
+                                    )
+                                  : "-"}
                               </td>
                             </tr>
                           );
@@ -848,24 +996,47 @@ export default function SalesByPurchasePage() {
                       {orders.length > 0 && (
                         <tfoot>
                           <tr className="bg-gray-100 font-bold">
-                            <td className="border border-gray-300 px-3 py-2 text-center" colSpan={5}>
+                            <td
+                              className="border border-gray-300 px-3 py-2 text-center"
+                              colSpan={5}
+                            >
                               합계
                             </td>
                             <td className="border border-gray-300 px-3 py-2 text-right">
-                              {formatNumber(orders.reduce((sum, o) => {
-                                const qty = typeof o.quantity === "number" ? o.quantity : parseFloat(String(o.quantity)) || 1;
-                                return sum + qty;
-                              }, 0))}
+                              {formatNumber(
+                                orders.reduce((sum, o) => {
+                                  const qty =
+                                    typeof o.quantity === "number"
+                                      ? o.quantity
+                                      : parseFloat(String(o.quantity)) || 1;
+                                  return sum + qty;
+                                }, 0),
+                              )}
                             </td>
-                            <td className="border border-gray-300 px-3 py-2 text-right">-</td>
                             <td className="border border-gray-300 px-3 py-2 text-right">
-                              {formatNumber(orders.reduce((sum, o) => {
-                                const qty = typeof o.quantity === "number" ? o.quantity : parseFloat(String(o.quantity)) || 1;
-                                const salePrice = typeof o.salePrice === "number" ? o.salePrice : parseFloat(String(o.salePrice)) || 0;
-                                return sum + qty * salePrice;
-                              }, 0))}
+                              -
                             </td>
-                            <td className="border border-gray-300 px-3 py-2" colSpan={2}>-</td>
+                            <td className="border border-gray-300 px-3 py-2 text-right">
+                              {formatNumber(
+                                orders.reduce((sum, o) => {
+                                  const qty =
+                                    typeof o.quantity === "number"
+                                      ? o.quantity
+                                      : parseFloat(String(o.quantity)) || 1;
+                                  const salePrice =
+                                    typeof o.salePrice === "number"
+                                      ? o.salePrice
+                                      : parseFloat(String(o.salePrice)) || 0;
+                                  return sum + qty * salePrice;
+                                }, 0),
+                              )}
+                            </td>
+                            <td
+                              className="border border-gray-300 px-3 py-2"
+                              colSpan={2}
+                            >
+                              -
+                            </td>
                           </tr>
                         </tfoot>
                       )}

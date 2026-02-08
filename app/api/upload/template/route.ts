@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     if (!file) {
       return NextResponse.json(
         {success: false, error: "파일이 제공되지 않았습니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
       return NextResponse.json(
         {success: false, error: "워크시트가 없습니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     if (!raw.length || raw[0].length === 0) {
       return NextResponse.json(
         {success: false, error: "파일이 비어있거나 헤더가 없습니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     if (headers.length === 0) {
       return NextResponse.json(
         {success: false, error: "헤더가 없습니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -117,8 +117,8 @@ export async function POST(request: NextRequest) {
     const result = await sql`
       INSERT INTO upload_templates (name, template_data, company_id, created_at)
       VALUES (${templateData.name}, ${JSON.stringify(
-      templateData
-    )}, ${companyId}, ${koreaTime.toISOString()}::timestamp)
+        templateData,
+      )}, ${companyId}, ${koreaTime.toISOString()}::timestamp)
       RETURNING id, created_at
     `.catch(async (err) => {
       // 테이블이 없으면 생성
@@ -136,8 +136,8 @@ export async function POST(request: NextRequest) {
         return await sql`
           INSERT INTO upload_templates (name, template_data, company_id, created_at)
           VALUES (${templateData.name}, ${JSON.stringify(
-          templateData
-        )}, ${companyId}, ${koreaTime.toISOString()}::timestamp)
+            templateData,
+          )}, ${companyId}, ${koreaTime.toISOString()}::timestamp)
           RETURNING id, created_at
         `;
       }
@@ -155,7 +155,7 @@ export async function POST(request: NextRequest) {
     console.error("템플릿 저장 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
     );
   }
 }
@@ -168,7 +168,7 @@ export async function GET(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -198,7 +198,83 @@ export async function GET(request: NextRequest) {
     console.error("템플릿 조회 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
+    );
+  }
+}
+
+// 템플릿 수정
+export async function PUT(request: NextRequest) {
+  try {
+    // company_id 추출
+    const companyId = await getCompanyIdFromRequest(request);
+    if (!companyId) {
+      return NextResponse.json(
+        {success: false, error: "company_id가 필요합니다."},
+        {status: 400},
+      );
+    }
+
+    const body = await request.json();
+    const {templateId, allowedMappingCodes} = body;
+
+    if (!templateId) {
+      return NextResponse.json(
+        {success: false, error: "템플릿 ID가 필요합니다."},
+        {status: 400},
+      );
+    }
+
+    // 템플릿 조회
+    const templateResult = await sql`
+      SELECT template_data
+      FROM upload_templates
+      WHERE id = ${templateId} AND company_id = ${companyId}
+    `;
+
+    if (templateResult.length === 0) {
+      return NextResponse.json(
+        {success: false, error: "템플릿을 찾을 수 없습니다."},
+        {status: 404},
+      );
+    }
+
+    // template_data 업데이트 (allowedMappingCodes 추가)
+    const templateData = templateResult[0].template_data;
+    const updatedTemplateData = {
+      ...templateData,
+      allowedMappingCodes: Array.isArray(allowedMappingCodes)
+        ? allowedMappingCodes.filter(
+            (code: any) => code && String(code).trim() !== "",
+          )
+        : [],
+    };
+
+    // 템플릿 업데이트
+    const result = await sql`
+      UPDATE upload_templates
+      SET template_data = ${JSON.stringify(updatedTemplateData)}
+      WHERE id = ${templateId} AND company_id = ${companyId}
+      RETURNING id, template_data
+    `;
+
+    if (result.length === 0) {
+      return NextResponse.json(
+        {success: false, error: "템플릿 업데이트에 실패했습니다."},
+        {status: 500},
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "템플릿이 성공적으로 수정되었습니다.",
+      templateData: result[0].template_data,
+    });
+  } catch (error: any) {
+    console.error("템플릿 수정 실패:", error);
+    return NextResponse.json(
+      {success: false, error: error.message},
+      {status: 500},
     );
   }
 }
@@ -211,7 +287,7 @@ export async function DELETE(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -221,7 +297,7 @@ export async function DELETE(request: NextRequest) {
     if (!templateId) {
       return NextResponse.json(
         {success: false, error: "템플릿 ID가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -234,7 +310,7 @@ export async function DELETE(request: NextRequest) {
     if (result.length === 0) {
       return NextResponse.json(
         {success: false, error: "템플릿을 찾을 수 없습니다."},
-        {status: 404}
+        {status: 404},
       );
     }
 
@@ -246,7 +322,7 @@ export async function DELETE(request: NextRequest) {
     console.error("템플릿 삭제 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
     );
   }
 }

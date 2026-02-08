@@ -1183,8 +1183,8 @@ function FileViewContent() {
                 headers["company-id"] = user.companyId.toString();
               }
               if (user?.id) {
-                userId = user.id;
-                headers["user-id"] = user.id;
+                userId = String(user.id);
+                headers["user-id"] = String(user.id);
               }
             }
           } catch (e) {
@@ -1671,7 +1671,7 @@ function FileViewContent() {
                     listHeaders["company-id"] = user.companyId.toString();
                   }
                   if (user?.id) {
-                    listHeaders["user-id"] = user.id;
+                    listHeaders["user-id"] = String(user.id);
                   }
                 }
               } catch (e) {
@@ -1709,54 +1709,64 @@ function FileViewContent() {
         setHeaderIndex(parsedFile.headerIndex);
 
         // productCodeMap 초기화 및 기존 데이터 동기화
-        let initialProductCodeMap = parsedFile.productCodeMap || {};
+        // 온라인 유저: 파일 업로드 시 저장된 productCodeMap(상품코드(사방넷) 값) 사용
+        // 일반 유저: 기존 productCodeMap 사용 + 테이블 데이터 동기화
+        let initialProductCodeMap: {[name: string]: string} =
+          parsedFile.productCodeMap || {};
 
-        // 테이블의 기존 매핑코드 데이터를 productCodeMap에 동기화
-        if (
-          parsedFile.tableData &&
-          parsedFile.tableData.length > 1 &&
-          parsedFile.headerIndex
-        ) {
-          const headerRow = parsedFile.tableData[0];
-          const nameIdx = parsedFile.headerIndex.nameIdx;
-          const mappingIdx = headerRow.findIndex((h: any) => h === "매핑코드");
+        console.log(
+          `📋 [${user?.grade === "온라인" ? "온라인" : "일반"} 유저] productCodeMap 로드: ${Object.keys(initialProductCodeMap).length}개 항목`,
+        );
 
+        if (user?.grade !== "온라인") {
+          // 일반 유저: 테이블의 기존 매핑코드 데이터를 productCodeMap에 동기화
           if (
-            typeof nameIdx === "number" &&
-            nameIdx !== -1 &&
-            mappingIdx !== -1
+            parsedFile.tableData &&
+            parsedFile.tableData.length > 1 &&
+            parsedFile.headerIndex
           ) {
-            parsedFile.tableData.slice(1).forEach((row: any[]) => {
-              const productName = row[nameIdx];
-              const mappingCode = row[mappingIdx];
+            const headerRow = parsedFile.tableData[0];
+            const nameIdx = parsedFile.headerIndex.nameIdx;
+            const mappingIdx = headerRow.findIndex(
+              (h: any) => h === "매핑코드",
+            );
 
-              if (
-                productName &&
-                typeof productName === "string" &&
-                mappingCode &&
-                typeof mappingCode === "string"
-              ) {
-                const trimmedName = productName.trim();
-                const trimmedCode = mappingCode.trim();
+            if (
+              typeof nameIdx === "number" &&
+              nameIdx !== -1 &&
+              mappingIdx !== -1
+            ) {
+              parsedFile.tableData.slice(1).forEach((row: any[]) => {
+                const productName = row[nameIdx];
+                const mappingCode = row[mappingIdx];
+
                 if (
-                  trimmedName &&
-                  trimmedCode &&
-                  !initialProductCodeMap[trimmedName]
+                  productName &&
+                  typeof productName === "string" &&
+                  mappingCode &&
+                  typeof mappingCode === "string"
                 ) {
-                  initialProductCodeMap[trimmedName] = trimmedCode;
+                  const trimmedName = productName.trim();
+                  const trimmedCode = mappingCode.trim();
+                  if (
+                    trimmedName &&
+                    trimmedCode &&
+                    !initialProductCodeMap[trimmedName]
+                  ) {
+                    initialProductCodeMap[trimmedName] = trimmedCode;
+                  }
                 }
-              }
-            });
+              });
+            }
           }
         }
 
         setProductCodeMap(initialProductCodeMap);
 
-        // productIdMap 초기화 (파일에서 불러온 데이터가 있으면 사용)
-        let initialProductIdMap: {[name: string]: string | number} = {};
-        if (parsedFile.productIdMap) {
-          initialProductIdMap = {...parsedFile.productIdMap};
-        }
+        // productIdMap 초기화
+        // 파일 업로드 시 저장된 productIdMap 사용
+        let initialProductIdMap: {[name: string]: string | number} =
+          parsedFile.productIdMap ? {...parsedFile.productIdMap} : {};
         setProductIdMap(initialProductIdMap);
 
         // 원본 배송메시지 저장 및 자동 배송메시지 생성
@@ -1814,78 +1824,81 @@ function FileViewContent() {
               codes.length > 0 ? codes : codesOriginRef.current;
 
             // ============================================================
-            // 온라인 유저: 상품코드(사방넷) 컬럼의 값으로만 codes.code와 매칭 (2순위 없음)
+            // 온라인 유저: 행 단위 매핑코드로 DB 매칭
+            // - processFile에서 각 행의 "매핑코드" 컬럼에 상품코드(사방넷) 값이 직접 설정되어 있음
+            // - 같은 상품명이지만 다른 매핑코드를 가진 행도 정확히 반영됨
+            // - productCodeMap은 상품명 기준으로 덮어써질 수 있으므로, 행 단위 테이블 값을 우선 사용
             // ============================================================
             if (user?.grade === "온라인") {
-              // 원본 헤더에서 "상품코드(사방넷)" 인덱스 찾기
-              let sabangnetCodeIdx = -1;
+              console.log(
+                `🔵 [온라인 유저] originalData에서 행 단위 매핑코드 재구축 시작`,
+              );
+
+              // 1단계: originalData + originalHeader에서 행 단위 매핑코드 맵 구축
+              // originalData는 raw Excel 데이터(헤더 포함), originalHeader는 raw 헤더
+              // key: 행 인덱스(1-based, originalData 기준), value: 클린 매핑코드
+              const rowMappingCodeMap: {[rowIdx: number]: string} = {};
+              const origData = parsedFile.originalData;
+              const origHeader = parsedFile.originalHeader;
+
               if (
-                parsedFile.originalHeader &&
-                Array.isArray(parsedFile.originalHeader)
+                origData &&
+                Array.isArray(origData) &&
+                origData.length > 1 &&
+                origHeader &&
+                Array.isArray(origHeader)
               ) {
-                sabangnetCodeIdx = parsedFile.originalHeader.findIndex(
+                // originalHeader에서 "상품코드(사방넷)" 인덱스 찾기
+                const sabangnetCodeIdx = origHeader.findIndex(
                   (h: any) =>
                     h &&
                     typeof h === "string" &&
                     h.replace(/\s+/g, "").toLowerCase() ===
                       "상품코드(사방넷)".replace(/\s+/g, "").toLowerCase(),
                 );
-              }
 
-              // 상품코드(사방넷)으로 매핑 (정확히 codes.code와 일치할 때만, 2순위 없음)
-              if (
-                sabangnetCodeIdx !== -1 &&
-                parsedFile.originalData &&
-                parsedFile.originalData.length > 1 &&
-                codesToUse.length > 0
-              ) {
-                // 원본 데이터에서 상품코드(사방넷) 값 추출하여 매핑
-                for (let i = 1; i < parsedFile.originalData.length; i++) {
-                  const originalRow = parsedFile.originalData[i];
-                  if (originalRow && originalRow[sabangnetCodeIdx]) {
-                    const sabangnetCode = String(
-                      originalRow[sabangnetCodeIdx],
-                    ).trim();
-                    if (sabangnetCode) {
-                      // "-0001" 제거
-                      const cleanedCode = sabangnetCode.replace(/-0001$/, "");
-                      if (cleanedCode) {
-                        // codes에서 매핑코드로 상품 찾기 (정확 매칭만, 2순위 없음)
-                        const matchedProduct = codesToUse.find(
-                          (p: any) =>
-                            p.code && String(p.code).trim() === cleanedCode,
-                        );
-                        if (matchedProduct && updatedTableData[i]) {
-                          const row = updatedTableData[i];
-                          const productName = row[nameIdx];
-                          if (productName && typeof productName === "string") {
-                            const name = productName.trim();
-                            if (name && !initialProductCodeMap[name]) {
-                              initialProductCodeMap[name] = matchedProduct.code;
-                              if (matchedProduct.id) {
-                                initialProductIdMap[name] = matchedProduct.id;
-                              }
-                              console.log(
-                                `✅ [온라인 유저] 상품코드(사방넷) 매핑: "${name}" → "${matchedProduct.code}" (원본: ${sabangnetCode})`,
-                              );
-                            }
-                          }
-                        } else if (!matchedProduct && i <= 3) {
-                          // DB에 없으면 자동 매핑 스킵 (로그만 출력)
-                          console.log(
-                            `ℹ️ [온라인 유저] 상품코드(사방넷) "${cleanedCode}" DB에 일치하는 매핑코드 없음 - 자동 매핑 스킵 (2순위 없음)`,
-                          );
+                if (sabangnetCodeIdx !== -1) {
+                  // originalData[0]은 헤더, [1]부터 데이터
+                  for (let i = 1; i < origData.length; i++) {
+                    const originalRow = origData[i];
+                    if (originalRow && originalRow[sabangnetCodeIdx]) {
+                      const sabangnetCode = String(
+                        originalRow[sabangnetCodeIdx],
+                      ).trim();
+                      if (sabangnetCode) {
+                        // "-0001" 또는 "-001" 제거
+                        const cleanedCode = sabangnetCode
+                          .replace(/-0001$/, "")
+                          .replace(/-001$/, "");
+                        if (cleanedCode) {
+                          rowMappingCodeMap[i] = cleanedCode;
                         }
                       }
                     }
                   }
+                  console.log(
+                    `🔵 [온라인 유저] originalData에서 ${Object.keys(rowMappingCodeMap).length}개 행의 매핑코드 추출`,
+                  );
+                } else {
+                  console.warn(
+                    `⚠️ [온라인 유저] originalHeader에서 "상품코드(사방넷)" 찾을 수 없음`,
+                  );
                 }
+              } else {
+                console.warn(
+                  `⚠️ [온라인 유저] originalData/originalHeader 없음 → 테이블 값 또는 productCodeMap 폴백`,
+                );
               }
 
-              // 온라인 유저: 테이블 데이터 업데이트 (상품코드(사방넷)으로 매칭된 것만 적용)
+              // 2단계: _originalRowIndex로 originalData 행과 매칭하여 매핑코드 적용
+              const origRowIdxColIdx = updatedTableData[0]?.findIndex(
+                (h: any) => h === "_originalRowIndex",
+              );
+              const hasOrigMapping = Object.keys(rowMappingCodeMap).length > 0;
+
               updatedTableData = updatedTableData.map(
                 (row: any[], idx: number) => {
-                  if (idx === 0) return row; // 헤더는 그대로
+                  if (idx === 0) return row;
 
                   const productName = row[nameIdx];
                   if (!productName || typeof productName !== "string")
@@ -1894,53 +1907,87 @@ function FileViewContent() {
                   const trimmedName = productName.trim();
                   if (!trimmedName) return row;
 
-                  // 온라인 유저: 상품코드(사방넷)으로 이미 매핑된 코드만 사용 (상품명 기반 자동 매핑 안 함)
-                  const codeVal = initialProductCodeMap[trimmedName];
-
                   let rowChanged = false;
                   const newRow = [...row];
 
-                  // 매핑코드가 있는 경우에만 적용
-                  if (
-                    mappingIdx !== -1 &&
-                    codeVal &&
-                    row[mappingIdx] !== codeVal
-                  ) {
-                    newRow[mappingIdx] = codeVal;
-                    rowChanged = true;
+                  // 매핑코드 결정: 오로지 원본 파일의 상품코드(사방넷) 값만 사용
+                  // productCodeMap은 사용하지 않음 (상품명 기준 덮어쓰기 문제)
+                  let codeVal = "";
+
+                  // 1순위: originalData에서 직접 (_originalRowIndex 사용)
+                  if (hasOrigMapping && origRowIdxColIdx !== -1) {
+                    const origRowIdx = parseInt(
+                      String(row[origRowIdxColIdx] || "0"),
+                    );
+                    if (origRowIdx > 0 && rowMappingCodeMap[origRowIdx]) {
+                      codeVal = rowMappingCodeMap[origRowIdx];
+                    }
                   }
 
-                  // 매핑코드가 있는 경우에만 내외주, 택배사 업데이트
-                  if (codeVal) {
-                    const matchedProduct = codesToUse.find(
+                  // 2순위: 테이블 기존 값 (processFile에서 설정된 값)
+                  // originalData가 없거나 매칭 실패한 경우에만 사용
+                  if (!codeVal && mappingIdx !== -1) {
+                    codeVal = String(row[mappingIdx] || "").trim();
+                  }
+
+                  // 온라인 유저는 productCodeMap 폴백 사용 안 함
+                  // (같은 상품명이지만 다른 매핑코드를 가진 행이 있을 수 있음)
+
+                  // 매핑코드 테이블에 반영
+                  if (mappingIdx !== -1 && codeVal) {
+                    const currentCode = String(row[mappingIdx] || "").trim();
+                    if (currentCode !== codeVal) {
+                      newRow[mappingIdx] = codeVal;
+                      rowChanged = true;
+                    }
+                  }
+
+                  // 매핑코드로 DB 매칭 (가장 최근 등록 상품)
+                  // 중요: 온라인 유저는 오로지 매핑코드로만 매핑하며, 매입처명은 전혀 고려하지 않음
+                  if (codeVal && codesToUse.length > 0) {
+                    // 매핑코드로만 필터링 (매입처명, 상품명 등 다른 필드는 전혀 고려하지 않음)
+                    const matchedProducts = codesToUse.filter(
                       (p: any) => p.code && String(p.code).trim() === codeVal,
                     );
+                    // 같은 매핑코드에 여러 상품이 있을 경우 가장 최근 등록된 상품(id가 가장 큰) 선택
+                    // 매입처명은 전혀 고려하지 않음
+                    const matchedProduct =
+                      matchedProducts.length > 0
+                        ? matchedProducts.reduce((latest: any, current: any) =>
+                            current.id > latest.id ? current : latest,
+                          )
+                        : null;
+
+                    if (matchedProduct && matchedProduct.id) {
+                      initialProductIdMap[trimmedName] = matchedProduct.id;
+                    }
+
                     if (matchedProduct) {
                       if (
                         typeIdx !== -1 &&
                         matchedProduct.type &&
                         row[typeIdx] !== matchedProduct.type
                       ) {
-                        if (!rowChanged) {
-                          rowChanged = true;
-                        }
                         newRow[typeIdx] = matchedProduct.type;
+                        rowChanged = true;
                       }
                       if (
                         postTypeIdx !== -1 &&
                         matchedProduct.postType &&
                         row[postTypeIdx] !== matchedProduct.postType
                       ) {
-                        if (!rowChanged) {
-                          rowChanged = true;
-                        }
                         newRow[postTypeIdx] = matchedProduct.postType;
+                        rowChanged = true;
                       }
                     }
                   }
 
                   return rowChanged ? newRow : row;
                 },
+              );
+
+              console.log(
+                `🔵 [온라인 유저] 매핑 완료: productIdMap ${Object.keys(initialProductIdMap).length}개 항목`,
               );
             } else {
               // ============================================================
@@ -3034,38 +3081,86 @@ function FileViewContent() {
                                   <div className="flex flex-col gap-1">
                                     <div>{cellValue}</div>
                                     {(() => {
-                                      // 상품 찾기 (사용자가 선택한 상품 우선, 없으면 상품명으로만 자동 매칭)
+                                      // 온라인 유저: 매핑코드로만 매핑된 상품 찾기
+                                      // 일반 유저: 사용자가 선택한 상품 우선, 없으면 상품명으로만 자동 매칭
                                       const productName = name
                                         ? String(name).trim()
                                         : "";
 
                                       let product = null;
-                                      const selectedProductId =
-                                        productIdMap[productName];
-                                      if (selectedProductId !== undefined) {
-                                        // 사용자가 선택한 상품 ID가 있으면 그것으로 정확히 찾기 (무조건 사용자가 선택한 상품만 사용)
-                                        // codes와 codesOriginRef.current 모두 확인
-                                        product =
-                                          codes.find(
-                                            (c: any) =>
-                                              c.id === selectedProductId,
-                                          ) ||
-                                          codesOriginRef.current.find(
-                                            (c: any) =>
-                                              c.id === selectedProductId,
-                                          );
-                                      } else if (productName) {
-                                        // 사용자가 선택하지 않은 경우에만 상품명이 정확히 일치할 때만 자동 매칭
-                                        // codes와 codesOriginRef.current 모두 확인
-                                        product =
-                                          codes.find(
-                                            (c: any) => c.name === productName,
-                                          ) ||
-                                          codesOriginRef.current.find(
-                                            (c: any) => c.name === productName,
-                                          );
+
+                                      if (user?.grade === "온라인") {
+                                        // 온라인 유저: 매핑코드로만 매핑 (매입처명은 전혀 고려하지 않음)
+                                        const mappingIdx = headerRow.findIndex(
+                                          (h: any) => h === "매핑코드",
+                                        );
+                                        if (
+                                          mappingIdx !== -1 &&
+                                          row[mappingIdx]
+                                        ) {
+                                          const mappingCode = String(
+                                            row[mappingIdx],
+                                          ).trim();
+                                          if (mappingCode) {
+                                            // codes에서 상품 정보 찾기
+                                            const codesToUse =
+                                              codes.length > 0
+                                                ? codes
+                                                : codesOriginRef.current;
+                                            // 매핑코드로만 필터링 (매입처명, 상품명 등 다른 필드는 전혀 고려하지 않음)
+                                            const matchedProducts =
+                                              codesToUse.filter(
+                                                (p: any) =>
+                                                  p.code &&
+                                                  String(p.code).trim() ===
+                                                    mappingCode,
+                                              );
+                                            // 같은 매핑코드에 여러 상품이 있을 경우 가장 최근 등록된 상품(id가 가장 큰) 선택
+                                            // 매입처명은 전혀 고려하지 않음
+                                            product =
+                                              matchedProducts.length > 0
+                                                ? matchedProducts.reduce(
+                                                    (
+                                                      latest: any,
+                                                      current: any,
+                                                    ) =>
+                                                      current.id > latest.id
+                                                        ? current
+                                                        : latest,
+                                                  )
+                                                : null;
+                                          }
+                                        }
+                                      } else {
+                                        // 일반 유저: 기존 로직 유지
+                                        const selectedProductId =
+                                          productIdMap[productName];
+                                        if (selectedProductId !== undefined) {
+                                          // 사용자가 선택한 상품 ID가 있으면 그것으로 정확히 찾기 (무조건 사용자가 선택한 상품만 사용)
+                                          // codes와 codesOriginRef.current 모두 확인
+                                          product =
+                                            codes.find(
+                                              (c: any) =>
+                                                c.id === selectedProductId,
+                                            ) ||
+                                            codesOriginRef.current.find(
+                                              (c: any) =>
+                                                c.id === selectedProductId,
+                                            );
+                                        } else if (productName) {
+                                          // 사용자가 선택하지 않은 경우에만 상품명이 정확히 일치할 때만 자동 매칭
+                                          // codes와 codesOriginRef.current 모두 확인
+                                          product =
+                                            codes.find(
+                                              (c: any) =>
+                                                c.name === productName,
+                                            ) ||
+                                            codesOriginRef.current.find(
+                                              (c: any) =>
+                                                c.name === productName,
+                                            );
+                                        }
                                       }
-                                      // 매핑코드로 자동 매칭하는 것은 하지 않음 (사용자가 선택한 상품만 사용)
 
                                       // purchase(매입처명)이 있으면 표시
                                       if (

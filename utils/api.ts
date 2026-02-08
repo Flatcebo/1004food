@@ -28,7 +28,7 @@ export function getAuthHeaders(): HeadersInit {
           headers["company-id"] = user.companyId.toString();
         }
         if (user?.id) {
-          headers["user-id"] = user.id;
+          headers["user-id"] = String(user.id);
         }
       }
     } catch (e) {
@@ -44,7 +44,7 @@ export function getAuthHeaders(): HeadersInit {
  */
 export async function apiCall<T = any>(
   url: string,
-  options?: RequestInit
+  options?: RequestInit,
 ): Promise<ApiResponse<T>> {
   try {
     const authHeaders = getAuthHeaders();
@@ -82,7 +82,7 @@ export async function fetchProducts(): Promise<ApiResponse<Product[]>> {
  * 상품 검색
  */
 export async function searchProducts(
-  productName: string
+  productName: string,
 ): Promise<ApiResponse<Product[]>> {
   return apiCall<Product[]>("/api/products/search", {
     method: "POST",
@@ -94,7 +94,7 @@ export async function searchProducts(
  * 상품 생성
  */
 export async function createProduct(
-  productData: ProductCreateRequest
+  productData: ProductCreateRequest,
 ): Promise<ApiResponse<Product>> {
   return apiCall<Product>("/api/products/create", {
     method: "POST",
@@ -106,7 +106,7 @@ export async function createProduct(
  * 상품 일괄 생성
  */
 export async function batchCreateProducts(
-  products: ProductCreateRequest[]
+  products: ProductCreateRequest[],
 ): Promise<ApiResponse<{count: number}>> {
   return apiCall<{count: number}>("/api/products/batch-create", {
     method: "POST",
@@ -129,7 +129,7 @@ export async function deleteProducts(ids: number[]): Promise<ApiResponse<any>> {
  */
 export async function batchUpdateProducts(
   ids: number[],
-  updates: Partial<ProductCreateRequest>
+  updates: Partial<ProductCreateRequest>,
 ): Promise<ApiResponse<{count: number}>> {
   return apiCall<{count: number}>("/api/products/batch-update", {
     method: "PUT",
@@ -141,7 +141,7 @@ export async function batchUpdateProducts(
  * 매입처 검색
  */
 export async function searchPurchase(
-  query: string
+  query: string,
 ): Promise<ApiResponse<PurchaseOption[]>> {
   return apiCall<PurchaseOption[]>("/api/purchase/search", {
     method: "POST",
@@ -154,10 +154,10 @@ export async function searchPurchase(
  */
 export async function authenticatedFetch(
   url: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<Response> {
   const headers = getAuthHeaders();
-  
+
   return fetch(url, {
     ...options,
     headers: {

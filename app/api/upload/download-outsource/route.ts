@@ -171,6 +171,20 @@ export async function POST(request: NextRequest) {
 
     const templateData = templateResult[0].template_data;
 
+    // CJ외주 발주서인 경우 템플릿에 저장된 매핑코드 가져오기
+    const templateNameForMapping = (templateData.name || "")
+      .normalize("NFC")
+      .trim();
+    const isCJOutsourceTemplateForMapping =
+      templateNameForMapping.includes("CJ") &&
+      templateNameForMapping.includes("외주");
+    const allowedMappingCodes =
+      isCJOutsourceTemplateForMapping &&
+      Array.isArray(templateData.allowedMappingCodes) &&
+      templateData.allowedMappingCodes.length > 0
+        ? templateData.allowedMappingCodes
+        : ["106464", "108640", "108788", "108879", "108221"]; // 기본값 (하위 호환성)
+
     let headers = Array.isArray(templateData.headers)
       ? templateData.headers
       : [];
@@ -357,17 +371,24 @@ export async function POST(request: NextRequest) {
       // 조건 로깅
       // console.log("🔍 생성된 조건 개수:", conditions.length);
 
-      // CJ외주 발주서인 경우: 지정된 매핑코드만 필터링
+      // CJ외주 발주서인 경우: 템플릿에 저장된 매핑코드만 필터링
       if (isCJOutsourceTemplateForFilter) {
-        const allowedCodes = ["106464", "108640", "108788", "108879", "108221"];
         conditions.push(sql`ur.row_data->>'내외주' = '외주'`);
-        conditions.push(sql`(
-          ur.row_data->>'매핑코드' = '106464'
-          OR ur.row_data->>'매핑코드' = '108640'
-          OR ur.row_data->>'매핑코드' = '108788'
-          OR ur.row_data->>'매핑코드' = '108879'
-          OR ur.row_data->>'매핑코드' = '108221'
-        )`);
+        if (allowedMappingCodes.length > 0) {
+          // 동적 SQL 조건 생성
+          const codeConditions = allowedMappingCodes.map(
+            (code: string) => sql`ur.row_data->>'매핑코드' = ${code}`,
+          );
+          if (codeConditions.length === 1) {
+            conditions.push(codeConditions[0]);
+          } else if (codeConditions.length > 1) {
+            let combinedCondition = sql`${codeConditions[0]}`;
+            for (let i = 1; i < codeConditions.length; i++) {
+              combinedCondition = sql`${combinedCondition} OR ${codeConditions[i]}`;
+            }
+            conditions.push(sql`(${combinedCondition})`);
+          }
+        }
       }
 
       // 쿼리 구성 (기간 필터를 직접 SQL에 명시)
@@ -690,7 +711,7 @@ export async function POST(request: NextRequest) {
 
       // 외주 발주서인 경우: 필터가 없어도 "외주"만 조회
       if (isOutsourceTemplate) {
-        // CJ외주 발주서인 경우: 매핑코드 106464, 108640, 108788, 108879, 108221 포함
+        // CJ외주 발주서인 경우: 템플릿에 저장된 매핑코드만 포함
         if (isCJOutsourceTemplate) {
           let query = sql`
             SELECT ur.id, ur.row_data
@@ -698,8 +719,12 @@ export async function POST(request: NextRequest) {
             INNER JOIN uploads u ON ur.upload_id = u.id
             WHERE u.company_id = ${companyId}
               AND TRIM(COALESCE(ur.row_data->>'내외주', '')) = '외주'
-              AND ur.row_data->>'매핑코드' IN ('106464', '108640', '108788', '108879', '108221')
           `;
+
+          // 템플릿에 저장된 매핑코드가 있으면 필터링 추가
+          if (allowedMappingCodes.length > 0) {
+            query = sql`${query} AND ur.row_data->>'매핑코드' = ANY(${allowedMappingCodes})`;
+          }
 
           // 일자 필터링 추가 (빈 문자열 체크)
           if (uploadTimeFrom && uploadTimeFrom.trim() !== "") {
@@ -725,8 +750,15 @@ export async function POST(request: NextRequest) {
             INNER JOIN uploads u ON ur.upload_id = u.id
             WHERE u.company_id = ${companyId}
               AND TRIM(COALESCE(ur.row_data->>'내외주', '')) = '외주'
-              AND (ur.row_data->>'매핑코드' IS NULL OR ur.row_data->>'매핑코드' NOT IN ('106464', '108640', '108788', '108879', '108221'))
           `;
+
+          // 템플릿에 저장된 CJ 외주 매핑코드가 있으면 제외
+          if (allowedMappingCodes.length > 0) {
+            query = sql`${query} AND (ur.row_data->>'매핑코드' IS NULL OR ur.row_data->>'매핑코드' != ALL(${allowedMappingCodes}))`;
+          } else {
+            // 기본값 사용 (하위 호환성)
+            query = sql`${query} AND (ur.row_data->>'매핑코드' IS NULL OR ur.row_data->>'매핑코드' NOT IN ('106464', '108640', '108788', '108879', '108221'))`;
+          }
 
           // 일자 필터링 추가 (빈 문자열 체크)
           if (uploadTimeFrom && uploadTimeFrom.trim() !== "") {
@@ -795,14 +827,11 @@ export async function POST(request: NextRequest) {
         //   dataRowsCount: dataRowsWithIds.length,
         // });
 
-        // CJ 외주 매핑코드 목록 (CJ 외주 발주서에서만 다운로드됨)
-        const CJ_OUTSOURCE_CODES = [
-          "106464",
-          "108640",
-          "108788",
-          "108879",
-          "108221",
-        ];
+        // CJ 외주 매핑코드 목록 (템플릿에 저장된 매핑코드 사용)
+        const CJ_OUTSOURCE_CODES =
+          allowedMappingCodes.length > 0
+            ? allowedMappingCodes
+            : ["106464", "108640", "108788", "108879", "108221"]; // 기본값 (하위 호환성)
 
         let filteredRowsWithIds;
         if (hadFilters) {
@@ -877,14 +906,11 @@ export async function POST(request: NextRequest) {
         downloadedRowIds = processedRowsWithIds.map((item: any) => item.id);
       } else {
         // rows가 직접 전달된 경우
-        // CJ 외주 매핑코드 목록 (CJ 외주 발주서에서만 다운로드됨)
-        const CJ_OUTSOURCE_CODES_ELSE = [
-          "106464",
-          "108640",
-          "108788",
-          "108879",
-          "108221",
-        ];
+        // CJ 외주 매핑코드 목록 (템플릿에 저장된 매핑코드 사용)
+        const CJ_OUTSOURCE_CODES_ELSE =
+          allowedMappingCodes.length > 0
+            ? allowedMappingCodes
+            : ["106464", "108640", "108788", "108879", "108221"]; // 기본값 (하위 호환성)
         // 내외주 필드에 공백이 있을 수 있으므로 trim() 처리
         // CJ 외주는 매핑코드로만 구분 (업체명으로 구분하면 "CJ제일제당" 등이 잘못 제외됨)
         dataRows = dataRows.filter((row: any) => {

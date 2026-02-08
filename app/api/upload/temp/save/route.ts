@@ -6,7 +6,7 @@ import {getCompanyIdFromRequest, getUserIdFromRequest} from "@/lib/company";
 // 중복 파일명 체크 함수 (전역적으로 파일명만 체크, company_id만 필터링)
 async function checkDuplicateFileName(
   fileName: string,
-  companyId: number
+  companyId: number,
 ): Promise<boolean> {
   try {
     // 같은 회사 내에서 파일명이 이미 존재하는지 체크 (모든 세션, 모든 유저)
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -38,8 +38,11 @@ export async function POST(request: NextRequest) {
     const userId = await getUserIdFromRequest(request);
     if (!userId) {
       return NextResponse.json(
-        {success: false, error: "user_id가 필요합니다. 로그인 후 다시 시도해주세요."},
-        {status: 401}
+        {
+          success: false,
+          error: "user_id가 필요합니다. 로그인 후 다시 시도해주세요.",
+        },
+        {status: 401},
       );
     }
 
@@ -49,14 +52,14 @@ export async function POST(request: NextRequest) {
     if (!sessionId) {
       return NextResponse.json(
         {success: false, error: "세션 ID가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
     if (!files || !Array.isArray(files)) {
       return NextResponse.json(
         {success: false, error: "필수 데이터가 누락되었습니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -77,6 +80,7 @@ export async function POST(request: NextRequest) {
         vendorName,
         userId: fileUserId,
         originalHeader,
+        originalData,
       } = file;
 
       if (!id || !fileName || !tableData) {
@@ -88,11 +92,11 @@ export async function POST(request: NextRequest) {
       console.log(`📋 파일 "${fileName}"의 originalHeader:`, originalHeader);
       console.log(
         `📋 파일 "${fileName}"의 originalHeader 타입:`,
-        typeof originalHeader
+        typeof originalHeader,
       );
       console.log(
         `📋 파일 "${fileName}"의 originalHeader 배열 여부:`,
-        Array.isArray(originalHeader)
+        Array.isArray(originalHeader),
       );
 
       // 파일 객체의 userId가 있으면 우선 사용, 없으면 헤더의 userId 사용
@@ -192,7 +196,7 @@ export async function POST(request: NextRequest) {
                   ? JSON.stringify(originalHeader)
                   : null
               },
-              ${JSON.stringify(tableData)},
+              ${JSON.stringify(originalData || tableData)},
               ${now.toISOString()}::timestamp,
               ${now.toISOString()}::timestamp
             )
@@ -209,7 +213,7 @@ export async function POST(request: NextRequest) {
               validation_status = EXCLUDED.validation_status,
               vendor_name = EXCLUDED.vendor_name,
               original_header = COALESCE(EXCLUDED.original_header, temp_files.original_header),
-              original_table_data = COALESCE(temp_files.original_table_data, EXCLUDED.original_table_data),
+              original_table_data = COALESCE(EXCLUDED.original_table_data, temp_files.original_table_data),
               updated_at = ${now.toISOString()}::timestamp
             RETURNING id, created_at, original_header, original_table_data
           `;
@@ -218,7 +222,7 @@ export async function POST(request: NextRequest) {
           if (
             error.message &&
             (error.message.includes(
-              'column "validation_status" does not exist'
+              'column "validation_status" does not exist',
             ) ||
               error.message.includes('column "user_id" does not exist'))
           ) {
@@ -226,7 +230,7 @@ export async function POST(request: NextRequest) {
             try {
               if (
                 error.message.includes(
-                  'column "validation_status" does not exist'
+                  'column "validation_status" does not exist',
                 )
               ) {
                 await sql`ALTER TABLE temp_files ADD COLUMN validation_status JSONB`;
@@ -263,7 +267,7 @@ export async function POST(request: NextRequest) {
                     ? JSON.stringify(originalHeader)
                     : null
                 },
-                ${JSON.stringify(tableData)},
+                ${JSON.stringify(originalData || tableData)},
                 ${now.toISOString()}::timestamp,
                 ${now.toISOString()}::timestamp
               )
@@ -280,7 +284,7 @@ export async function POST(request: NextRequest) {
                 validation_status = EXCLUDED.validation_status,
                 vendor_name = EXCLUDED.vendor_name,
                 original_header = COALESCE(EXCLUDED.original_header, temp_files.original_header),
-                original_table_data = COALESCE(temp_files.original_table_data, EXCLUDED.original_table_data),
+                original_table_data = COALESCE(EXCLUDED.original_table_data, temp_files.original_table_data),
                 updated_at = ${now.toISOString()}::timestamp
               RETURNING id, created_at, original_header, original_table_data
             `;
@@ -325,7 +329,7 @@ export async function POST(request: NextRequest) {
                       ? JSON.stringify(originalHeader)
                       : null
                   },
-                  ${JSON.stringify(tableData)},
+                  ${JSON.stringify(originalData || tableData)},
                   ${now.toISOString()}::timestamp,
                   ${now.toISOString()}::timestamp
                 )
@@ -341,7 +345,7 @@ export async function POST(request: NextRequest) {
                   validation_status = EXCLUDED.validation_status,
                   vendor_name = EXCLUDED.vendor_name,
                   original_header = COALESCE(EXCLUDED.original_header, temp_files.original_header),
-                  original_table_data = COALESCE(temp_files.original_table_data, EXCLUDED.original_table_data),
+                  original_table_data = COALESCE(EXCLUDED.original_table_data, temp_files.original_table_data),
                   updated_at = ${now.toISOString()}::timestamp
                 RETURNING id, created_at, original_header, original_table_data
               `;
@@ -368,7 +372,7 @@ export async function POST(request: NextRequest) {
                       ? JSON.stringify(originalHeader)
                       : null
                   },
-                  ${JSON.stringify(tableData)},
+                  ${JSON.stringify(originalData || tableData)},
                   ${now.toISOString()}::timestamp,
                   ${now.toISOString()}::timestamp
                 )
@@ -383,7 +387,7 @@ export async function POST(request: NextRequest) {
                   validation_status = EXCLUDED.validation_status,
                   vendor_name = EXCLUDED.vendor_name,
                   original_header = COALESCE(EXCLUDED.original_header, temp_files.original_header),
-                  original_table_data = COALESCE(temp_files.original_table_data, EXCLUDED.original_table_data),
+                  original_table_data = COALESCE(EXCLUDED.original_table_data, temp_files.original_table_data),
                   updated_at = ${now.toISOString()}::timestamp
                 RETURNING id, created_at, original_header, original_table_data
               `;
@@ -413,7 +417,7 @@ export async function POST(request: NextRequest) {
     const validResults = results.filter((r) => r !== null);
     const successResults = validResults.filter((r: any) => r.success);
     const duplicateResults = validResults.filter(
-      (r) => r.error === "DUPLICATE_FILENAME"
+      (r) => r.error === "DUPLICATE_FILENAME",
     );
 
     const successCount = successResults.length;
@@ -431,7 +435,7 @@ export async function POST(request: NextRequest) {
           savedCount: successCount,
           totalCount: files.length,
         },
-        {status: 409}
+        {status: 409},
       ); // 409 Conflict
     }
 
@@ -445,7 +449,7 @@ export async function POST(request: NextRequest) {
     console.error("임시 저장 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
     );
   }
 }

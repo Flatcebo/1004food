@@ -4,7 +4,7 @@ import {useEffect, useState, useRef, useMemo, useCallback} from "react";
 import {useLoadingStore} from "@/stores/loadingStore";
 import MultiSelectDropdown from "@/components/MultiSelectDropdown";
 import LoadingOverlay from "@/components/LoadingOverlay";
-import {IoAdd, IoTrash, IoClose} from "react-icons/io5";
+import {IoAdd, IoTrash, IoClose, IoPencil} from "react-icons/io5";
 
 interface Mall {
   id: number;
@@ -38,6 +38,9 @@ export default function MallPromotionsPage() {
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingPromotionId, setEditingPromotionId] = useState<number | null>(
+    null,
+  );
   const [mallSearchValue, setMallSearchValue] = useState<string>("");
   const [selectedMallId, setSelectedMallId] = useState<number | null>(null);
   const [selectedProductCode, setSelectedProductCode] = useState<string>("");
@@ -133,8 +136,9 @@ export default function MallPromotionsPage() {
     loadProducts();
   }, []);
 
-  // 모달 열기
+  // 모달 열기 (추가 모드)
   const handleOpenModal = (mallId: number) => {
+    setEditingPromotionId(null);
     setSelectedMallId(mallId);
     setSelectedProductCode("");
     setDiscountRate("");
@@ -146,9 +150,37 @@ export default function MallPromotionsPage() {
     setIsModalOpen(true);
   };
 
+  // 모달 열기 (수정 모드)
+  const handleOpenEditModal = (promotion: Promotion) => {
+    setEditingPromotionId(promotion.id);
+    setSelectedMallId(promotion.mallId);
+    setSelectedProductCode(promotion.productCode);
+    setDiscountRate(
+      promotion.discountRate !== null ? promotion.discountRate.toString() : "",
+    );
+    setEventPrice(
+      promotion.eventPrice !== null ? promotion.eventPrice.toString() : "",
+    );
+    setStartDate(promotion.startDate || "");
+    setEndDate(promotion.endDate || "");
+
+    // 상품 정보 설정
+    const product = products.find((p) => p.code === promotion.productCode);
+    if (product) {
+      setProductNameSearchValue(product.displayName);
+      setProductCodeSearchValue(product.code);
+    } else {
+      setProductNameSearchValue("");
+      setProductCodeSearchValue(promotion.productCode);
+    }
+
+    setIsModalOpen(true);
+  };
+
   // 모달 닫기
   const handleCloseModal = () => {
     setIsModalOpen(false);
+    setEditingPromotionId(null);
     setSelectedMallId(null);
     setSelectedProductCode("");
     setDiscountRate("");
@@ -181,22 +213,41 @@ export default function MallPromotionsPage() {
       return;
     }
 
-    startLoading("행사가 저장", "저장 중입니다...", "");
+    const isEditMode = editingPromotionId !== null;
+    startLoading(
+      isEditMode ? "행사가 수정" : "행사가 저장",
+      isEditMode ? "수정 중입니다..." : "저장 중입니다...",
+      "",
+    );
 
     try {
-      const response = await fetch("/api/mall-promotions", {
-        method: "POST",
+      const url = "/api/mall-promotions";
+      const method = isEditMode ? "PUT" : "POST";
+      const body = isEditMode
+        ? {
+            id: editingPromotionId,
+            mallId: selectedMallId,
+            productCode: selectedProductCode,
+            discountRate: discountRate ? parseFloat(discountRate) : null,
+            eventPrice: eventPrice ? parseInt(eventPrice) : null,
+            startDate: startDate,
+            endDate: endDate,
+          }
+        : {
+            mallId: selectedMallId,
+            productCode: selectedProductCode,
+            discountRate: discountRate ? parseFloat(discountRate) : null,
+            eventPrice: eventPrice ? parseInt(eventPrice) : null,
+            startDate: startDate,
+            endDate: endDate,
+          };
+
+      const response = await fetch(url, {
+        method,
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          mallId: selectedMallId,
-          productCode: selectedProductCode,
-          discountRate: discountRate ? parseFloat(discountRate) : null,
-          eventPrice: eventPrice ? parseInt(eventPrice) : null,
-          startDate: startDate,
-          endDate: endDate,
-        }),
+        body: JSON.stringify(body),
       });
 
       const result = await response.json();
@@ -209,13 +260,15 @@ export default function MallPromotionsPage() {
           setPromotions(listResult.data || []);
         }
         handleCloseModal();
-        alert("행사가가 저장되었습니다.");
+        alert(
+          isEditMode ? "행사가가 수정되었습니다." : "행사가가 저장되었습니다.",
+        );
       } else {
-        alert(`저장 실패: ${result.error}`);
+        alert(`${isEditMode ? "수정" : "저장"} 실패: ${result.error}`);
       }
     } catch (error) {
-      console.error("행사가 저장 실패:", error);
-      alert("저장 중 오류가 발생했습니다.");
+      console.error(`행사가 ${isEditMode ? "수정" : "저장"} 실패:`, error);
+      alert(`${isEditMode ? "수정" : "저장"} 중 오류가 발생했습니다.`);
     } finally {
       stopLoading();
     }
@@ -518,14 +571,25 @@ export default function MallPromotionsPage() {
                                       : "-"}
                                   </td>
                                   <td className="border border-gray-300 px-2 py-1.5">
-                                    <button
-                                      className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
-                                      onClick={() =>
-                                        handleDeletePromotion(promotion.id)
-                                      }
-                                    >
-                                      삭제
-                                    </button>
+                                    <div className="flex gap-1.5">
+                                      <button
+                                        className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 flex items-center gap-1"
+                                        onClick={() =>
+                                          handleOpenEditModal(promotion)
+                                        }
+                                      >
+                                        <IoPencil className="w-3 h-3" />
+                                        수정
+                                      </button>
+                                      <button
+                                        className="px-2 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
+                                        onClick={() =>
+                                          handleDeletePromotion(promotion.id)
+                                        }
+                                      >
+                                        삭제
+                                      </button>
+                                    </div>
                                   </td>
                                 </tr>
                               );
@@ -547,7 +611,9 @@ export default function MallPromotionsPage() {
         <div className="fixed inset-0 bg-black/40 bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-4 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-bold">행사가 추가</h2>
+              <h2 className="text-lg font-bold">
+                {editingPromotionId !== null ? "행사가 수정" : "행사가 추가"}
+              </h2>
               <button
                 className="text-gray-500 hover:text-gray-700"
                 onClick={handleCloseModal}
@@ -570,40 +636,13 @@ export default function MallPromotionsPage() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                {/* 시작일 */}
-                <div>
-                  <label className="block text-xs font-medium mb-1.5">
-                    시작일 <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    required
-                  />
-                </div>
-
-                {/* 종료일 */}
-                <div>
-                  <label className="block text-xs font-medium mb-1.5">
-                    종료일 <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
               {/* 상품 선택 */}
               <div>
                 <label className="block text-xs font-medium mb-1.5">
-                  상품 선택
+                  상품 선택{" "}
+                  {editingPromotionId !== null && (
+                    <span className="text-gray-500 text-xs">(수정 불가)</span>
+                  )}
                 </label>
                 <div className="grid grid-cols-2 gap-3">
                   {/* 상품명 입력 */}
@@ -618,42 +657,50 @@ export default function MallPromotionsPage() {
                         placeholder="상품명 입력"
                         value={productNameSearchValue}
                         onChange={(e) => {
-                          setProductNameSearchValue(e.target.value);
-                          setIsProductNameDropdownOpen(true);
+                          if (editingPromotionId === null) {
+                            setProductNameSearchValue(e.target.value);
+                            setIsProductNameDropdownOpen(true);
+                          }
                         }}
-                        onFocus={() => setIsProductNameDropdownOpen(true)}
+                        onFocus={() => {
+                          if (editingPromotionId === null) {
+                            setIsProductNameDropdownOpen(true);
+                          }
+                        }}
+                        disabled={editingPromotionId !== null}
                       />
-                      {isProductNameDropdownOpen && (
-                        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-300 rounded shadow-lg max-h-48 overflow-y-auto">
-                          {filteredProductsByName.length > 0 ? (
-                            filteredProductsByName.map((product) => (
-                              <div
-                                key={product.code}
-                                className="px-2 py-1.5 hover:bg-gray-100 cursor-pointer"
-                                onClick={() => {
-                                  setSelectedProductCode(product.code);
-                                  setProductNameSearchValue(
-                                    product.displayName,
-                                  );
-                                  setProductCodeSearchValue(product.code);
-                                  setIsProductNameDropdownOpen(false);
-                                }}
-                              >
-                                <div className="font-medium text-sm">
-                                  {product.displayName}
+                      {isProductNameDropdownOpen &&
+                        editingPromotionId === null && (
+                          <div className="absolute z-50 mt-1 w-full bg-white border border-gray-300 rounded shadow-lg max-h-48 overflow-y-auto">
+                            {filteredProductsByName.length > 0 ? (
+                              filteredProductsByName.map((product) => (
+                                <div
+                                  key={product.code}
+                                  className="px-2 py-1.5 hover:bg-gray-100 cursor-pointer"
+                                  onClick={() => {
+                                    setSelectedProductCode(product.code);
+                                    setProductNameSearchValue(
+                                      product.displayName,
+                                    );
+                                    setProductCodeSearchValue(product.code);
+                                    setIsProductNameDropdownOpen(false);
+                                  }}
+                                >
+                                  <div className="font-medium text-sm">
+                                    {product.displayName}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    매핑코드: {product.code}
+                                  </div>
                                 </div>
-                                <div className="text-xs text-gray-500">
-                                  매핑코드: {product.code}
-                                </div>
+                              ))
+                            ) : (
+                              <div className="px-2 py-1.5 text-xs text-gray-500">
+                                검색 결과가 없습니다.
                               </div>
-                            ))
-                          ) : (
-                            <div className="px-2 py-1.5 text-xs text-gray-500">
-                              검색 결과가 없습니다.
-                            </div>
-                          )}
-                        </div>
-                      )}
+                            )}
+                          </div>
+                        )}
                     </div>
                   </div>
 
@@ -669,44 +716,82 @@ export default function MallPromotionsPage() {
                         placeholder="매핑코드 입력"
                         value={productCodeSearchValue}
                         onChange={(e) => {
-                          setProductCodeSearchValue(e.target.value);
-                          setIsProductCodeDropdownOpen(true);
+                          if (editingPromotionId === null) {
+                            setProductCodeSearchValue(e.target.value);
+                            setIsProductCodeDropdownOpen(true);
+                          }
                         }}
-                        onFocus={() => setIsProductCodeDropdownOpen(true)}
+                        onFocus={() => {
+                          if (editingPromotionId === null) {
+                            setIsProductCodeDropdownOpen(true);
+                          }
+                        }}
+                        disabled={editingPromotionId !== null}
                       />
-                      {isProductCodeDropdownOpen && (
-                        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-300 rounded shadow-lg max-h-48 overflow-y-auto">
-                          {filteredProductsByCode.length > 0 ? (
-                            filteredProductsByCode.map((product) => (
-                              <div
-                                key={product.code}
-                                className="px-2 py-1.5 hover:bg-gray-100 cursor-pointer"
-                                onClick={() => {
-                                  setSelectedProductCode(product.code);
-                                  setProductNameSearchValue(
-                                    product.displayName,
-                                  );
-                                  setProductCodeSearchValue(product.code);
-                                  setIsProductCodeDropdownOpen(false);
-                                }}
-                              >
-                                <div className="font-medium text-sm">
-                                  {product.displayName}
+                      {isProductCodeDropdownOpen &&
+                        editingPromotionId === null && (
+                          <div className="absolute z-50 mt-1 w-full bg-white border border-gray-300 rounded shadow-lg max-h-48 overflow-y-auto">
+                            {filteredProductsByCode.length > 0 ? (
+                              filteredProductsByCode.map((product) => (
+                                <div
+                                  key={product.code}
+                                  className="px-2 py-1.5 hover:bg-gray-100 cursor-pointer"
+                                  onClick={() => {
+                                    setSelectedProductCode(product.code);
+                                    setProductNameSearchValue(
+                                      product.displayName,
+                                    );
+                                    setProductCodeSearchValue(product.code);
+                                    setIsProductCodeDropdownOpen(false);
+                                  }}
+                                >
+                                  <div className="font-medium text-sm">
+                                    {product.displayName}
+                                  </div>
+                                  <div className="text-xs text-gray-500">
+                                    매핑코드: {product.code}
+                                  </div>
                                 </div>
-                                <div className="text-xs text-gray-500">
-                                  매핑코드: {product.code}
-                                </div>
+                              ))
+                            ) : (
+                              <div className="px-2 py-1.5 text-xs text-gray-500">
+                                검색 결과가 없습니다.
                               </div>
-                            ))
-                          ) : (
-                            <div className="px-2 py-1.5 text-xs text-gray-500">
-                              검색 결과가 없습니다.
-                            </div>
-                          )}
-                        </div>
-                      )}
+                            )}
+                          </div>
+                        )}
                     </div>
                   </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {/* 시작일 */}
+                <div>
+                  <label className="block text-xs font-medium mb-1.5">
+                    시작일 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                    value={startDate || ""}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    required
+                  />
+                </div>
+
+                {/* 종료일 */}
+                <div>
+                  <label className="block text-xs font-medium mb-1.5">
+                    종료일 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
+                    value={endDate || ""}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    required
+                  />
                 </div>
               </div>
 
@@ -719,7 +804,7 @@ export default function MallPromotionsPage() {
                   type="number"
                   className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
                   placeholder="할인율 입력 (예: 10)"
-                  value={discountRate}
+                  value={discountRate || ""}
                   onChange={(e) => handleDiscountRateChange(e.target.value)}
                   min="0"
                   max="100"
@@ -736,7 +821,7 @@ export default function MallPromotionsPage() {
                   type="number"
                   className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded"
                   placeholder="행사가 입력"
-                  value={eventPrice}
+                  value={eventPrice || ""}
                   onChange={(e) => handleEventPriceChange(e.target.value)}
                   min="0"
                 />
@@ -817,7 +902,7 @@ export default function MallPromotionsPage() {
                   className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
                   onClick={handleSavePromotion}
                 >
-                  저장
+                  {editingPromotionId !== null ? "수정" : "저장"}
                 </button>
               </div>
             </div>

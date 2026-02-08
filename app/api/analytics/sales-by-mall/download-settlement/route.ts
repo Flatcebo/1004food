@@ -20,17 +20,21 @@ export async function POST(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
     const body = await request.json();
-    const {settlementIds} = body; // 선택된 정산 ID 배열
+    const {settlementIds, perOrderShippingFee} = body; // 선택된 정산 ID 배열
 
-    if (!settlementIds || !Array.isArray(settlementIds) || settlementIds.length === 0) {
+    if (
+      !settlementIds ||
+      !Array.isArray(settlementIds) ||
+      settlementIds.length === 0
+    ) {
       return NextResponse.json(
         {success: false, error: "정산 ID가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -52,14 +56,14 @@ export async function POST(request: NextRequest) {
     if (settlements.length === 0) {
       return NextResponse.json(
         {success: false, error: "정산 데이터를 찾을 수 없습니다."},
-        {status: 404}
+        {status: 404},
       );
     }
 
     // ZIP 파일 생성
     const zip = new JSZip();
     const dateStr = generateDatePrefix();
-    
+
     // 정산서 A1 셀용 날짜 (YYYY-MM-DD 형식)
     const today = new Date();
     const year = today.getFullYear();
@@ -93,7 +97,7 @@ export async function POST(request: NextRequest) {
 
       // 저장된 order_data와 product_data를 사용하여 주문 데이터 구성
       const orderIds = settlementOrders.map((so: any) => so.order_id);
-      
+
       // upload_rows에서 기본 정보만 가져오기
       const uploadRowsData = await sql`
         SELECT DISTINCT ON (ur.id)
@@ -104,13 +108,19 @@ export async function POST(request: NextRequest) {
           AND ur.id = ANY(${orderIds})
         ORDER BY ur.id
       `;
-      
-      const uploadRowsMap = new Map(uploadRowsData.map((ur: any) => [ur.id, ur]));
-      
+
+      const uploadRowsMap = new Map(
+        uploadRowsData.map((ur: any) => [ur.id, ur]),
+      );
+
       // 저장된 order_data, product_data와 결합
       const orders = settlementOrders.map((so: any) => {
         const productData = so.product_data || {};
-        const productCode = productData.code || so.order_data?.["매핑코드"] || so.order_data?.["productId"] || null;
+        const productCode =
+          productData.code ||
+          so.order_data?.["매핑코드"] ||
+          so.order_data?.["productId"] ||
+          null;
         return {
           id: so.order_id,
           row_data: so.order_data || {}, // 저장된 주문 데이터 사용
@@ -175,6 +185,14 @@ export async function POST(request: NextRequest) {
         const eventPrice = promotionMap[mappingCode] || null;
         const unitPrice = eventPrice !== null ? eventPrice : salePriceNum;
 
+        // 배송비 계산: 건당 배송비가 체크 해제되어 있으면 각 주문건마다 배송비 계산 적용
+        // 각 주문건마다: (공급가 * 수량) - (4000 * (수량 - 1))
+        // 즉, 각 주문건의 첫 번째 상품에만 배송비가 포함되고 나머지는 배송비가 빠짐
+        const calculatedAmount =
+          perOrderShippingFee === false
+            ? unitPrice * quantityNum - 4000 * (quantityNum - 1)
+            : unitPrice * quantityNum;
+
         // 사방넷명: products의 sabang_name 또는 row_data의 사방넷명
         const sabangName =
           order.productSabangName ||
@@ -185,21 +203,23 @@ export async function POST(request: NextRequest) {
           "";
 
         // 과세/면세: products의 bill_type
-        const billType =
-          (order.productBillType === "과세" || order.productBillType === "면세"
+        const billType = (
+          order.productBillType === "과세" || order.productBillType === "면세"
             ? order.productBillType
-            : "과세") as "과세" | "면세";
+            : "과세"
+        ) as "과세" | "면세";
 
         // 매핑코드가 같은 상품들은 합산
+        // 각 주문건별로 계산된 배송비가 포함된 금액을 합산
         if (orderDataMap[mappingCode]) {
           orderDataMap[mappingCode].quantity += quantityNum;
-          orderDataMap[mappingCode].amount += quantityNum * unitPrice;
+          orderDataMap[mappingCode].amount += calculatedAmount;
         } else {
           orderDataMap[mappingCode] = {
             sabangName,
             quantity: quantityNum,
             unitPrice,
-            amount: quantityNum * unitPrice,
+            amount: calculatedAmount,
             billType,
             mappingCode,
           };
@@ -207,7 +227,9 @@ export async function POST(request: NextRequest) {
       });
 
       // 배열로 변환 및 정렬 (사방넷명 오름차순)
-      const orderDataList: SettlementOrderData[] = Object.values(orderDataMap).sort((a, b) => {
+      const orderDataList: SettlementOrderData[] = Object.values(
+        orderDataMap,
+      ).sort((a, b) => {
         const nameA = (a.sabangName || "").toLowerCase();
         const nameB = (b.sabangName || "").toLowerCase();
         if (nameA < nameB) return -1;
@@ -218,7 +240,7 @@ export async function POST(request: NextRequest) {
       // 합계 계산
       const totalAmount = orderDataList.reduce(
         (sum, order) => sum + order.amount,
-        0
+        0,
       );
       const taxableAmount = orderDataList
         .filter((order) => order.billType === "과세")
@@ -267,8 +289,11 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("정산서 다운로드 실패:", error);
     return NextResponse.json(
-      {success: false, error: error.message || "알 수 없는 오류가 발생했습니다."},
-      {status: 500}
+      {
+        success: false,
+        error: error.message || "알 수 없는 오류가 발생했습니다.",
+      },
+      {status: 500},
     );
   }
 }

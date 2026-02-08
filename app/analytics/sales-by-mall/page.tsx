@@ -98,6 +98,7 @@ export default function SalesByMallPage() {
   const [selectedSettlementIds, setSelectedSettlementIds] = useState<
     Set<number>
   >(new Set());
+  const [perOrderShippingFee, setPerOrderShippingFee] = useState<boolean>(true);
   const [downloading, setDownloading] = useState(false);
 
   // 쇼핑몰 목록 조회
@@ -177,7 +178,7 @@ export default function SalesByMallPage() {
         `/api/analytics/sales-by-mall?${params.toString()}`,
         {
           headers,
-        }
+        },
       );
 
       const result = await response.json();
@@ -205,7 +206,7 @@ export default function SalesByMallPage() {
     startLoading(
       "매출 정산 갱신",
       "정산 데이터를 계산하고 있습니다...",
-      "잠시만 기다려주세요"
+      "잠시만 기다려주세요",
     );
 
     try {
@@ -311,7 +312,7 @@ export default function SalesByMallPage() {
       mallId: number,
       mallName: string,
       startDate: string,
-      endDate: string
+      endDate: string,
     ) => {
       setOrdersLoading(true);
       setError("");
@@ -368,7 +369,7 @@ export default function SalesByMallPage() {
         setOrdersLoading(false);
       }
     },
-    []
+    [],
   );
 
   // 날짜만 추출 (YYYY-MM-DD 형식)
@@ -407,7 +408,7 @@ export default function SalesByMallPage() {
 
       return formatDate(new Date(dateStr));
     },
-    []
+    [],
   );
 
   // 주문 수량 셀 클릭 핸들러
@@ -468,10 +469,10 @@ export default function SalesByMallPage() {
         settlement.mallId,
         settlement.mallName,
         startDate,
-        endDate
+        endDate,
       );
     },
-    [fetchOrders, extractDateOnly]
+    [fetchOrders, extractDateOnly],
   );
 
   // 주문 모달 닫기
@@ -490,7 +491,7 @@ export default function SalesByMallPage() {
         setSelectedSettlementIds(new Set());
       }
     },
-    [settlements]
+    [settlements],
   );
 
   // 개별 체크박스 선택/해제
@@ -506,7 +507,7 @@ export default function SalesByMallPage() {
         return newSet;
       });
     },
-    []
+    [],
   );
 
   // 정산서 다운로드
@@ -548,8 +549,11 @@ export default function SalesByMallPage() {
         {
           method: "POST",
           headers,
-          body: JSON.stringify({settlementIds: idsToDownload}),
-        }
+          body: JSON.stringify({
+            settlementIds: idsToDownload,
+            perOrderShippingFee: perOrderShippingFee,
+          }),
+        },
       );
 
       if (!response.ok) {
@@ -570,7 +574,7 @@ export default function SalesByMallPage() {
       }.zip`;
       if (contentDisposition) {
         const fileNameMatch = contentDisposition.match(
-          /filename\*=UTF-8''(.+)/
+          /filename\*=UTF-8''(.+)/,
         );
         if (fileNameMatch) {
           downloadFileName = decodeURIComponent(fileNameMatch[1]);
@@ -593,7 +597,7 @@ export default function SalesByMallPage() {
     } finally {
       setDownloading(false);
     }
-  }, [settlements, selectedSettlementIds]);
+  }, [settlements, selectedSettlementIds, perOrderShippingFee]);
 
   // 기간 표시 포맷팅 (시간 포함)
   const formatDateRange = useCallback(
@@ -606,7 +610,7 @@ export default function SalesByMallPage() {
         return `${startDate} 00:00:00 ~ ${endDate} 23:59:59`;
       }
     },
-    []
+    [],
   );
 
   useEffect(() => {
@@ -627,17 +631,28 @@ export default function SalesByMallPage() {
             <div className="mb-4 flex gap-4 items-center justify-between">
               <h2 className="text-xl font-bold">쇼핑몰별 매출 정산</h2>
               {settlements.length > 0 && (
-                <button
-                  className="px-4 py-2 bg-indigo-500 text-white text-sm rounded hover:bg-indigo-600 disabled:bg-gray-400"
-                  onClick={handleDownloadSettlement}
-                  disabled={downloading}
-                >
-                  {downloading
-                    ? "다운로드 중..."
-                    : selectedSettlementIds.size > 0
-                    ? `${selectedSettlementIds.size}건 다운로드`
-                    : "전체 다운로드"}
-                </button>
+                <div className="flex gap-4 items-center">
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={perOrderShippingFee}
+                      onChange={(e) => setPerOrderShippingFee(e.target.checked)}
+                      className="w-4 h-4"
+                    />
+                    <span>건당 배송비</span>
+                  </label>
+                  <button
+                    className="px-4 py-2 bg-indigo-500 text-white text-sm rounded hover:bg-indigo-600 disabled:bg-gray-400"
+                    onClick={handleDownloadSettlement}
+                    disabled={downloading}
+                  >
+                    {downloading
+                      ? "다운로드 중..."
+                      : selectedSettlementIds.size > 0
+                        ? `${selectedSettlementIds.size}건 다운로드`
+                        : "전체 다운로드"}
+                  </button>
+                </div>
               )}
             </div>
 
@@ -679,7 +694,7 @@ export default function SalesByMallPage() {
                     setSelectedMallId("");
                   } else {
                     const foundMall = malls.find(
-                      (mall) => mall.name === newValues[0]
+                      (mall) => mall.name === newValues[0],
                     );
                     if (foundMall) {
                       setSelectedMallId(foundMall.id.toString());
@@ -839,7 +854,7 @@ export default function SalesByMallPage() {
                             onChange={(e) =>
                               handleSelectSettlement(
                                 settlement.id,
-                                e.target.checked
+                                e.target.checked,
                               )
                             }
                             className="cursor-pointer"
@@ -909,77 +924,77 @@ export default function SalesByMallPage() {
                           {formatNumber(
                             settlements.reduce(
                               (sum, s) => sum + (s.orderQuantity || 0),
-                              0
-                            )
+                              0,
+                            ),
                           )}
                         </td>
                         <td className="border border-gray-300 px-4 py-2 text-right">
                           {formatNumber(
                             settlements.reduce(
                               (sum, s) => sum + (s.orderAmount || 0),
-                              0
-                            )
+                              0,
+                            ),
                           )}
                         </td>
                         <td className="border border-gray-300 px-4 py-2 text-right">
                           {formatNumber(
                             settlements.reduce(
                               (sum, s) => sum + (s.cancelQuantity || 0),
-                              0
-                            )
+                              0,
+                            ),
                           )}
                         </td>
                         <td className="border border-gray-300 px-4 py-2 text-right">
                           {formatNumber(
                             settlements.reduce(
                               (sum, s) => sum + (s.cancelAmount || 0),
-                              0
-                            )
+                              0,
+                            ),
                           )}
                         </td>
                         <td className="border border-gray-300 px-4 py-2 text-right">
                           {formatNumber(
                             settlements.reduce(
                               (sum, s) => sum + (s.netSalesQuantity || 0),
-                              0
-                            )
+                              0,
+                            ),
                           )}
                         </td>
                         <td className="border border-gray-300 px-4 py-2 text-right">
                           {formatNumber(
                             settlements.reduce(
                               (sum, s) => sum + (s.netSalesAmount || 0),
-                              0
-                            )
+                              0,
+                            ),
                           )}
                         </td>
                         <td className="border border-gray-300 px-4 py-2 text-right">
                           {formatNumber(
                             settlements.reduce(
                               (sum, s) => sum + (s.totalProfitAmount || 0),
-                              0
-                            )
+                              0,
+                            ),
                           )}
                         </td>
                         <td className="border border-gray-300 px-4 py-2 text-right">
                           {formatPercent(
                             (settlements.reduce(
                               (sum, s) => sum + (s.totalProfitAmount || 0),
-                              0
+                              0,
                             ) /
                               (settlements.reduce(
                                 (sum, s) => sum + (s.netSalesAmount || 0),
-                                0
+                                0,
                               ) || 1)) *
-                              100
+                              100,
                           )}
                         </td>
                         <td className="border border-gray-300 px-4 py-2 text-right">
                           {formatNumber(
                             settlements.reduce(
                               (sum, s) => sum + (s.salesFeeAmount || 0),
-                              0
-                            )
+                              0,
+                            ),
                           )}
                         </td>
                         <td className="border border-gray-300 px-4 py-2 text-right">
@@ -989,21 +1004,21 @@ export default function SalesByMallPage() {
                           {formatNumber(
                             settlements.reduce(
                               (sum, s) => sum + (s.netProfitAmount || 0),
-                              0
-                            )
+                              0,
+                            ),
                           )}
                         </td>
                         <td className="border border-gray-300 px-4 py-2 text-right">
                           {formatPercent(
                             (settlements.reduce(
                               (sum, s) => sum + (s.netProfitAmount || 0),
-                              0
+                              0,
                             ) /
                               (settlements.reduce(
                                 (sum, s) => sum + (s.netSalesAmount || 0),
-                                0
+                                0,
                               ) || 1)) *
-                              100
+                              100,
                           )}
                         </td>
                       </tr>
@@ -1029,7 +1044,7 @@ export default function SalesByMallPage() {
                     기간:{" "}
                     {formatDateRange(
                       orderModalData.startDate,
-                      orderModalData.endDate
+                      orderModalData.endDate,
                     )}{" "}
                     ({orders.length}건)
                   </p>
@@ -1142,11 +1157,11 @@ export default function SalesByMallPage() {
                               const newWindow = window.open(
                                 url,
                                 "_blank",
-                                "width=1200,height=800"
+                                "width=1200,height=800",
                               );
                               if (!newWindow) {
                                 alert(
-                                  "팝업이 차단되었습니다. 팝업 차단을 해제해주세요."
+                                  "팝업이 차단되었습니다. 팝업 차단을 해제해주세요.",
                                 );
                               }
                             };
@@ -1215,14 +1230,14 @@ export default function SalesByMallPage() {
                                 <td className="border border-gray-300 px-3 py-2">
                                   {order.orderDate
                                     ? new Date(order.orderDate).toLocaleString(
-                                        "ko-KR"
+                                        "ko-KR",
                                       )
                                     : "-"}
                                 </td>
                                 <td className="border border-gray-300 px-3 py-2">
                                   {order.createdAt
                                     ? new Date(order.createdAt).toLocaleString(
-                                        "ko-KR"
+                                        "ko-KR",
                                       )
                                     : "-"}
                                 </td>
@@ -1247,7 +1262,7 @@ export default function SalesByMallPage() {
                                       ? o.quantity
                                       : parseFloat(String(o.quantity)) || 1;
                                   return sum + qty;
-                                }, 0)
+                                }, 0),
                               )}
                             </td>
                             <td className="border border-gray-300 px-3 py-2 text-right">
@@ -1274,7 +1289,7 @@ export default function SalesByMallPage() {
                                       ? o.eventPrice
                                       : salePrice;
                                   return sum + qty * price;
-                                }, 0)
+                                }, 0),
                               )}
                             </td>
                             <td

@@ -85,6 +85,15 @@ export async function POST(request: NextRequest) {
     }
 
     const templateData = templateResult[0].template_data;
+
+    // CJ외주 발주서인 경우 템플릿에 저장된 매핑코드 가져오기
+    const allowedMappingCodes =
+      isCJOutsource &&
+      Array.isArray(templateData.allowedMappingCodes) &&
+      templateData.allowedMappingCodes.length > 0
+        ? templateData.allowedMappingCodes
+        : ["106464", "108640", "108788", "108879", "108221"]; // 기본값 (하위 호환성)
+
     const headers = Array.isArray(templateData.headers)
       ? templateData.headers
       : [];
@@ -200,11 +209,10 @@ export async function POST(request: NextRequest) {
 
       // CJ외주 발주서인 경우 필터링 적용
       if (isCJOutsource) {
-        const allowedCodes = ["106464", "108640", "108788", "108879", "108221"];
         rowIdsWithData = rowIdsWithData.filter((item: any) => {
           const mappingCode = String(item.row_data?.매핑코드 || "").trim();
           const isInhouse = item.row_data?.내외주 === "내주";
-          return isInhouse && allowedCodes.includes(mappingCode);
+          return isInhouse && allowedMappingCodes.includes(mappingCode);
         });
         console.log(
           `CJ외주 발주서 선택 다운로드: ${rowData.length}건 중 ${rowIdsWithData.length}건 필터링됨`,
@@ -308,21 +316,22 @@ export async function POST(request: NextRequest) {
         // CJ외주 발주서인 경우: 매핑코드 필터를 무시하고 CJ외주 조건을 적용
         if (isCJOutsource && dbField === "매핑코드") {
           // 매핑코드 필터 대신 CJ외주 조건을 추가
-          const allowedCodes = [
-            "106464",
-            "108640",
-            "108788",
-            "108879",
-            "108221",
-          ];
           conditions.push(sql`ur.row_data->>'내외주' = '내주'`);
-          conditions.push(sql`(
-            ur.row_data->>'매핑코드' = '106464'
-            OR ur.row_data->>'매핑코드' = '108640'
-            OR ur.row_data->>'매핑코드' = '108788'
-            OR ur.row_data->>'매핑코드' = '108879'
-            OR ur.row_data->>'매핑코드' = '108221'
-          )`);
+          if (allowedMappingCodes.length > 0) {
+            // 동적 SQL 조건 생성
+            const codeConditions = allowedMappingCodes.map(
+              (code: string) => sql`ur.row_data->>'매핑코드' = ${code}`,
+            );
+            if (codeConditions.length === 1) {
+              conditions.push(codeConditions[0]);
+            } else if (codeConditions.length > 1) {
+              let combinedCondition = sql`${codeConditions[0]}`;
+              for (let i = 1; i < codeConditions.length; i++) {
+                combinedCondition = sql`${combinedCondition} OR ${codeConditions[i]}`;
+              }
+              conditions.push(sql`(${combinedCondition})`);
+            }
+          }
         } else if (dbField && searchPattern) {
           conditions.push(sql`ur.row_data->>${dbField} ILIKE ${searchPattern}`);
         }
@@ -338,21 +347,22 @@ export async function POST(request: NextRequest) {
         // CJ외주 발주서인 경우: 매핑코드 필터가 아닌 경우에도 항상 CJ외주 조건 적용
         if (isCJOutsource && dbField !== "매핑코드") {
           // CJ외주 조건 추가 (매핑코드 필터가 아닌 경우)
-          const allowedCodes = [
-            "106464",
-            "108640",
-            "108788",
-            "108879",
-            "108221",
-          ];
           conditions.push(sql`ur.row_data->>'내외주' = '내주'`);
-          conditions.push(sql`(
-            ur.row_data->>'매핑코드' = '106464'
-            OR ur.row_data->>'매핑코드' = '108640'
-            OR ur.row_data->>'매핑코드' = '108788'
-            OR ur.row_data->>'매핑코드' = '108879'
-            OR ur.row_data->>'매핑코드' = '108221'
-          )`);
+          if (allowedMappingCodes.length > 0) {
+            // 동적 SQL 조건 생성
+            const codeConditions = allowedMappingCodes.map(
+              (code: string) => sql`ur.row_data->>'매핑코드' = ${code}`,
+            );
+            if (codeConditions.length === 1) {
+              conditions.push(codeConditions[0]);
+            } else if (codeConditions.length > 1) {
+              let combinedCondition = sql`${codeConditions[0]}`;
+              for (let i = 1; i < codeConditions.length; i++) {
+                combinedCondition = sql`${combinedCondition} OR ${codeConditions[i]}`;
+              }
+              conditions.push(sql`(${combinedCondition})`);
+            }
+          }
         }
 
         // 조건부 쿼리 구성
@@ -425,15 +435,8 @@ export async function POST(request: NextRequest) {
         // 필터가 없으면 company_id로 필터링된 모든 데이터 조회
         let allData: any[];
 
-        // CJ외주 발주서인 경우: 내주이고 지정된 매핑코드만 조회
+        // CJ외주 발주서인 경우: 내주이고 템플릿에 저장된 매핑코드만 조회
         if (isCJOutsource) {
-          const allowedCodes = [
-            "106464",
-            "108640",
-            "108788",
-            "108879",
-            "108221",
-          ];
           // grade별 필터링 조건 구성
           let gradeFilterCondition = sql``;
           if (userGrade === "납품업체" || userGrade === "온라인") {
@@ -447,22 +450,22 @@ export async function POST(request: NextRequest) {
             `;
           }
 
-          allData = await sql`
+          let query = sql`
             SELECT ur.id, ur.row_data
             FROM upload_rows ur
             INNER JOIN uploads u ON ur.upload_id = u.id
             WHERE u.company_id = ${companyId}
               AND ur.row_data->>'내외주' = '내주'
-              AND (
-                ur.row_data->>'매핑코드' = '106464'
-                OR ur.row_data->>'매핑코드' = '108640'
-                OR ur.row_data->>'매핑코드' = '108788'
-                OR ur.row_data->>'매핑코드' = '108879'
-                OR ur.row_data->>'매핑코드' = '108221'
-              )
-            ${gradeFilterCondition}
-            ORDER BY u.created_at DESC, ur.id DESC
           `;
+
+          // 템플릿에 저장된 매핑코드가 있으면 필터링 추가
+          if (allowedMappingCodes.length > 0) {
+            query = sql`${query} AND ur.row_data->>'매핑코드' = ANY(${allowedMappingCodes})`;
+          }
+
+          query = sql`${query} ${gradeFilterCondition} ORDER BY u.created_at DESC, ur.id DESC`;
+
+          allData = await query;
           console.log(
             `CJ외주 발주서 전체 다운로드: ${allData.length}건 조회됨`,
           );
@@ -535,14 +538,11 @@ export async function POST(request: NextRequest) {
 
     // 내주 발주서인 경우: 내외주가 "내주"인 것들만 필터링 + CJ외주 매핑코드 제외
     if (isInhouse) {
-      // CJ외주 발주서에서 사용하는 매핑코드들 (106464, 108640, 108788, 108879, 108221) 제외
-      const cjOutsourceCodes = [
-        "106464",
-        "108640",
-        "108788",
-        "108879",
-        "108221",
-      ];
+      // CJ외주 발주서에서 사용하는 매핑코드들 (템플릿에 저장된 매핑코드 사용)
+      const cjOutsourceCodes =
+        isCJOutsource && allowedMappingCodes.length > 0
+          ? allowedMappingCodes
+          : ["106464", "108640", "108788", "108879", "108221"]; // 기본값 (하위 호환성)
       rows = rows.filter(
         (row: any) =>
           row.내외주?.trim() === "내주" &&

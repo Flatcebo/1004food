@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -82,7 +82,7 @@ export async function GET(request: NextRequest) {
     console.error("매입처별 주문 통계 조회 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
     );
   }
 }

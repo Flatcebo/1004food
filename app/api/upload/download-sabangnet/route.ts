@@ -19,7 +19,14 @@ import {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const {templateId, rowIds, filters, rows, preferSabangName} = body;
+    const {
+      templateId,
+      rowIds,
+      filters,
+      rows,
+      preferSabangName,
+      perOrderShippingFee,
+    } = body;
 
     if (!templateId) {
       return NextResponse.json(
@@ -130,19 +137,27 @@ export async function POST(request: NextRequest) {
 
     if (isSabangnet) {
       // 상품 정보 조회: productId가 있으면 ID로, 없으면 매핑코드로 조회
+      // productId를 숫자로 변환하여 일관된 타입으로 처리
       const productIds = [
-        ...new Set(dataRows.map((row: any) => row.productId).filter(Boolean)),
+        ...new Set(
+          dataRows
+            .map((row: any) => row.productId)
+            .filter(Boolean)
+            .map((id: any) => Number(id))
+            .filter((id: number) => !isNaN(id)),
+        ),
       ];
       const productCodes = [
         ...new Set(
           dataRows
             .filter((row: any) => !row.productId && row.매핑코드)
-            .map((row: any) => row.매핑코드),
+            .map((row: any) => String(row.매핑코드)),
         ),
       ];
-      const productSalePriceMap: {[id: string | number]: number | null} = {};
-      const productSabangNameMap: {[id: string | number]: string | null} = {};
-      const productVendorNameMap: {[id: string | number]: string | null} = {};
+      // 키를 문자열로 통일하여 타입 불일치 방지
+      const productSalePriceMap: {[id: string]: number | null} = {};
+      const productSabangNameMap: {[id: string]: string | null} = {};
+      const productVendorNameMap: {[id: string]: string | null} = {};
       const productSalePriceMapByCode: {[code: string]: number | null} = {};
       const productSabangNameMapByCode: {[code: string]: string | null} = {};
       const productVendorNameMapByCode: {[code: string]: string | null} = {};
@@ -157,14 +172,16 @@ export async function POST(request: NextRequest) {
 
         productsById.forEach((p: any) => {
           if (p.id) {
+            // 키를 문자열로 통일하여 저장
+            const idKey = String(p.id);
             if (p.sale_price !== null && p.sale_price !== undefined) {
-              productSalePriceMap[p.id] = p.sale_price;
+              productSalePriceMap[idKey] = p.sale_price;
             }
             if (p.sabangName !== undefined) {
-              productSabangNameMap[p.id] = p.sabangName;
+              productSabangNameMap[idKey] = p.sabangName;
             }
             if (p.vendorName !== undefined) {
-              productVendorNameMap[p.id] = p.vendorName;
+              productVendorNameMap[idKey] = p.vendorName;
             }
           }
         });
@@ -180,14 +197,16 @@ export async function POST(request: NextRequest) {
 
         productsByCode.forEach((p: any) => {
           if (p.code) {
+            // 키를 문자열로 통일하여 저장
+            const codeKey = String(p.code);
             if (p.sale_price !== null && p.sale_price !== undefined) {
-              productSalePriceMapByCode[p.code] = p.sale_price;
+              productSalePriceMapByCode[codeKey] = p.sale_price;
             }
             if (p.sabangName !== undefined) {
-              productSabangNameMapByCode[p.code] = p.sabangName;
+              productSabangNameMapByCode[codeKey] = p.sabangName;
             }
             if (p.vendorName !== undefined) {
-              productVendorNameMapByCode[p.code] = p.vendorName;
+              productVendorNameMapByCode[codeKey] = p.vendorName;
             }
           }
         });
@@ -289,10 +308,13 @@ export async function POST(request: NextRequest) {
 
         // 공급가 및 사방넷명 주입: productId가 있으면 ID로, 없으면 매핑코드로 찾기
         if (row.productId) {
+          // productId를 문자열 키로 변환하여 맵에서 찾기 (타입 일관성 보장)
+          const productIdKey = String(row.productId);
+
           // 사용자가 선택한 상품 ID로만 찾기
           let salePrice: number | null = null;
-          if (productSalePriceMap[row.productId] !== undefined) {
-            salePrice = productSalePriceMap[row.productId];
+          if (productSalePriceMap[productIdKey] !== undefined) {
+            salePrice = productSalePriceMap[productIdKey];
           }
 
           // 행사가 적용: 행사가가 있으면 우선 사용, 없으면 할인율 적용
@@ -303,18 +325,21 @@ export async function POST(request: NextRequest) {
           }
 
           if (salePrice !== null) {
-            // 수량을 고려한 판매가 계산: (공급가 * 수량) - (4000 * (수량 - 1))
+            // 수량을 고려한 판매가 계산
             const quantity =
               Number(row["수량"] || row["개수"] || row["quantity"] || 1) || 1;
+            // 건당 배송비가 체크되어 있으면 배송비 계산 스킵, 체크 해제 시 기존 로직 적용
             const calculatedPrice =
-              salePrice * quantity - 4000 * (quantity - 1);
+              perOrderShippingFee === false
+                ? salePrice * quantity - 4000 * (quantity - 1)
+                : salePrice * quantity;
             row["판매가"] = calculatedPrice;
             row["sale_price"] = calculatedPrice;
           }
 
           // 사방넷명 설정: productSabangNameMap에 있으면 사용, 없으면 null로 설정 (상품명으로 fallback)
-          if (productSabangNameMap[row.productId] !== undefined) {
-            const sabangName = productSabangNameMap[row.productId];
+          if (productSabangNameMap[productIdKey] !== undefined) {
+            const sabangName = productSabangNameMap[productIdKey];
             if (
               sabangName !== null &&
               sabangName !== undefined &&
@@ -338,9 +363,12 @@ export async function POST(request: NextRequest) {
           }
         } else if (row.매핑코드) {
           // productId가 없으면 매핑코드로 찾기
+          // 매핑코드도 문자열 키로 변환하여 일관성 보장
+          const mappingCodeKey = String(row.매핑코드);
+
           let salePrice: number | null = null;
-          if (productSalePriceMapByCode[row.매핑코드] !== undefined) {
-            salePrice = productSalePriceMapByCode[row.매핑코드];
+          if (productSalePriceMapByCode[mappingCodeKey] !== undefined) {
+            salePrice = productSalePriceMapByCode[mappingCodeKey];
           }
 
           // 행사가 적용: 행사가가 있으면 우선 사용, 없으면 할인율 적용
@@ -351,18 +379,21 @@ export async function POST(request: NextRequest) {
           }
 
           if (salePrice !== null) {
-            // 수량을 고려한 판매가 계산: (공급가 * 수량) - (4000 * (수량 - 1))
+            // 수량을 고려한 판매가 계산
             const quantity =
               Number(row["수량"] || row["개수"] || row["quantity"] || 1) || 1;
+            // 건당 배송비가 체크되어 있으면 배송비 계산 스킵, 체크 해제 시 기존 로직 적용
             const calculatedPrice =
-              salePrice * quantity - 4000 * (quantity - 1);
+              perOrderShippingFee === false
+                ? salePrice * quantity - 4000 * (quantity - 1)
+                : salePrice * quantity;
             row["판매가"] = calculatedPrice;
             row["sale_price"] = calculatedPrice;
           }
 
           // 사방넷명 설정: productSabangNameMapByCode에 있으면 사용
-          if (productSabangNameMapByCode[row.매핑코드] !== undefined) {
-            const sabangName = productSabangNameMapByCode[row.매핑코드];
+          if (productSabangNameMapByCode[mappingCodeKey] !== undefined) {
+            const sabangName = productSabangNameMapByCode[mappingCodeKey];
             if (
               sabangName !== null &&
               sabangName !== undefined &&
@@ -535,13 +566,8 @@ export async function POST(request: NextRequest) {
               }
             }
 
-            // 받는사람, 상품명 열에서 공백 제거
-            if (
-              headerStr === "받는사람" ||
-              headerStr.includes("받는사람") ||
-              headerStr === "상품명" ||
-              headerStr.includes("상품명")
-            ) {
+            // 받는사람 열에서 공백 제거
+            if (headerStr === "받는사람" || headerStr.includes("받는사람")) {
               stringValue = stringValue.replace(/\s+/g, "");
             }
 

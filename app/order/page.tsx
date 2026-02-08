@@ -339,7 +339,10 @@ function OrderPageContent() {
   });
 
   // ============================================================
-  // 온라인 유저용 자동 매핑 함수 (상품코드(사방넷) 컬럼의 매핑코드 값으로만 매칭, 상품명 기반 자동 매핑 안 함)
+  // 온라인 유저용 자동 매핑 함수
+  // - 파일 업로드 시 저장된 productCodeMap(상품코드(사방넷) 값)을 사용
+  // - 이 값으로 DB의 products.code와 매칭해서 productId, 내외주, 택배사를 채움
+  // - 상품명 기반 자동 매핑은 수행하지 않음
   // ============================================================
   const applyAutoMappingForOnlineUser = useCallback(
     (
@@ -360,73 +363,43 @@ function OrderPageContent() {
       if (mappingIdx === -1 && typeIdx === -1 && postTypeIdx === -1)
         return null;
 
-      // 원본 헤더에서 "상품코드(사방넷)" 헤더 인덱스 찾기
-      let sabangnetCodeIdx = -1;
-      if (file.originalHeader && file.originalData) {
-        sabangnetCodeIdx = file.originalHeader.findIndex(
-          (h: any) =>
-            h &&
-            typeof h === "string" &&
-            h.replace(/\s+/g, "").toLowerCase() ===
-              "상품코드(사방넷)".replace(/\s+/g, "").toLowerCase(),
+      let fileChanged = false;
+      // 온라인 유저: 파일 업로드 시 저장된 productCodeMap 사용 (상품코드(사방넷) 값)
+      const fileProductCodeMap: {[key: string]: string} = {
+        ...(file.productCodeMap || {}),
+      };
+      const fileProductIdMap: {[key: string]: any} = {
+        ...(file.productIdMap || {}),
+      };
+
+      console.log(
+        `🔵 [온라인 유저] 자동 매핑 시작 - productCodeMap: ${Object.keys(fileProductCodeMap).length}개 항목`,
+      );
+
+      // 온라인 유저: 파일 업로드 시 저장된 productCodeMap의 매핑코드로 DB와 매칭
+      // productCodeMap에 있는 값(상품코드(사방넷))으로 codes.code와 정확히 일치하는 상품 찾기
+      if (Object.keys(fileProductCodeMap).length > 0 && codesData.length > 0) {
+        Object.entries(fileProductCodeMap).forEach(
+          ([productName, mappingCode]) => {
+            // codes에서 매핑코드로 상품 찾기 (정확 매칭만)
+            const matchedProduct = codesData.find(
+              (p: any) => p.code && String(p.code).trim() === mappingCode,
+            );
+            if (matchedProduct) {
+              // productId 저장
+              if (matchedProduct.id && !fileProductIdMap[productName]) {
+                fileProductIdMap[productName] = matchedProduct.id;
+              }
+            }
+          },
+        );
+        console.log(
+          `🔵 [온라인 유저] DB 매칭 완료 - productIdMap: ${Object.keys(fileProductIdMap).length}개 항목`,
         );
       }
 
-      let fileChanged = false;
-      const fileProductCodeMap = {...file.productCodeMap};
-      const fileProductIdMap = {...(file.productIdMap || {})};
-
-      // 온라인 유저: 상품코드(사방넷) 컬럼에 있는 매핑코드 값으로만 매칭 (정확히 일치할 때만)
-      // 상품명 기반 자동 매핑은 수행하지 않음
-      // 매핑코드가 DB에 없으면 자동 매핑하지 않음 (2순위 없음)
-      if (
-        sabangnetCodeIdx !== -1 &&
-        file.originalData &&
-        file.originalData.length > 1 &&
-        codesData.length > 0
-      ) {
-        // 원본 데이터에서 상품코드(사방넷) 값 추출 및 매핑
-        for (let i = 1; i < file.originalData.length; i++) {
-          const originalRow = file.originalData[i];
-          if (originalRow && originalRow[sabangnetCodeIdx]) {
-            const sabangnetCode = String(originalRow[sabangnetCodeIdx]).trim();
-            if (sabangnetCode) {
-              // "-0001" 제거
-              const cleanedCode = sabangnetCode.replace(/-0001$/, "");
-              if (cleanedCode) {
-                // codes에서 매핑코드로 상품 찾기 (정확 매칭만, 2순위 없음)
-                const matchedProduct = codesData.find(
-                  (p: any) => p.code && String(p.code).trim() === cleanedCode,
-                );
-                if (matchedProduct && file.tableData[i]) {
-                  const row = file.tableData[i];
-                  const productName = row[nameIdx];
-                  if (productName && typeof productName === "string") {
-                    const name = productName.trim();
-                    if (name && !fileProductCodeMap[name]) {
-                      fileProductCodeMap[name] = matchedProduct.code;
-                      if (matchedProduct.id) {
-                        fileProductIdMap[name] = matchedProduct.id;
-                      }
-                      console.log(
-                        `✅ [온라인] 상품코드(사방넷) 매핑코드 매칭: "${name}" → "${matchedProduct.code}" (원본: ${sabangnetCode})`,
-                      );
-                    }
-                  }
-                } else if (!matchedProduct && i <= 3) {
-                  // 일치하는 매핑코드가 없으면 자동 매핑하지 않음 (로그만 출력, 2순위 없음)
-                  console.log(
-                    `ℹ️ [온라인] 상품코드(사방넷) "${cleanedCode}" DB에 일치하는 매핑코드 없음 - 자동 매핑 스킵 (2순위 없음)`,
-                  );
-                }
-              }
-            }
-          }
-        }
-      }
-
-      // 온라인 유저: 테이블 데이터 업데이트 (상품코드(사방넷)으로 매칭된 것만 적용)
-      // 상품명 기반 자동 매핑은 하지 않음
+      // 온라인 유저: 테이블 데이터 업데이트
+      // - productCodeMap에 있는 매핑코드만 사용 (상품명 기반 자동 매핑 안 함)
       const updatedTableData = file.tableData.map((row: any[], idx: number) => {
         if (idx === 0) return row;
 
@@ -438,8 +411,8 @@ function OrderPageContent() {
         let rowChanged = false;
         let updatedRow = row;
 
-        // 온라인 유저: 상품코드(사방넷)으로 이미 매핑된 코드만 사용 (상품명 기반 자동 매핑 안 함)
-        const codeVal = fileProductCodeMap[name] || globalProductCodeMap[name];
+        // 온라인 유저: productCodeMap에 있는 매핑코드만 사용 (상품명 기반 자동 매핑 안 함)
+        const codeVal = fileProductCodeMap[name];
 
         // 매핑코드가 있는 경우에만 적용
         if (mappingIdx >= 0 && codeVal && row[mappingIdx] !== codeVal) {
@@ -682,6 +655,8 @@ function OrderPageContent() {
 
   // ============================================================
   // 각 업로드된 파일에 자동 매핑 적용 (grade에 따라 분리된 함수 호출)
+  // - 온라인 유저: productCodeMap(상품코드(사방넷))으로 DB 매칭
+  // - 일반 유저: 상품명으로 DB 매칭
   // ============================================================
   useEffect(() => {
     if (uploadedFiles.length === 0 || codes.length === 0) {
@@ -700,6 +675,7 @@ function OrderPageContent() {
     }
 
     const isOnlineUser = user?.grade === "온라인";
+
     console.log("🔄 자동 매핑 시작:", {
       filesCount: uploadedFiles.length,
       codesCount: codes.length,
@@ -707,7 +683,7 @@ function OrderPageContent() {
       isOnlineUser,
     });
 
-    // codes가 로드되면 즉시 자동 매핑 실행
+    // 파일 목록에서 자동 매핑 실행 (온라인/일반 유저 모두)
     let hasChanges = false;
     const updatedFiles = uploadedFiles.map((file) => {
       // grade에 따라 분리된 자동 매핑 함수 호출
@@ -909,8 +885,8 @@ function OrderPageContent() {
               headers["company-id"] = user.companyId.toString();
             }
             if (user?.id) {
-              userId = user.id;
-              headers["user-id"] = user.id;
+              userId = String(user.id);
+              headers["user-id"] = String(user.id);
             }
           }
         } catch (e) {

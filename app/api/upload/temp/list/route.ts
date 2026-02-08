@@ -4,21 +4,34 @@ import {getCompanyIdFromRequest, getUserIdFromRequest} from "@/lib/company";
 
 export async function GET(request: NextRequest) {
   try {
+    // 디버깅: 헤더 확인
+    const allHeaders: Record<string, string> = {};
+    request.headers.forEach((value, key) => {
+      allHeaders[key] = value;
+    });
+    console.log("[temp/list] 요청 헤더:", allHeaders);
+
     // company_id 추출
     const companyId = await getCompanyIdFromRequest(request);
     if (!companyId) {
+      console.error("[temp/list] company_id 없음");
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
     // user_id 추출 (필수)
     const userId = await getUserIdFromRequest(request);
+    console.log("[temp/list] 추출된 userId:", userId);
     if (!userId) {
+      console.error("[temp/list] user_id 없음");
       return NextResponse.json(
-        {success: false, error: "user_id가 필요합니다. 로그인 후 다시 시도해주세요."},
-        {status: 401}
+        {
+          success: false,
+          error: "user_id가 필요합니다. 로그인 후 다시 시도해주세요.",
+        },
+        {status: 401},
       );
     }
 
@@ -88,6 +101,7 @@ export async function GET(request: NextRequest) {
               is_confirmed as "isConfirmed",
               vendor_name as "vendorName",
               original_header as "originalHeader",
+              original_table_data as "originalData",
               created_at as "createdAt",
               updated_at
             FROM temp_files
@@ -110,6 +124,7 @@ export async function GET(request: NextRequest) {
               is_confirmed as "isConfirmed",
               vendor_name as "vendorName",
               original_header as "originalHeader",
+              original_table_data as "originalData",
               created_at as "createdAt",
               updated_at
             FROM temp_files
@@ -120,7 +135,7 @@ export async function GET(request: NextRequest) {
           // user_id는 위에서 필수 체크됨, 이 분기는 도달하지 않음
           return NextResponse.json(
             {success: false, error: "user_id가 필요합니다."},
-            {status: 401}
+            {status: 401},
           );
         }
       } else if (sessionId) {
@@ -142,6 +157,7 @@ export async function GET(request: NextRequest) {
               is_confirmed as "isConfirmed",
               vendor_name as "vendorName",
               original_header as "originalHeader",
+              original_table_data as "originalData",
               created_at as "createdAt",
               updated_at
             FROM temp_files
@@ -165,6 +181,7 @@ export async function GET(request: NextRequest) {
               is_confirmed as "isConfirmed",
               vendor_name as "vendorName",
               original_header as "originalHeader",
+              original_table_data as "originalData",
               created_at as "createdAt",
               updated_at
             FROM temp_files
@@ -177,7 +194,7 @@ export async function GET(request: NextRequest) {
           // user_id는 위에서 필수 체크됨, 이 분기는 도달하지 않음
           return NextResponse.json(
             {success: false, error: "user_id가 필요합니다."},
-            {status: 401}
+            {status: 401},
           );
         }
       }
@@ -204,6 +221,7 @@ export async function GET(request: NextRequest) {
               is_confirmed as "isConfirmed",
               vendor_name as "vendorName",
               original_header as "originalHeader",
+              original_table_data as "originalData",
               created_at as "createdAt",
               updated_at
             FROM temp_files
@@ -225,6 +243,7 @@ export async function GET(request: NextRequest) {
               is_confirmed as "isConfirmed",
               vendor_name as "vendorName",
               original_header as "originalHeader",
+              original_table_data as "originalData",
               created_at as "createdAt",
               updated_at
             FROM temp_files
@@ -248,7 +267,7 @@ export async function GET(request: NextRequest) {
     console.error("임시 파일 목록 조회 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
     );
   }
 }

@@ -9,6 +9,7 @@ import {
 } from "@/utils/purchaseTemplateMapping";
 import {mapDataToTemplate} from "@/utils/excelDataMapping";
 import {getUserIdFromRequest} from "@/lib/company";
+import {createCJOutsourceTemplate} from "@/libs/cj-outsource-template";
 
 // 전화번호에 하이픈을 추가하여 형식 맞춤
 function formatPhoneNumber(phoneNumber: string): string {
@@ -43,7 +44,11 @@ function formatPhoneNumber1ForOnline(phoneNumber: string): string {
   if (!phoneNumber || phoneNumber.trim() === "") return phoneNumber;
   if (phoneNumber.includes("-")) {
     const firstDashIndex = phoneNumber.indexOf("-");
-    return phoneNumber.slice(0, firstDashIndex) + " " + phoneNumber.slice(firstDashIndex);
+    return (
+      phoneNumber.slice(0, firstDashIndex) +
+      " " +
+      phoneNumber.slice(firstDashIndex)
+    );
   }
   const numOnly = phoneNumber.replace(/\D/g, "");
   if (numOnly.length === 0) return phoneNumber;
@@ -73,7 +78,7 @@ export async function POST(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -119,7 +124,7 @@ export async function POST(request: NextRequest) {
     if (purchases.length === 0) {
       return NextResponse.json(
         {success: false, error: "매입처가 없습니다."},
-        {status: 404}
+        {status: 404},
       );
     }
 
@@ -139,7 +144,8 @@ export async function POST(request: NextRequest) {
 
     // ZIP 파일 생성
     const zip = new JSZip();
-    const allUpdatedOrderIds: number[] = [];
+    // 매입처별 주문 ID 그룹화 (차수 정보 생성을 위해)
+    const purchaseOrderMap = new Map<number, number[]>();
 
     // 각 매입처별로 엑셀 파일 생성
     for (const purchase of purchases) {
@@ -170,174 +176,281 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // 주문 ID 수집
-      allUpdatedOrderIds.push(...ordersData.map((o: any) => o.id));
+      // 매입처별 주문 ID 저장 (차수 정보 생성을 위해)
+      const orderIds = ordersData.map((o: any) => o.id);
+      purchaseOrderMap.set(purchase.id, orderIds);
 
       const templateHeaders = purchase.template_headers;
 
-      // 엑셀 파일 생성
-      const wb = new Excel.Workbook();
-      const sheet = wb.addWorksheet(purchase.name);
+      // 헤더 결정 및 엑셀 파일 생성
+      let buffer: Buffer;
 
-      // 헤더 결정
-      let finalHeaders: string[];
-      if (templateHeaders && Array.isArray(templateHeaders) && templateHeaders.length > 0) {
-        finalHeaders = getTemplateHeaderNames(templateHeaders);
-      } else {
-        finalHeaders = [
-          "주문번호",
-          "상품명",
-          "수량",
-          "수취인명",
-          "전화번호1",
-          "전화번호2",
-          "우편번호",
-          "주소",
-          "배송메시지",
-        ];
-      }
+      if (
+        templateHeaders &&
+        Array.isArray(templateHeaders) &&
+        templateHeaders.length > 0
+      ) {
+        // 매입처 템플릿이 있는 경우 기존 로직 사용
+        const finalHeaders = getTemplateHeaderNames(templateHeaders);
 
-      // 헤더 행 추가
-      const headerRow = sheet.addRow(finalHeaders);
-      headerRow.height = 30;
+        // 엑셀 파일 생성
+        const wb = new Excel.Workbook();
+        const sheet = wb.addWorksheet(purchase.name);
 
-      // 헤더 스타일
-      headerRow.eachCell((cell) => {
-        cell.fill = {
-          type: "pattern",
-          pattern: "solid",
-          fgColor: {argb: "FFE0E0E0"},
-        };
-        cell.border = {
-          top: {style: "thin"},
-          left: {style: "thin"},
-          bottom: {style: "thin"},
-          right: {style: "thin"},
-        };
-        cell.font = {
-          bold: true,
-          size: 11,
-        };
-        cell.alignment = {
-          vertical: "middle",
-          horizontal: "center",
-        };
-      });
+        // 헤더 행 추가
+        const headerRow = sheet.addRow(finalHeaders);
+        headerRow.height = 30;
 
-      // 데이터 행 추가
-      ordersData.forEach((order: any) => {
-        const rowData = order.row_data || {};
-        
-        if (order.sabang_name) {
-          rowData["사방넷명"] = order.sabang_name;
-          rowData["sabangName"] = order.sabang_name;
-        }
-
-        let rowValues: string[];
-        if (templateHeaders && Array.isArray(templateHeaders) && templateHeaders.length > 0) {
-          rowValues = mapRowToTemplateFormat(rowData, templateHeaders, headerAliases);
-        } else {
-          // 기본 외주 발주서 양식 - mapDataToTemplate 사용
-          rowValues = finalHeaders.map((header: string) => {
-            let value = mapDataToTemplate(rowData, header, {
-              formatPhone: true, // 외주 발주서에서는 전화번호에 하이픈 추가
-            });
-
-            let stringValue = value != null ? String(value) : "";
-
-            // 수취인명인지 확인
-            const headerStrNormalized = header.replace(/\s+/g, "").toLowerCase();
-            const isReceiverName =
-              header === "수취인명" ||
-              header === "수취인" ||
-              header === "받는사람" ||
-              (header.includes("수취인") &&
-                !headerStrNormalized.includes("전화") &&
-                !headerStrNormalized.includes("주소") &&
-                !headerStrNormalized.includes("우편") &&
-                !headerStrNormalized.includes("연락"));
-
-            // 배송메시지 필드인지 확인
-            const isDeliveryMessageField =
-              header.includes("배송") ||
-              header.includes("메시지") ||
-              header.includes("배메") ||
-              header === "배송메시지" ||
-              header === "배송 메시지";
-
-            // 수취인명이 아닌 필드에서는 별 제거 (배송메시지 제외)
-            if (!isReceiverName && !isDeliveryMessageField) {
-              stringValue = stringValue.replace(/^★/, "").trim();
-            }
-
-            // 수취인명인 경우 앞에 ★ 붙이기
-            if (isReceiverName) {
-              stringValue = "★" + stringValue.replace(/^★/, "").trim();
-            }
-
-            // 주문번호인 경우 내부코드 사용 (온라인 유저는 sabang_code)
-            if (header === "주문번호" || header.includes("주문번호")) {
-              if (userGrade === "온라인") {
-                stringValue = rowData["sabang_code"] || rowData["주문번호"] || stringValue;
-              } else {
-                stringValue = rowData["내부코드"] || stringValue;
-              }
-            }
-
-            // 전화번호 포맷팅
-            if (header === "전화번호1" || header.includes("전화번호1")) {
-              let phone1Value = stringValue;
-              if (phone1Value) {
-                phone1Value = formatPhoneNumber(phone1Value);
-                // grade가 "온라인"인 경우 공백 추가
-                if (userGrade === "온라인") {
-                  phone1Value = formatPhoneNumber1ForOnline(phone1Value);
-                }
-                stringValue = phone1Value;
-              }
-            }
-
-            return stringValue;
-          });
-        }
-
-        const dataRow = sheet.addRow(rowValues);
-        dataRow.eachCell((cell) => {
+        // 헤더 스타일
+        headerRow.eachCell((cell) => {
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: {argb: "FFE0E0E0"},
+          };
           cell.border = {
             top: {style: "thin"},
             left: {style: "thin"},
             bottom: {style: "thin"},
             right: {style: "thin"},
           };
+          cell.font = {
+            bold: true,
+            size: 11,
+          };
           cell.alignment = {
             vertical: "middle",
+            horizontal: "center",
           };
         });
-      });
 
-      // 열 너비 자동 조절
-      finalHeaders.forEach((_, index) => {
-        const column = sheet.getColumn(index + 1);
-        column.width = 15;
-      });
+        // 데이터 행 추가
+        ordersData.forEach((order: any) => {
+          const rowData = order.row_data || {};
 
-      // 엑셀 버퍼 생성
-      const buffer = await wb.xlsx.writeBuffer();
+          if (order.sabang_name) {
+            rowData["사방넷명"] = order.sabang_name;
+            rowData["sabangName"] = order.sabang_name;
+          }
+
+          // 매입처 템플릿으로 매핑
+          const rowValues = mapRowToTemplateFormat(
+            rowData,
+            templateHeaders,
+            headerAliases,
+          );
+
+          const dataRow = sheet.addRow(rowValues);
+          dataRow.eachCell((cell) => {
+            cell.border = {
+              top: {style: "thin"},
+              left: {style: "thin"},
+              bottom: {style: "thin"},
+              right: {style: "thin"},
+            };
+            cell.alignment = {
+              vertical: "middle",
+            };
+          });
+        });
+
+        // 열 너비 자동 조절
+        finalHeaders.forEach((_, index) => {
+          const column = sheet.getColumn(index + 1);
+          column.width = 15;
+        });
+
+        // 엑셀 버퍼 생성
+        buffer = await wb.xlsx.writeBuffer();
+      } else {
+        // 템플릿이 없는 경우 외주 발주서 양식 사용
+        // 외주 발주서 기본 컬럼 순서: 보내는 분, 전화번호, 주소, 받는사람, 전화번호1, 전화번호2, 우편번호, 주소, 비어있는 열, 상품명, 배송메시지, 박스, 업체명
+        const outsourceColumnOrder = [
+          "보내는 분",
+          "전화번호",
+          "주소",
+          "받는사람",
+          "전화번호1",
+          "전화번호2",
+          "우편번호",
+          "주소",
+          "", // 비어있는 열
+          "상품명",
+          "배송메시지",
+          "박스",
+          "업체명",
+        ];
+
+        // 데이터를 2차원 배열로 변환
+        const excelData: any[][] = ordersData.map((order: any) => {
+          const rowData = order.row_data || {};
+
+          // 사방넷명 추가
+          if (order.sabang_name) {
+            rowData["사방넷명"] = order.sabang_name;
+            rowData["sabangName"] = order.sabang_name;
+          }
+
+          return outsourceColumnOrder.map((header: string, colIdx: number) => {
+            if (header === "") return "";
+
+            let value: any = "";
+
+            // 각 헤더에 맞는 데이터 매핑
+            switch (header) {
+              case "보내는 분":
+                value = purchase.name || "";
+                break;
+              case "전화번호":
+                value = "";
+                break;
+              case "받는사람":
+                value = mapDataToTemplate(rowData, "수취인명", {
+                  formatPhone: false,
+                });
+                // 수취인명 앞에 ★ 붙이기
+                let receiverName = value != null ? String(value) : "";
+                receiverName = "★" + receiverName.replace(/^★/, "").trim();
+                value = receiverName;
+                break;
+              case "전화번호1":
+                value = mapDataToTemplate(rowData, "전화번호1", {
+                  formatPhone: true,
+                });
+                let phone1Value = value != null ? String(value) : "";
+                if (phone1Value) {
+                  phone1Value = formatPhoneNumber(phone1Value);
+                  if (userGrade === "온라인") {
+                    phone1Value = formatPhoneNumber1ForOnline(phone1Value);
+                  }
+                  value = phone1Value;
+                }
+                break;
+              case "전화번호2":
+                value = mapDataToTemplate(rowData, "전화번호2", {
+                  formatPhone: true,
+                });
+                break;
+              case "우편번호":
+                value = mapDataToTemplate(rowData, "우편번호", {
+                  formatPhone: false,
+                });
+                break;
+              case "주소":
+                // 첫 번째 주소(인덱스 2)는 빈 값, 두 번째 주소(인덱스 7)는 실제 주소
+                const addressIndices = outsourceColumnOrder
+                  .map((h, idx) => (h === "주소" ? idx : -1))
+                  .filter((idx) => idx !== -1);
+                const isFirstAddress = colIdx === addressIndices[0];
+                value = isFirstAddress
+                  ? ""
+                  : mapDataToTemplate(rowData, "주소", {
+                      formatPhone: false,
+                    });
+                break;
+              case "상품명":
+                value = mapDataToTemplate(rowData, "상품명", {
+                  formatPhone: false,
+                });
+                break;
+              case "배송메시지":
+                value = mapDataToTemplate(rowData, "배송메시지", {
+                  formatPhone: false,
+                });
+                break;
+              case "박스":
+                value = "";
+                break;
+              case "업체명":
+                value = purchase.name || "";
+                break;
+              default:
+                value = mapDataToTemplate(rowData, header, {
+                  formatPhone: false,
+                });
+            }
+
+            return value != null ? String(value) : "";
+          });
+        });
+
+        // 외주 발주서 템플릿 사용
+        const outsourceWorkbook = createCJOutsourceTemplate(
+          outsourceColumnOrder,
+          excelData,
+        );
+        // 워크시트 이름을 매입처 이름으로 변경
+        if (outsourceWorkbook.worksheets.length > 0) {
+          outsourceWorkbook.worksheets[0].name = purchase.name;
+        }
+        buffer = await outsourceWorkbook.xlsx.writeBuffer();
+      }
       const fileName = `${queryStartDate}_${purchase.name}_발주서.xlsx`;
       zip.file(fileName, buffer);
     }
 
-    // 발주 상태 업데이트
-    if (allUpdatedOrderIds.length > 0) {
+    // 발주 상태 업데이트 및 차수 정보 저장 (매입처별로)
+    if (purchaseOrderMap.size > 0) {
       try {
-        await sql`
-          UPDATE upload_rows ur
-          SET is_ordered = true
-          FROM uploads u
-          WHERE ur.upload_id = u.id 
-            AND u.company_id = ${companyId}
-            AND ur.id = ANY(${allUpdatedOrderIds})
-        `;
+        // 한국 시간 계산
+        const now = new Date();
+        const koreaTimeMs = now.getTime() + 9 * 60 * 60 * 1000; // UTC + 9시간
+        const koreaDate = new Date(koreaTimeMs);
+        const batchDate = koreaDate.toISOString().split("T")[0];
+
+        // 한국 시간을 PostgreSQL timestamp 형식으로 변환 (YYYY-MM-DD HH:mm:ss)
+        const koreaYear = koreaDate.getUTCFullYear();
+        const koreaMonth = String(koreaDate.getUTCMonth() + 1).padStart(2, "0");
+        const koreaDay = String(koreaDate.getUTCDate()).padStart(2, "0");
+        const koreaHours = String(koreaDate.getUTCHours()).padStart(2, "0");
+        const koreaMinutes = String(koreaDate.getUTCMinutes()).padStart(2, "0");
+        const koreaSeconds = String(koreaDate.getUTCSeconds()).padStart(2, "0");
+        const koreaTimestamp = `${koreaYear}-${koreaMonth}-${koreaDay} ${koreaHours}:${koreaMinutes}:${koreaSeconds}`;
+
+        // 각 매입처별로 차수 정보 생성
+        for (const [purchaseId, orderIds] of purchaseOrderMap.entries()) {
+          if (orderIds.length === 0) continue;
+
+          // 해당 매입처의 오늘 마지막 batch_number 조회
+          const lastBatchResult = await sql`
+            SELECT COALESCE(MAX(batch_number), 0) as last_batch
+            FROM order_batches
+            WHERE company_id = ${companyId}
+              AND purchase_id = ${purchaseId}
+              AND batch_date = ${batchDate}::date
+          `;
+          const lastBatchNumber = lastBatchResult[0]?.last_batch || 0;
+          const newBatchNumber = lastBatchNumber + 1;
+
+          // 새 batch 생성 (한국 시간으로 created_at 설정)
+          const newBatchResult = await sql`
+            INSERT INTO order_batches (company_id, purchase_id, batch_number, batch_date, created_at)
+            VALUES (
+              ${companyId}, 
+              ${purchaseId}, 
+              ${newBatchNumber}, 
+              ${batchDate}::date,
+              ${koreaTimestamp}::timestamp
+            )
+            RETURNING id
+          `;
+          const newBatchId = newBatchResult[0]?.id;
+
+          // upload_rows 업데이트 (is_ordered = true, order_batch_id 설정)
+          await sql`
+            UPDATE upload_rows ur
+            SET is_ordered = true,
+                order_batch_id = ${newBatchId}
+            FROM uploads u
+            WHERE ur.upload_id = u.id 
+              AND u.company_id = ${companyId}
+              AND ur.id = ANY(${orderIds})
+          `;
+
+          console.log(
+            `[DOWNLOAD-ALL] Purchase ID ${purchaseId}: ${newBatchNumber}차 발주 (${orderIds.length}건)`,
+          );
+        }
       } catch (updateError) {
         console.error("발주 상태 업데이트 실패:", updateError);
       }
@@ -352,7 +465,7 @@ export async function POST(request: NextRequest) {
     responseHeaders.set("Content-Type", "application/zip");
     responseHeaders.set(
       "Content-Disposition",
-      `attachment; filename="purchase_orders.zip"; filename*=UTF-8''${encodedZipFileName}`
+      `attachment; filename="purchase_orders.zip"; filename*=UTF-8''${encodedZipFileName}`,
     );
 
     return new Response(Buffer.from(zipBuffer), {
@@ -362,7 +475,7 @@ export async function POST(request: NextRequest) {
     console.error("전체 다운로드 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
     );
   }
 }

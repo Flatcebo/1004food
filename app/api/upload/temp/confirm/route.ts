@@ -600,6 +600,100 @@ export async function POST(request: NextRequest) {
       );
       const updatedDataRows = updatedTableData.slice(1);
 
+      // ============================================================
+      // 온라인 유저: 상품코드(사방넷) 컬럼 값으로 직접 products.code와 매칭
+      // 프론트엔드 productCodeMap/productIdMap 외에도 서버에서 직접 매칭하여 확실하게 처리
+      // ============================================================
+      let onlineProductMapping: {
+        [rowIdx: number]: {code: string; productId: number};
+      } = {};
+
+      if (isOnlineUser && file.original_header && file.original_data) {
+        // 원본 헤더에서 "상품코드(사방넷)" 인덱스 찾기
+        const sabangnetCodeIdx = file.original_header.findIndex(
+          (h: any) =>
+            h &&
+            typeof h === "string" &&
+            h.replace(/\s+/g, "").toLowerCase() ===
+              "상품코드(사방넷)".replace(/\s+/g, "").toLowerCase(),
+        );
+
+        if (sabangnetCodeIdx !== -1 && file.original_data.length > 1) {
+          // 모든 상품코드(사방넷) 값을 수집 (배치 조회용)
+          const sabangnetCodes = new Set<string>();
+          const rowSabangnetCodeMap: {[rowIdx: number]: string} = {};
+
+          for (let i = 1; i < file.original_data.length; i++) {
+            const originalRow = file.original_data[i];
+            if (originalRow && originalRow[sabangnetCodeIdx]) {
+              const sabangnetCode = String(
+                originalRow[sabangnetCodeIdx],
+              ).trim();
+              if (sabangnetCode) {
+                // "-0001" 또는 "-001" 제거
+                const cleanedCode = sabangnetCode
+                  .replace(/-0001$/, "")
+                  .replace(/-001$/, "");
+                if (cleanedCode) {
+                  sabangnetCodes.add(cleanedCode);
+                  rowSabangnetCodeMap[i - 1] = cleanedCode; // rowIdx는 0부터 시작
+                }
+              }
+            }
+          }
+
+          // 배치로 products 조회 (상품코드(사방넷) 값으로 정확히 매칭)
+          // 중요: 온라인 유저는 오로지 매핑코드로만 매핑하며, 매입처명은 전혀 고려하지 않음
+          // 하나의 매핑코드에 여러 상품이 있을 수 있으므로 가장 최근 등록된 상품(id가 가장 큰)으로 매칭
+          if (sabangnetCodes.size > 0) {
+            try {
+              const codesArray = Array.from(sabangnetCodes);
+              // 매핑코드로만 조회 (매입처명, 상품명 등 다른 필드는 전혀 고려하지 않음)
+              const productsResult = await sql`
+                SELECT id, code
+                FROM products
+                WHERE code = ANY(${codesArray}) AND company_id = ${companyId}
+                ORDER BY id ASC
+              `;
+
+              // 코드별 제품 정보 맵 생성 (ORDER BY id ASC이므로 forEach가 덮어쓰면 가장 최근 등록된 상품이 남음)
+              // 매입처명은 전혀 고려하지 않고 오로지 매핑코드로만 매칭
+              const codeToProductMap: {[code: string]: {id: number}} = {};
+              productsResult.forEach((product: any) => {
+                if (product.code) {
+                  codeToProductMap[String(product.code).trim()] = {
+                    id: product.id,
+                  };
+                }
+              });
+
+              // 각 행에 매핑 정보 저장
+              for (const [rowIdxStr, cleanedCode] of Object.entries(
+                rowSabangnetCodeMap,
+              )) {
+                const rowIdx = parseInt(rowIdxStr);
+                const product = codeToProductMap[cleanedCode];
+                if (product) {
+                  onlineProductMapping[rowIdx] = {
+                    code: cleanedCode,
+                    productId: product.id,
+                  };
+                }
+              }
+
+              console.log(
+                `✅ [온라인 유저] 상품코드(사방넷) 직접 매칭: ${Object.keys(onlineProductMapping).length}개 매칭됨 (총 ${sabangnetCodes.size}개 코드)`,
+              );
+            } catch (error) {
+              console.error(
+                "[온라인 유저] 상품코드(사방넷) 매칭 조회 실패:",
+                error,
+              );
+            }
+          }
+        }
+      }
+
       // 배열을 객체로 변환 (헤더를 키로 사용)
       // 중요: rowIndex는 정렬된 순서가 아니라 원본 순서를 사용해야 함
       const rowObjects = updatedDataRows.map((row: any[], rowIndex: number) => {
@@ -707,40 +801,64 @@ export async function POST(request: NextRequest) {
           rowObj["주문상태"] = "공급중";
         }
 
-        // 매핑코드 및 productId 추가 (productCodeMap, productIdMap에서 가져오기)
+        // 매핑코드 및 productId 추가
         if (nameIdx !== -1) {
           const productName = String(row[nameIdx] || "").trim();
           if (productName) {
-            // 매핑코드 추가
-            if (productCodeMap[productName]) {
-              rowObj["매핑코드"] = productCodeMap[productName];
-            }
-            // productId 추가 (productIdMap에서 가져오기)
-            // 여러 키 변형으로 시도 (정확한 매칭, 공백 제거 등)
-            let productId = null;
-
-            // 1순위: 정확한 상품명으로 매칭
-            if (productIdMap[productName]) {
-              productId = productIdMap[productName];
+            // ============================================================
+            // 온라인 유저: 상품코드(사방넷) 컬럼 값으로만 products.code와 정확히 매칭
+            // 2순위, 3순위 매칭 없음 - 상품코드(사방넷)으로 매칭 안 되면 자동 매핑 안 함
+            // ============================================================
+            if (isOnlineUser) {
+              // 1순위: 서버에서 직접 상품코드(사방넷)으로 매칭한 결과 사용 (가장 확실)
+              if (onlineProductMapping[rowIndex]) {
+                const mapping = onlineProductMapping[rowIndex];
+                rowObj["매핑코드"] = mapping.code;
+                rowObj["productId"] = mapping.productId;
+              }
+              // 2순위: productCodeMap/productIdMap에서 정확한 상품명으로만 매칭 (프론트엔드 결과)
+              else if (productCodeMap[productName]) {
+                rowObj["매핑코드"] = productCodeMap[productName];
+                if (productIdMap[productName]) {
+                  rowObj["productId"] = productIdMap[productName];
+                }
+              }
+              // 온라인 유저는 부분 매칭 시도하지 않음 - 위에서 매칭 안 되면 자동 매핑 안 함
             } else {
-              // 2순위: 공백 제거한 상품명으로 매칭
-              const trimmedName = productName.replace(/\s+/g, "");
-              if (productIdMap[trimmedName]) {
-                productId = productIdMap[trimmedName];
+              // ============================================================
+              // 일반 유저: 기존 로직 유지 (여러 키 변형으로 시도)
+              // ============================================================
+              // 매핑코드 추가
+              if (productCodeMap[productName]) {
+                rowObj["매핑코드"] = productCodeMap[productName];
+              }
+              // productId 추가 (productIdMap에서 가져오기)
+              // 여러 키 변형으로 시도 (정확한 매칭, 공백 제거 등)
+              let productId = null;
+
+              // 1순위: 정확한 상품명으로 매칭
+              if (productIdMap[productName]) {
+                productId = productIdMap[productName];
               } else {
-                // 3순위: productIdMap의 모든 키를 순회하며 부분 매칭 시도
-                for (const [key, value] of Object.entries(productIdMap)) {
-                  const trimmedKey = key.replace(/\s+/g, "");
-                  if (trimmedKey === trimmedName || key === productName) {
-                    productId = value;
-                    break;
+                // 2순위: 공백 제거한 상품명으로 매칭
+                const trimmedName = productName.replace(/\s+/g, "");
+                if (productIdMap[trimmedName]) {
+                  productId = productIdMap[trimmedName];
+                } else {
+                  // 3순위: productIdMap의 모든 키를 순회하며 부분 매칭 시도
+                  for (const [key, value] of Object.entries(productIdMap)) {
+                    const trimmedKey = key.replace(/\s+/g, "");
+                    if (trimmedKey === trimmedName || key === productName) {
+                      productId = value;
+                      break;
+                    }
                   }
                 }
               }
-            }
 
-            if (productId) {
-              rowObj["productId"] = productId;
+              if (productId) {
+                rowObj["productId"] = productId;
+              }
             }
           }
         }

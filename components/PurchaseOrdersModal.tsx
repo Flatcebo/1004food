@@ -11,6 +11,7 @@ import {
   mapRowToTemplateFormat,
   getTemplateHeaderNames,
 } from "@/utils/purchaseTemplateMapping";
+import {mapDataToTemplate} from "@/utils/excelDataMapping";
 
 interface PurchaseStats {
   id: number;
@@ -52,6 +53,7 @@ interface PurchaseOrdersModalProps {
   startDate: string;
   endDate: string;
   onClose: () => void;
+  onDataUpdate?: () => void;
 }
 
 export default function PurchaseOrdersModal({
@@ -59,6 +61,7 @@ export default function PurchaseOrdersModal({
   startDate,
   endDate,
   onClose,
+  onDataUpdate,
 }: PurchaseOrdersModalProps) {
   const [orders, setOrders] = useState<OrderData[]>([]);
   const [batches, setBatches] = useState<BatchInfo[]>([]);
@@ -79,6 +82,8 @@ export default function PurchaseOrdersModal({
   const [detailRow, setDetailRow] = useState<any>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [isCanceling, setIsCanceling] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [showTemplateView, setShowTemplateView] = useState(false);
   const [purchaseDetail, setPurchaseDetail] = useState<any>(null);
 
@@ -148,14 +153,13 @@ export default function PurchaseOrdersModal({
   // 헤더 목록
   const headers = useMemo(() => {
     return [
-      "내부코드",
-      "주문번호",
-      "상품명",
+      "내부코드/주문번호",
       "매핑코드",
+      "상품명",
+      "수량",
       "수취인명",
       "수취인 전화번호",
       "주소",
-      "수량",
       "주문상태",
       "발주여부",
     ];
@@ -183,10 +187,17 @@ export default function PurchaseOrdersModal({
     (order: OrderData, header: string): string => {
       const rowData = order.rowData || {};
       switch (header) {
-        case "내부코드":
-          return rowData["내부코드"] || "-";
-        case "주문번호":
-          return rowData["주문번호"] || "-";
+        case "내부코드/주문번호":
+          const internalCode = rowData["내부코드"] || "-";
+          const orderNumber = rowData["주문번호"] || "-";
+          if (internalCode !== "-" && orderNumber !== "-") {
+            return `${internalCode} / ${orderNumber}`;
+          } else if (internalCode !== "-") {
+            return internalCode;
+          } else if (orderNumber !== "-") {
+            return orderNumber;
+          }
+          return "-";
         case "상품명":
           return rowData["상품명"] || order.productName || "-";
         case "매핑코드":
@@ -280,6 +291,10 @@ export default function PurchaseOrdersModal({
       setSelectedRows(new Set());
       // 다운로드 후 주문 목록 새로고침 (발주 상태 업데이트 반영)
       await fetchOrders();
+      // 부모 컴포넌트 데이터도 새로고침
+      if (onDataUpdate) {
+        onDataUpdate();
+      }
     } catch (err: any) {
       alert(`다운로드 오류: ${err.message}`);
     } finally {
@@ -293,6 +308,7 @@ export default function PurchaseOrdersModal({
     startDate,
     endDate,
     fetchOrders,
+    onDataUpdate,
   ]);
 
   // 카카오톡 전송
@@ -336,7 +352,11 @@ export default function PurchaseOrdersModal({
       const result = await response.json();
       if (result.success) {
         alert(`카카오톡 전송 완료: ${result.message}`);
-        fetchOrders();
+        await fetchOrders();
+        // 부모 컴포넌트 데이터도 새로고침
+        if (onDataUpdate) {
+          onDataUpdate();
+        }
       } else {
         alert(`전송 실패: ${result.error}`);
       }
@@ -353,6 +373,7 @@ export default function PurchaseOrdersModal({
     startDate,
     endDate,
     fetchOrders,
+    onDataUpdate,
   ]);
 
   // 이메일 전송
@@ -394,7 +415,11 @@ export default function PurchaseOrdersModal({
       const result = await response.json();
       if (result.success) {
         alert(`이메일 전송 완료: ${result.message}`);
-        fetchOrders();
+        await fetchOrders();
+        // 부모 컴포넌트 데이터도 새로고침
+        if (onDataUpdate) {
+          onDataUpdate();
+        }
       } else {
         alert(`전송 실패: ${result.error}`);
       }
@@ -411,7 +436,96 @@ export default function PurchaseOrdersModal({
     startDate,
     endDate,
     fetchOrders,
+    onDataUpdate,
   ]);
+
+  // 선택된 항목 취소 처리
+  const handleCancelSelected = useCallback(async () => {
+    if (selectedRows.size === 0) {
+      alert("취소할 항목을 선택해주세요.");
+      return;
+    }
+
+    if (!confirm(`선택한 ${selectedRows.size}개의 주문을 취소하시겠습니까?`)) {
+      return;
+    }
+
+    setIsCanceling(true);
+    try {
+      const response = await fetch("/api/upload/cancel", {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          rowIds: Array.from(selectedRows),
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert(`${result.updatedCount}개의 주문이 취소되었습니다.`);
+        setSelectedRows(new Set());
+        await fetchOrders();
+        // 부모 컴포넌트 데이터도 새로고침
+        if (onDataUpdate) {
+          onDataUpdate();
+        }
+      } else {
+        alert(`취소 실패: ${result.error}`);
+      }
+    } catch (error: any) {
+      console.error("주문 취소 중 오류:", error);
+      alert(`취소 중 오류가 발생했습니다: ${error.message}`);
+    } finally {
+      setIsCanceling(false);
+    }
+  }, [selectedRows, fetchOrders, onDataUpdate]);
+
+  // 선택된 항목 삭제 처리
+  const handleDeleteSelected = useCallback(async () => {
+    if (selectedRows.size === 0) {
+      alert("삭제할 항목을 선택해주세요.");
+      return;
+    }
+
+    if (
+      !confirm(
+        `선택한 ${selectedRows.size}개의 데이터를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`,
+      )
+    ) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch("/api/upload/delete", {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          rowIds: Array.from(selectedRows),
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert(`${result.deletedCount}개의 데이터가 삭제되었습니다.`);
+        setSelectedRows(new Set());
+        await fetchOrders();
+        // 부모 컴포넌트 데이터도 새로고침
+        if (onDataUpdate) {
+          onDataUpdate();
+        }
+      } else {
+        alert(`삭제 실패: ${result.error}`);
+      }
+    } catch (error: any) {
+      console.error("데이터 삭제 중 오류:", error);
+      alert(`삭제 중 오류가 발생했습니다: ${error.message}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [selectedRows, fetchOrders, onDataUpdate]);
 
   // 매핑코드 셀 클릭
   const handleMappingCodeClick = useCallback((order: OrderData) => {
@@ -504,7 +618,7 @@ export default function PurchaseOrdersModal({
 
   return (
     <div className="fixed inset-0 bg-[#00000080] flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-[95vw] max-w-7xl h-[90vh] flex flex-col">
+      <div className="bg-white rounded-lg shadow-xl w-[90vw] h-[90vh] flex flex-col">
         {/* 헤더 */}
         <div className="flex items-center justify-between p-4 border-b">
           <div>
@@ -656,7 +770,7 @@ export default function PurchaseOrdersModal({
                       {/* 아코디언 내용 - 테이블 */}
                       {expandedBatches.has(batchKey) && (
                         <div className="p-4 overflow-x-auto">
-                          <table className="w-full border-collapse border border-gray-300 text-sm">
+                          <table className="w-full border-collapse border border-gray-300 text-xs">
                             <thead>
                               <tr className="bg-gray-50">
                                 <th className="border border-gray-300 px-3 py-2 text-center w-10">
@@ -726,8 +840,24 @@ export default function PurchaseOrdersModal({
                                     );
                                     const isClickable =
                                       header === "매핑코드" ||
-                                      header === "내부코드";
+                                      header === "내부코드/주문번호";
                                     const isOrderStatus = header === "발주여부";
+                                    const isProductName = header === "상품명";
+                                    const isInternalCodeOrderNumber =
+                                      header === "내부코드/주문번호";
+                                    const isAddress = header === "주소";
+                                    const sabangName =
+                                      order.sabangName ||
+                                      order.rowData?.사방넷명 ||
+                                      order.rowData?.sabangName ||
+                                      "";
+                                    const rowData = order.rowData || {};
+                                    const internalCode =
+                                      rowData["내부코드"] || "";
+                                    const orderNumber =
+                                      rowData["주문번호"] || "";
+                                    const deliveryMessage =
+                                      rowData["배송메시지"] || "";
 
                                     return (
                                       <td
@@ -740,11 +870,44 @@ export default function PurchaseOrdersModal({
                                         onClick={() => {
                                           if (header === "매핑코드")
                                             handleMappingCodeClick(order);
-                                          else if (header === "내부코드")
+                                          else if (
+                                            header === "내부코드/주문번호"
+                                          )
                                             handleInternalCodeClick(order);
                                         }}
                                       >
-                                        {cellValue}
+                                        {isProductName && sabangName ? (
+                                          <div>
+                                            <div>{cellValue}</div>
+                                            <div className="text-blue-600 text-xs mt-1">
+                                              {sabangName}
+                                            </div>
+                                          </div>
+                                        ) : isInternalCodeOrderNumber &&
+                                          (internalCode || orderNumber) ? (
+                                          <div>
+                                            {internalCode && (
+                                              <div>{internalCode}</div>
+                                            )}
+                                            {orderNumber && (
+                                              <div className="text-blue-600 text-xs mt-1">
+                                                {orderNumber}
+                                              </div>
+                                            )}
+                                            {!internalCode && !orderNumber && (
+                                              <div>-</div>
+                                            )}
+                                          </div>
+                                        ) : isAddress && deliveryMessage ? (
+                                          <div>
+                                            <div>{cellValue}</div>
+                                            <div className="text-blue-600 text-xs mt-1">
+                                              {deliveryMessage}
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          cellValue
+                                        )}
                                       </td>
                                     );
                                   })}
@@ -764,7 +927,7 @@ export default function PurchaseOrdersModal({
                       발주된 주문 (차수 정보 없음)
                     </h3>
                   </div>
-                  <table className="w-full border-collapse border border-gray-300 text-sm">
+                  <table className="w-full border-collapse border border-gray-300 text-xs">
                     <thead>
                       <tr className="bg-gray-100">
                         <th className="border border-gray-300 px-3 py-2 text-center w-10">
@@ -828,8 +991,22 @@ export default function PurchaseOrdersModal({
                           {headers.map((header, colIdx) => {
                             const cellValue = getCellValue(order, header);
                             const isClickable =
-                              header === "매핑코드" || header === "내부코드";
+                              header === "매핑코드" ||
+                              header === "내부코드/주문번호";
                             const isOrderStatus = header === "발주여부";
+                            const isProductName = header === "상품명";
+                            const isInternalCodeOrderNumber =
+                              header === "내부코드/주문번호";
+                            const isAddress = header === "주소";
+                            const sabangName =
+                              order.sabangName ||
+                              order.rowData?.사방넷명 ||
+                              order.rowData?.sabangName ||
+                              "";
+                            const rowData = order.rowData || {};
+                            const internalCode = rowData["내부코드"] || "";
+                            const orderNumber = rowData["주문번호"] || "";
+                            const deliveryMessage = rowData["배송메시지"] || "";
 
                             return (
                               <td
@@ -842,11 +1019,40 @@ export default function PurchaseOrdersModal({
                                 onClick={() => {
                                   if (header === "매핑코드")
                                     handleMappingCodeClick(order);
-                                  else if (header === "내부코드")
+                                  else if (header === "내부코드/주문번호")
                                     handleInternalCodeClick(order);
                                 }}
                               >
-                                {cellValue}
+                                {isProductName && sabangName ? (
+                                  <div>
+                                    <div>{cellValue}</div>
+                                    <div className="text-blue-600 text-xs mt-1">
+                                      {sabangName}
+                                    </div>
+                                  </div>
+                                ) : isInternalCodeOrderNumber &&
+                                  (internalCode || orderNumber) ? (
+                                  <div>
+                                    {internalCode && <div>{internalCode}</div>}
+                                    {orderNumber && (
+                                      <div className="text-blue-600 text-xs mt-1">
+                                        {orderNumber}
+                                      </div>
+                                    )}
+                                    {!internalCode && !orderNumber && (
+                                      <div>-</div>
+                                    )}
+                                  </div>
+                                ) : isAddress && deliveryMessage ? (
+                                  <div>
+                                    <div>{cellValue}</div>
+                                    <div className="text-blue-600 text-xs mt-1">
+                                      {deliveryMessage}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  cellValue
+                                )}
                               </td>
                             );
                           })}
@@ -866,7 +1072,7 @@ export default function PurchaseOrdersModal({
                     </h3>
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full border-collapse border border-gray-300 text-sm">
+                    <table className="w-full border-collapse border border-gray-300 text-xs">
                       <thead>
                         <tr className="bg-gray-100">
                           <th className="border border-gray-300 px-3 py-2 text-center w-10">
@@ -932,8 +1138,23 @@ export default function PurchaseOrdersModal({
                             {headers.map((header, colIdx) => {
                               const cellValue = getCellValue(order, header);
                               const isClickable =
-                                header === "매핑코드" || header === "내부코드";
+                                header === "매핑코드" ||
+                                header === "내부코드/주문번호";
                               const isOrderStatus = header === "발주여부";
+                              const isProductName = header === "상품명";
+                              const isInternalCodeOrderNumber =
+                                header === "내부코드/주문번호";
+                              const isAddress = header === "주소";
+                              const sabangName =
+                                order.sabangName ||
+                                order.rowData?.사방넷명 ||
+                                order.rowData?.sabangName ||
+                                "";
+                              const rowData = order.rowData || {};
+                              const internalCode = rowData["내부코드"] || "";
+                              const orderNumber = rowData["주문번호"] || "";
+                              const deliveryMessage =
+                                rowData["배송메시지"] || "";
 
                               return (
                                 <td
@@ -946,12 +1167,43 @@ export default function PurchaseOrdersModal({
                                   onClick={() => {
                                     if (header === "매핑코드") {
                                       handleMappingCodeClick(order);
-                                    } else if (header === "내부코드") {
+                                    } else if (header === "내부코드/주문번호") {
                                       handleInternalCodeClick(order);
                                     }
                                   }}
                                 >
-                                  {cellValue}
+                                  {isProductName && sabangName ? (
+                                    <div>
+                                      <div>{cellValue}</div>
+                                      <div className="text-blue-600 text-xs mt-1">
+                                        {sabangName}
+                                      </div>
+                                    </div>
+                                  ) : isInternalCodeOrderNumber &&
+                                    (internalCode || orderNumber) ? (
+                                    <div>
+                                      {internalCode && (
+                                        <div>{internalCode}</div>
+                                      )}
+                                      {orderNumber && (
+                                        <div className="text-blue-600 text-xs mt-1">
+                                          {orderNumber}
+                                        </div>
+                                      )}
+                                      {!internalCode && !orderNumber && (
+                                        <div>-</div>
+                                      )}
+                                    </div>
+                                  ) : isAddress && deliveryMessage ? (
+                                    <div>
+                                      <div>{cellValue}</div>
+                                      <div className="text-blue-600 text-xs mt-1">
+                                        {deliveryMessage}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    cellValue
+                                  )}
                                 </td>
                               );
                             })}
@@ -966,7 +1218,7 @@ export default function PurchaseOrdersModal({
           ) : (
             // 미발주 주문만 - 기존 목록 보기 뷰
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse border border-gray-300 text-sm">
+              <table className="w-full border-collapse border border-gray-300 text-xs">
                 <thead>
                   <tr className="bg-gray-100">
                     <th className="border border-gray-300 px-3 py-2 text-center w-10">
@@ -1012,8 +1264,22 @@ export default function PurchaseOrdersModal({
                       {headers.map((header, colIdx) => {
                         const cellValue = getCellValue(order, header);
                         const isClickable =
-                          header === "매핑코드" || header === "내부코드";
+                          header === "매핑코드" ||
+                          header === "내부코드/주문번호";
                         const isOrderStatus = header === "발주여부";
+                        const isProductName = header === "상품명";
+                        const isInternalCodeOrderNumber =
+                          header === "내부코드/주문번호";
+                        const isAddress = header === "주소";
+                        const sabangName =
+                          order.sabangName ||
+                          order.rowData?.사방넷명 ||
+                          order.rowData?.sabangName ||
+                          "";
+                        const rowData = order.rowData || {};
+                        const internalCode = rowData["내부코드"] || "";
+                        const orderNumber = rowData["주문번호"] || "";
+                        const deliveryMessage = rowData["배송메시지"] || "";
 
                         return (
                           <td
@@ -1026,12 +1292,39 @@ export default function PurchaseOrdersModal({
                             onClick={() => {
                               if (header === "매핑코드") {
                                 handleMappingCodeClick(order);
-                              } else if (header === "내부코드") {
+                              } else if (header === "내부코드/주문번호") {
                                 handleInternalCodeClick(order);
                               }
                             }}
                           >
-                            {cellValue}
+                            {isProductName && sabangName ? (
+                              <div>
+                                <div>{cellValue}</div>
+                                <div className="text-blue-600 text-xs mt-1">
+                                  {sabangName}
+                                </div>
+                              </div>
+                            ) : isInternalCodeOrderNumber &&
+                              (internalCode || orderNumber) ? (
+                              <div>
+                                {internalCode && <div>{internalCode}</div>}
+                                {orderNumber && (
+                                  <div className="text-blue-600 text-xs mt-1">
+                                    {orderNumber}
+                                  </div>
+                                )}
+                                {!internalCode && !orderNumber && <div>-</div>}
+                              </div>
+                            ) : isAddress && deliveryMessage ? (
+                              <div>
+                                <div>{cellValue}</div>
+                                <div className="text-blue-600 text-xs mt-1">
+                                  {deliveryMessage}
+                                </div>
+                              </div>
+                            ) : (
+                              cellValue
+                            )}
                           </td>
                         );
                       })}
@@ -1067,10 +1360,31 @@ export default function PurchaseOrdersModal({
               : `총 ${orders.length}건`}
           </div>
           <div className="flex gap-2">
+            {selectedRows.size > 0 && (
+              <>
+                <button
+                  onClick={handleCancelSelected}
+                  disabled={isCanceling || isDeleting || isSending}
+                  className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-bold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isCanceling ? "처리 중..." : `${selectedRows.size}건 취소`}
+                </button>
+                <button
+                  onClick={handleDeleteSelected}
+                  disabled={isCanceling || isDeleting || isSending}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isDeleting ? "삭제 중..." : `${selectedRows.size}건 삭제`}
+                </button>
+              </>
+            )}
             <button
               onClick={handleSendKakao}
               disabled={
-                isSending || !purchase.submitType?.includes("kakaotalk")
+                isSending ||
+                isCanceling ||
+                isDeleting ||
+                !purchase.submitType?.includes("kakaotalk")
               }
               className="px-4 py-2 bg-yellow-500 text-white text-sm rounded hover:bg-yellow-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
               title={
@@ -1083,7 +1397,12 @@ export default function PurchaseOrdersModal({
             </button>
             <button
               onClick={handleSendEmail}
-              disabled={isSending || !purchase.submitType?.includes("email")}
+              disabled={
+                isSending ||
+                isCanceling ||
+                isDeleting ||
+                !purchase.submitType?.includes("email")
+              }
               className="px-4 py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
               title={
                 !purchase.submitType?.includes("email")
@@ -1166,28 +1485,29 @@ function TemplateView({
       const headers = getTemplateHeaderNames(purchase.templateHeaders);
       setEditableHeaders(headers);
     } else {
-      // 기본 외주 발주서 헤더
+      // 기본 외주 발주서 헤더 (download-outsource와 동일)
+      // 외주 발주서의 일반적인 헤더 구조 사용
       setEditableHeaders([
-        "주문번호",
-        "상품명",
-        "수량",
-        "수취인명",
+        "보내는 분",
+        "전화번호",
+        "주소",
+        "받는사람",
         "전화번호1",
         "전화번호2",
         "우편번호",
         "주소",
+        "", // 비어있는 열
+        "상품명",
         "배송메시지",
+        "박스",
+        "업체명",
       ]);
     }
   }, [purchase]);
 
-  // 각 주문의 데이터를 템플릿 형식으로 매핑 (템플릿이 있을 때만)
+  // 각 주문의 데이터를 템플릿 형식으로 매핑
   useEffect(() => {
-    if (
-      purchase?.templateHeaders &&
-      purchase.templateHeaders.length > 0 &&
-      orders.length > 0
-    ) {
+    if (orders.length > 0) {
       const cache: {[orderId: number]: string[]} = {};
 
       orders.forEach((order) => {
@@ -1197,20 +1517,118 @@ function TemplateView({
           매핑코드: order.rowData?.매핑코드 || order.productCode,
         };
 
-        const mappedValues = mapRowToTemplateFormat(
-          rowData,
-          purchase.templateHeaders,
-          headerAliases,
-        );
+        if (purchase?.templateHeaders && purchase.templateHeaders.length > 0) {
+          // 템플릿이 있는 경우
+          const mappedValues = mapRowToTemplateFormat(
+            rowData,
+            purchase.templateHeaders,
+            headerAliases,
+          );
+          cache[order.id] = mappedValues;
+        } else {
+          // 템플릿이 없는 경우 - 기본 외주 발주서 양식으로 매핑
+          const defaultHeaders = [
+            "보내는 분",
+            "전화번호",
+            "주소",
+            "받는사람",
+            "전화번호1",
+            "전화번호2",
+            "우편번호",
+            "주소",
+            "", // 비어있는 열
+            "상품명",
+            "배송메시지",
+            "박스",
+            "업체명",
+          ];
 
-        cache[order.id] = mappedValues;
+          const mappedValues = defaultHeaders.map(
+            (header: string, colIdx: number) => {
+              if (header === "") return "";
+
+              let value: any = "";
+
+              // 각 헤더에 맞는 데이터 매핑 (download-outsource와 동일한 로직)
+              switch (header) {
+                case "보내는 분":
+                  value = purchase?.name || "";
+                  break;
+                case "전화번호":
+                  value = "";
+                  break;
+                case "받는사람":
+                  value = mapDataToTemplate(rowData, "수취인명", {
+                    formatPhone: false,
+                  });
+                  // 수취인명 앞에 ★ 붙이기
+                  let receiverName = value != null ? String(value) : "";
+                  receiverName = "★" + receiverName.replace(/^★/, "").trim();
+                  value = receiverName;
+                  break;
+                case "전화번호1":
+                  value = mapDataToTemplate(rowData, "전화번호1", {
+                    formatPhone: true,
+                  });
+                  break;
+                case "전화번호2":
+                  value = mapDataToTemplate(rowData, "전화번호2", {
+                    formatPhone: true,
+                  });
+                  break;
+                case "우편번호":
+                  value = mapDataToTemplate(rowData, "우편번호", {
+                    formatPhone: false,
+                  });
+                  break;
+                case "주소":
+                  // 첫 번째 주소(인덱스 2)는 빈 값, 두 번째 주소(인덱스 7)는 실제 주소
+                  const addressIndices = defaultHeaders
+                    .map((h, idx) => (h === "주소" ? idx : -1))
+                    .filter((idx) => idx !== -1);
+                  const isFirstAddress = colIdx === addressIndices[0];
+                  value = isFirstAddress
+                    ? ""
+                    : mapDataToTemplate(rowData, "주소", {
+                        formatPhone: false,
+                      });
+                  break;
+                case "상품명":
+                  value = mapDataToTemplate(rowData, "상품명", {
+                    formatPhone: false,
+                    preferSabangName: true,
+                  });
+                  break;
+                case "배송메시지":
+                  value = mapDataToTemplate(rowData, "배송메시지", {
+                    formatPhone: false,
+                  });
+                  break;
+                case "박스":
+                  value = "";
+                  break;
+                case "업체명":
+                  value = purchase?.name || "";
+                  break;
+                default:
+                  value = mapDataToTemplate(rowData, header, {
+                    formatPhone: false,
+                  });
+              }
+
+              return value != null ? String(value) : "";
+            },
+          );
+
+          cache[order.id] = mappedValues;
+        }
       });
 
       setMappedDataCache(cache);
     } else {
       setMappedDataCache({});
     }
-  }, [orders, purchase?.templateHeaders, headerAliases]);
+  }, [orders, purchase?.templateHeaders, purchase?.name, headerAliases]);
 
   // 헤더 수정
   const handleHeaderChange = useCallback((index: number, value: string) => {
@@ -1251,30 +1669,15 @@ function TemplateView({
         }
       }
 
-      // 기본 매핑 (템플릿이 없을 때)
-      const rowData = order.rowData || {};
-      switch (header) {
-        case "주문번호":
-          return rowData["내부코드"] || rowData["주문번호"] || "";
-        case "상품명":
-          return rowData["상품명"] || order.productName || "";
-        case "수량":
-          return rowData["수량"] || "1";
-        case "수취인명":
-          return rowData["수취인명"] || "";
-        case "전화번호1":
-          return rowData["수취인 전화번호"] || rowData["전화번호1"] || "";
-        case "전화번호2":
-          return rowData["전화번호2"] || rowData["수취인 전화번호"] || "";
-        case "우편번호":
-          return rowData["우편"] || rowData["우편번호"] || "";
-        case "주소":
-          return rowData["주소"] || "";
-        case "배송메시지":
-          return rowData["배송메시지"] || "";
-        default:
-          return rowData[header] || "";
+      // 기본 매핑 (템플릿이 없을 때) - mappedDataCache에서 가져오기
+      const mappedValues = mappedDataCache[order.id];
+      if (mappedValues && mappedValues[headerIndex] !== undefined) {
+        return mappedValues[headerIndex] || "";
       }
+
+      // fallback: 기본 매핑
+      const rowData = order.rowData || {};
+      return rowData[header] || "";
     },
     [
       editableCells,
@@ -1289,7 +1692,7 @@ function TemplateView({
       <div className="mb-4 p-3 bg-blue-50 text-blue-700 rounded text-sm">
         양식 미리보기 - 헤더와 셀 값을 수정할 수 있습니다.
       </div>
-      <table className="w-full border-collapse border border-gray-300 text-sm">
+      <table className="w-full border-collapse border border-gray-300 text-xs">
         <thead>
           <tr className="bg-gray-100">
             {editableHeaders.map((header, idx) => (

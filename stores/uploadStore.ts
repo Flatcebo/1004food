@@ -469,8 +469,8 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
               headers["company-id"] = user.companyId.toString();
             }
             if (user?.id) {
-              userId = user.id;
-              headers["user-id"] = user.id;
+              userId = String(user.id);
+              headers["user-id"] = String(user.id);
             }
           }
         } catch (e) {
@@ -550,8 +550,8 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
               headers["company-id"] = user.companyId.toString();
             }
             if (user?.id) {
-              userId = user.id;
-              headers["user-id"] = user.id;
+              userId = String(user.id);
+              headers["user-id"] = String(user.id);
             }
           }
         } catch (e) {
@@ -1463,6 +1463,29 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             }
           }
 
+          // 온라인 유저: "매핑코드" 컬럼 추가만 수행 (값 설정은 빈 행 필터링 후에 수행)
+          // 빈 행 필터링 전에 설정하면 인덱스가 어긋날 수 있으므로, 필터링 후 _originalRowIndex로 정확히 매칭
+          if (isOnlineUser && sabangnetCodeIdx !== -1) {
+            const headerRowArr = jsonData[0] as any[];
+            let mappingCodeColIdx = headerRowArr.findIndex(
+              (h: any) => h && typeof h === "string" && h === "매핑코드",
+            );
+
+            // "매핑코드" 컬럼이 canonical header에 없으면 직접 추가
+            // (DB header_aliases에 "매핑코드"가 등록되지 않은 경우)
+            if (mappingCodeColIdx === -1) {
+              headerRowArr.push("매핑코드");
+              mappingCodeColIdx = headerRowArr.length - 1;
+              // 기존 데이터 행에도 빈 값 추가 (나중에 빈 행 필터링 후 재설정)
+              for (let i = 1; i < jsonData.length; i++) {
+                jsonData[i].push("");
+              }
+              console.log(
+                `✅ [온라인 유저] "매핑코드" 컬럼 추가 (값 설정은 빈 행 필터링 후 수행)`,
+              );
+            }
+          }
+
           // 수취인명/이름(내부 컬럼 기준) 동명이인 번호 붙이기
           if (jsonData.length > 1) {
             const headerRow = jsonData[0] as any[];
@@ -1602,6 +1625,107 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             jsonData = [headerRow, ...filteredRows];
           }
 
+          // 온라인 유저: 빈 행 필터링 후 _originalRowIndex를 사용하여 매핑코드 정확히 설정
+          // 빈 행 필터링 후에는 jsonData의 인덱스와 raw의 인덱스가 맞지 않으므로
+          // _originalRowIndex를 사용해서 원본 raw 데이터의 행과 정확히 매칭
+          // 오로지 원본 파일의 상품코드(사방넷) 값만 사용, 상품명 등 다른 것은 무시
+          if (isOnlineUser && sabangnetCodeIdx !== -1) {
+            const headerRowArr = jsonData[0] as any[];
+            let mappingCodeColIdx = headerRowArr.findIndex(
+              (h: any) => h && typeof h === "string" && h === "매핑코드",
+            );
+            const origRowIdxColIdx = headerRowArr.findIndex(
+              (h: any) =>
+                h && typeof h === "string" && h === "_originalRowIndex",
+            );
+
+            // 매핑코드 컬럼이 없으면 추가
+            if (mappingCodeColIdx === -1) {
+              headerRowArr.push("매핑코드");
+              mappingCodeColIdx = headerRowArr.length - 1;
+              // 각 데이터 행에도 빈 값 추가
+              for (let i = 1; i < jsonData.length; i++) {
+                jsonData[i].push("");
+              }
+              console.log(
+                `✅ [온라인 유저] "매핑코드" 컬럼 추가 (빈 행 필터링 후)`,
+              );
+            }
+
+            if (mappingCodeColIdx !== -1 && origRowIdxColIdx !== -1) {
+              let setCount = 0;
+              let errorCount = 0;
+              for (let i = 1; i < jsonData.length; i++) {
+                const row = jsonData[i];
+                // _originalRowIndex에서 원본 행 인덱스 가져오기 (1-based)
+                const origRowIdx = parseInt(
+                  String(row[origRowIdxColIdx] || "0"),
+                );
+
+                if (origRowIdx > 0) {
+                  // raw 데이터에서 원본 행 찾기 (headerRowIndex + origRowIdx)
+                  const rawRowIdx = headerRowIndex + origRowIdx;
+                  if (rawRowIdx < raw.length) {
+                    const originalRow = raw[rawRowIdx];
+                    if (
+                      originalRow &&
+                      originalRow[sabangnetCodeIdx] !== undefined &&
+                      originalRow[sabangnetCodeIdx] !== null
+                    ) {
+                      const sabangnetCode = String(
+                        originalRow[sabangnetCodeIdx],
+                      ).trim();
+                      if (sabangnetCode) {
+                        // "-0001" 또는 "-001" 제거
+                        const cleanedCode = sabangnetCode
+                          .replace(/-0001$/, "")
+                          .replace(/-001$/, "");
+                        if (cleanedCode) {
+                          row[mappingCodeColIdx] = cleanedCode;
+                          setCount++;
+                          // 디버깅: 처음 3개 행만 로그
+                          if (setCount <= 3) {
+                            console.log(
+                              `  ✅ 행 ${i} (원본행 ${origRowIdx}): "${sabangnetCode}" → "${cleanedCode}"`,
+                            );
+                          }
+                        }
+                      }
+                    } else {
+                      errorCount++;
+                      if (errorCount <= 3) {
+                        console.warn(
+                          `  ⚠️ 행 ${i} (원본행 ${origRowIdx}): 상품코드(사방넷) 값 없음`,
+                        );
+                      }
+                    }
+                  } else {
+                    errorCount++;
+                    if (errorCount <= 3) {
+                      console.warn(
+                        `  ⚠️ 행 ${i} (원본행 ${origRowIdx}): rawRowIdx ${rawRowIdx} >= raw.length ${raw.length}`,
+                      );
+                    }
+                  }
+                } else {
+                  errorCount++;
+                  if (errorCount <= 3) {
+                    console.warn(
+                      `  ⚠️ 행 ${i}: _originalRowIndex가 유효하지 않음 (${row[origRowIdxColIdx]})`,
+                    );
+                  }
+                }
+              }
+              console.log(
+                `✅ [온라인 유저] 매핑코드 설정 완료: ${setCount}건 성공${errorCount > 0 ? `, ${errorCount}건 실패` : ""}`,
+              );
+            } else {
+              console.error(
+                `❌ [온라인 유저] 매핑코드 설정 실패: mappingCodeColIdx=${mappingCodeColIdx}, origRowIdxColIdx=${origRowIdxColIdx}`,
+              );
+            }
+          }
+
           // 상품명 인덱스 찾기
           const headerRow = jsonData[0] as any[];
           const nameIdx = headerRow.findIndex(
@@ -1654,14 +1778,27 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             }
           }
 
+          // ============================================================
+          // 온라인 유저의 경우: productCodeMap을 만들지 않음
+          // - 온라인 유저는 오로지 원본 파일의 상품코드(사방넷) 값을 각 행에 직접 저장
+          // - productCodeMap은 상품명 기준으로 덮어써지는 문제가 있어서 사용하지 않음
+          // - 각 행의 매핑코드는 이미 tableData에 직접 설정되어 있음 (빈 행 필터링 후 재설정 포함)
+          // ============================================================
+          let initialProductCodeMap: {[name: string]: string} = {};
+
+          // 온라인 유저는 productCodeMap을 만들지 않음 (각 행에 직접 저장된 값만 사용)
+          if (!isOnlineUser) {
+            // 일반 유저는 기존 로직 유지 (필요시 추가)
+          }
+
           const uploadedFile: UploadedFile = {
             id: newFileId,
             fileName: file.name,
             rowCount: jsonData.length - 1,
             tableData: jsonData as any[][],
             headerIndex: nameIdx !== -1 ? {nameIdx} : null,
-            productCodeMap: {},
-            userId: useAuthStore.getState().user?.id,
+            productCodeMap: initialProductCodeMap, // 온라인 유저의 경우 상품코드(사방넷) 값으로 미리 채움
+            userId: user?.id,
             uploadTime: new Date().toISOString(),
             vendorName: vendorNameStr, // 쇼핑몰명에서 자동 입력된 업체명
             originalHeader: originalHeader, // 원본 파일의 헤더 순서 (정규화 전)
@@ -1706,6 +1843,9 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             const user = parsed.state?.user;
             if (user?.companyId) {
               headers["company-id"] = user.companyId.toString();
+            }
+            if (user?.id) {
+              headers["user-id"] = String(user.id);
             }
           }
         } catch (e) {
