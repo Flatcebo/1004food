@@ -1,6 +1,7 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
 import {getCompanyIdFromRequest, getUserIdFromRequest} from "@/lib/company";
+import {kstTime} from "@/utils/date";
 
 /**
  * GET /api/upload/delivery-vendors
@@ -85,6 +86,8 @@ export async function GET(request: NextRequest) {
       // 이미 UTC로 변환된 Date 객체 사용
       dateFromUTC = startKoreaDate;
       dateToUTC = endKoreaDate;
+
+      console.log(startKoreaStr, endKoreaStr);
     } else {
       // 기본값: 오늘만 조회 (한국 시간 기준)
       const now = new Date();
@@ -104,17 +107,6 @@ export async function GET(request: NextRequest) {
       dateToUTC = new Date(todayEndKoreaStr);
     }
 
-    // 디버깅 로그
-    console.log(
-      `🔍 [운송장 업체 조회] startDate: ${startDateParam}, endDate: ${endDateParam}`,
-    );
-    console.log(
-      `🔍 [운송장 업체 조회] 조회 범위 (UTC): ${dateFromUTC.toISOString()} ~ ${dateToUTC.toISOString()}`,
-    );
-    console.log(
-      `🔍 [운송장 업체 조회] 조회 범위 (한국시간): ${new Date(dateFromUTC.getTime() + 9 * 3600000).toISOString()} ~ ${new Date(dateToUTC.getTime() + 9 * 3600000).toISOString()}`,
-    );
-
     // 금일 업로드된 주문에서 업체명 추출
     let vendorsQuery;
 
@@ -126,8 +118,8 @@ export async function GET(request: NextRequest) {
         FROM upload_rows ur
         INNER JOIN uploads u ON ur.upload_id = u.id
         WHERE u.company_id = ${companyId}
-          AND u.created_at >= ${dateFromUTC.toISOString()}
-          AND u.created_at <= ${dateToUTC.toISOString()}
+          AND u.created_at >= ${kstTime(dateFromUTC)}
+          AND u.created_at <= ${kstTime(dateToUTC)}
           AND ur.row_data->>'업체명' IS NOT NULL
           AND ur.row_data->>'업체명' != ''
         ORDER BY vendor_name
@@ -164,8 +156,8 @@ export async function GET(request: NextRequest) {
         FROM upload_rows ur
         INNER JOIN uploads u ON ur.upload_id = u.id
         WHERE u.company_id = ${companyId}
-          AND u.created_at >= ${dateFromUTC.toISOString()}
-          AND u.created_at <= ${dateToUTC.toISOString()}
+        AND u.created_at >= ${kstTime(dateFromUTC)}
+          AND u.created_at <= ${kstTime(dateToUTC)}
           AND ur.row_data->>'업체명' = ANY(${vendorNames})
           AND ur.row_data->>'업체명' IS NOT NULL
           AND ur.row_data->>'업체명' != ''
@@ -197,8 +189,8 @@ export async function GET(request: NextRequest) {
           FROM upload_rows ur
           INNER JOIN uploads u ON ur.upload_id = u.id
           WHERE u.company_id = ${companyId}
-            AND u.created_at >= ${dateFromUTC.toISOString()}
-            AND u.created_at <= ${dateToUTC.toISOString()}
+          AND u.created_at >= ${kstTime(dateFromUTC)}
+          AND u.created_at <= ${kstTime(dateToUTC)}   
             AND ur.row_data->>'업체명' = ${vendorName}
           GROUP BY u.id, u.file_name, u.created_at
           ORDER BY u.created_at DESC
@@ -215,8 +207,8 @@ export async function GET(request: NextRequest) {
           FROM upload_rows ur
           INNER JOIN uploads u ON ur.upload_id = u.id
           WHERE u.company_id = ${companyId}
-            AND u.created_at >= ${dateFromUTC.toISOString()}
-            AND u.created_at <= ${dateToUTC.toISOString()}
+          AND u.created_at >= ${kstTime(dateFromUTC)}
+          AND u.created_at <= ${kstTime(dateToUTC)}
             AND ur.row_data->>'업체명' = ${vendorName}
         `;
 

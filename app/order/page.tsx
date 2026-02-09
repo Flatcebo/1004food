@@ -303,7 +303,10 @@ function OrderPageContent() {
 
   // 파일 검증 관련 훅
   const {fileValidationStatus, updateValidationStatus, updateValidation} =
-    useFileValidation(uploadedFiles, productCodeMap);
+    useFileValidation(uploadedFiles, productCodeMap, {
+      userGrade: user?.grade,
+      codes,
+    });
 
   // 검증 상태를 boolean으로 변환하는 헬퍼 함수
   const getValidationStatus = (fileId: string): boolean => {
@@ -319,6 +322,8 @@ function OrderPageContent() {
     confirmFile,
     updateValidationStatus,
     loadFilesFromServer,
+    userGrade: user?.grade,
+    codes,
   });
 
   // 현재 선택된 파일 ID 찾기
@@ -866,6 +871,7 @@ function OrderPageContent() {
     fetchSavedData,
     resetData,
     unconfirmFile,
+    userGrade: user?.grade,
   });
 
   const handleFileDelete = async (fileId: string) => {

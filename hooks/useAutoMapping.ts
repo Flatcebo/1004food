@@ -60,6 +60,9 @@ export function useAutoMapping({
     const mappingIdx = headerRow.findIndex((h) => h === "매핑코드");
     const typeIdx = headerRow.findIndex((h) => h === "내외주");
     const postTypeIdx = headerRow.findIndex((h) => h === "택배사");
+    const vendorIdx = headerRow.findIndex(
+      (h) => h === "업체명" || h === "업체",
+    );
 
     if (mappingIdx === -1 && typeIdx === -1 && postTypeIdx === -1) return;
 
@@ -142,6 +145,20 @@ export function useAutoMapping({
             rowChanged = true;
           }
           updatedRow[postTypeIdx] = found.postType;
+          changed = true;
+        }
+        // 매입처명(purchase)도 업데이트 (온라인 유저 포함)
+        if (
+          vendorIdx >= 0 &&
+          found.purchase &&
+          String(found.purchase).trim() !== "" &&
+          String(row[vendorIdx] || "").trim() !== String(found.purchase).trim()
+        ) {
+          if (!rowChanged) {
+            updatedRow = [...row];
+            rowChanged = true;
+          }
+          updatedRow[vendorIdx] = found.purchase;
           changed = true;
         }
       }

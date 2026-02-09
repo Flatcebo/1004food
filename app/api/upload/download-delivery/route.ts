@@ -5,6 +5,7 @@ import ExcelJS from "exceljs";
 import {generateExcelFileName, generateDatePrefix} from "@/utils/filename";
 import {createInhouseTemplate} from "@/libs/inhouse-template";
 import {mapDataToTemplate} from "@/utils/excelDataMapping";
+import {getKoreaTimestampString} from "@/utils/koreaTime";
 
 /**
  * POST /api/upload/download-delivery
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
     if (!vendorName || !uploadId) {
       return NextResponse.json(
         {success: false, error: "업체명과 파일 ID가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest) {
       const templateDataName = (template.template_data?.name || "")
         .normalize("NFC")
         .trim();
-      
+
       if (nameColumn.includes("내주") || templateDataName.includes("내주")) {
         inhouseTemplate = template;
         break;
@@ -62,9 +63,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "내주 발주서 템플릿을 찾을 수 없습니다. 템플릿 이름에 '내주'가 포함되어 있어야 합니다.",
+          error:
+            "내주 발주서 템플릿을 찾을 수 없습니다. 템플릿 이름에 '내주'가 포함되어 있어야 합니다.",
         },
-        {status: 404}
+        {status: 404},
       );
     }
 
@@ -76,7 +78,8 @@ export async function POST(request: NextRequest) {
       ? inhouseTemplateData.columnOrder
       : inhouseHeaders;
     const inhouseColumnWidths =
-      inhouseTemplateData.columnWidths && typeof inhouseTemplateData.columnWidths === "object"
+      inhouseTemplateData.columnWidths &&
+      typeof inhouseTemplateData.columnWidths === "object"
         ? inhouseTemplateData.columnWidths
         : {};
 
@@ -98,7 +101,9 @@ export async function POST(request: NextRequest) {
 
           if (userResult[0].assigned_vendor_ids) {
             try {
-              assignedVendorIds = Array.isArray(userResult[0].assigned_vendor_ids)
+              assignedVendorIds = Array.isArray(
+                userResult[0].assigned_vendor_ids,
+              )
                 ? userResult[0].assigned_vendor_ids
                 : JSON.parse(userResult[0].assigned_vendor_ids || "[]");
             } catch (e) {
@@ -124,21 +129,31 @@ export async function POST(request: NextRequest) {
       if (!allowedVendorNames.includes(vendorName)) {
         return NextResponse.json(
           {success: false, error: "해당 업체에 대한 권한이 없습니다."},
-          {status: 403}
+          {status: 403},
         );
       }
     }
 
     // 금일 날짜 계산 (한국 시간 기준)
-    const today = new Date();
-    const koreaTime = new Date(today.getTime() + 9 * 60 * 60 * 1000);
-    const todayStart = new Date(koreaTime);
-    todayStart.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(koreaTime);
-    todayEnd.setHours(23, 59, 59, 999);
+    const now = new Date();
 
-    const todayStartUTC = new Date(todayStart.getTime() - 9 * 60 * 60 * 1000);
-    const todayEndUTC = new Date(todayEnd.getTime() - 9 * 60 * 60 * 1000);
+    const todayStart = new Date(
+      new Intl.DateTimeFormat("sv-SE", {
+        timeZone: "Asia/Seoul",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(now) + "T00:00:00",
+    );
+
+    const todayEnd = new Date(
+      new Intl.DateTimeFormat("sv-SE", {
+        timeZone: "Asia/Seoul",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).format(now) + "T23:59:59.999",
+    );
 
     // 해당 파일(upload_id)의 배송중인 주문 데이터 조회
     const deliveryOrdersResult = await sql`
@@ -166,7 +181,7 @@ export async function POST(request: NextRequest) {
     if (allRowsResult.length === 0) {
       return NextResponse.json(
         {success: false, error: "해당 파일의 데이터를 찾을 수 없습니다."},
-        {status: 404}
+        {status: 404},
       );
     }
 
@@ -186,10 +201,10 @@ export async function POST(request: NextRequest) {
       const isDeliveryOrder = deliveryRowOrders.has(rowOrder);
 
       // A열: 택배사 (운송장 있는 경우만, 없으면 공란)
-      const carrier = isDeliveryOrder ? (rowData["택배사"] || "") : "";
-      
+      const carrier = isDeliveryOrder ? rowData["택배사"] || "" : "";
+
       // B열: 운송장번호 (운송장 있는 경우만, 없으면 공란)
-      const trackingNumber = isDeliveryOrder ? (rowData["운송장번호"] || "") : "";
+      const trackingNumber = isDeliveryOrder ? rowData["운송장번호"] || "" : "";
 
       // C열부터: 내주 발주서 양식에 맞게 데이터 매핑
       const inhouseData = inhouseColumnOrder.map((header: string) => {
@@ -236,8 +251,8 @@ export async function POST(request: NextRequest) {
 
     // 열 너비 설정 (A, B열 + 내주 발주서 열 너비)
     const columnWidths: {[key: string]: number} = {
-      "택배사": 15,
-      "운송장번호": 20,
+      택배사: 15,
+      운송장번호: 20,
       ...inhouseColumnWidths,
     };
 
@@ -248,13 +263,13 @@ export async function POST(request: NextRequest) {
       columnWidths,
       excelData,
       "운송장",
-      2 // A, B열 추가로 인한 오프셋
+      2, // A, B열 추가로 인한 오프셋
     );
 
     // A, B열 스타일 조정 (운송장 관련 열은 기본 스타일 유지)
     const worksheet = workbook.worksheets[0];
     const headerRow = worksheet.getRow(1);
-    
+
     // A, B열 헤더 스타일 조정 (기본 스타일 유지)
     headerRow.getCell(1).fill = {
       type: "pattern",
@@ -297,8 +312,21 @@ export async function POST(request: NextRequest) {
     const encodedFileName = encodeURIComponent(fileName);
     const contentDisposition = `attachment; filename="${safeFileName}"; filename*=UTF-8''${encodedFileName}`;
 
+    const nowKST = new Date(
+      new Intl.DateTimeFormat("sv-SE", {
+        timeZone: "Asia/Seoul",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      }).format(new Date()),
+    );
+
     // 히스토리 저장 (비동기로 처리하여 다운로드 응답을 지연시키지 않음)
     if (userId) {
+      const koreaTimestamp = getKoreaTimestampString();
       sql`
         INSERT INTO download_history (
           user_id,
@@ -306,14 +334,16 @@ export async function POST(request: NextRequest) {
           vendor_name,
           file_name,
           form_type,
-          upload_id
+          upload_id,
+          downloaded_at
         ) VALUES (
           ${userId},
           ${companyId},
           ${vendorName},
           ${fileName},
           '운송장',
-          ${uploadId}
+          ${uploadId},
+          ${koreaTimestamp}::timestamp
         )
       `.catch((error) => {
         console.error("히스토리 저장 실패:", error);
@@ -325,7 +355,7 @@ export async function POST(request: NextRequest) {
     const responseHeaders = new Headers();
     responseHeaders.set(
       "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     );
     responseHeaders.set("Content-Disposition", contentDisposition);
 
@@ -336,7 +366,7 @@ export async function POST(request: NextRequest) {
     console.error("운송장 다운로드 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
     );
   }
 }

@@ -4,6 +4,7 @@ import {getCompanyIdFromRequest, getUserIdFromRequest} from "@/lib/company";
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
 import {generateDatePrefix} from "@/utils/filename";
+import {getKoreaTimestampString} from "@/utils/koreaTime";
 
 /**
  * POST /api/upload/download-sabangnet-ab
@@ -74,10 +75,10 @@ export async function POST(request: NextRequest) {
       // 한국 시간으로 시작일 00:00:00, 종료일 23:59:59를 UTC로 변환
       const startKoreaStr = `${startDate}T00:00:00+09:00`;
       const endKoreaStr = `${endDate}T23:59:59.999+09:00`;
-      
+
       const startKoreaDate = new Date(startKoreaStr);
       const endKoreaDate = new Date(endKoreaStr);
-      
+
       // UTC로 변환
       dateFromUTC = new Date(startKoreaDate.toISOString());
       dateToUTC = new Date(endKoreaDate.toISOString());
@@ -399,6 +400,7 @@ export async function POST(request: NextRequest) {
         : `${targetVendorNames[0]}_${dateFilterLabel} 기간`;
       const formType = allVendors ? "전체 사방넷 AB" : "사방넷 AB";
 
+      const koreaTimestamp = getKoreaTimestampString();
       sql`
         INSERT INTO download_history (
           user_id,
@@ -406,14 +408,16 @@ export async function POST(request: NextRequest) {
           vendor_name,
           file_name,
           form_type,
-          date_filter
+          date_filter,
+          downloaded_at
         ) VALUES (
           ${userId},
           ${companyId},
           ${allVendors ? null : targetVendorNames[0]},
           ${historyFileName},
           ${formType},
-          ${startDate && endDate ? `${startDate} ~ ${endDate}` : null}
+          ${startDate && endDate ? `${startDate} ~ ${endDate}` : null},
+          ${koreaTimestamp}::timestamp
         )
       `.catch((error) => {
         console.error("히스토리 저장 실패:", error);

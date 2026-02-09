@@ -11,10 +11,16 @@ import {
 interface UseFileSaveProps {
   confirmedFiles: Set<string>;
   uploadedFiles: UploadedFile[];
-  codes: Array<{name: string; code: string; [key: string]: any}>;
+  codes: Array<{
+    name: string;
+    code: string;
+    id?: number | string;
+    [key: string]: any;
+  }>;
   fetchSavedData: () => Promise<void>;
   resetData: () => void;
   unconfirmFile: (fileId: string) => void;
+  userGrade?: string;
 }
 
 export function useFileSave({
@@ -24,6 +30,7 @@ export function useFileSave({
   fetchSavedData,
   resetData,
   unconfirmFile,
+  userGrade,
 }: UseFileSaveProps) {
   const {startLoading, updateLoadingMessage, stopLoading} = useLoadingStore();
 
@@ -47,7 +54,7 @@ export function useFileSave({
           console.log(
             "📦 DB에서 상품 목록 로드 완료:",
             productsToUse.length,
-            "개"
+            "개",
           );
         } else {
           console.warn("⚠️ 상품 목록을 가져올 수 없습니다.");
@@ -68,7 +75,7 @@ export function useFileSave({
             if (uploadedFile) {
               return uploadedFile;
             }
-            
+
             // uploadedFiles에 없으면 sessionStorage에서 확인
             const storedFile = sessionStorage.getItem(`uploadedFile_${fileId}`);
             if (storedFile) {
@@ -79,7 +86,7 @@ export function useFileSave({
                 return null;
               }
             }
-            
+
             // 둘 다 없으면 null 반환 (삭제된 파일)
             return null;
           })
@@ -92,7 +99,9 @@ export function useFileSave({
       }
 
       if (filesToUpload.length === 0) {
-        alert("업로드할 파일이 없습니다. 파일이 삭제되었거나 찾을 수 없습니다.");
+        alert(
+          "업로드할 파일이 없습니다. 파일이 삭제되었거나 찾을 수 없습니다.",
+        );
         stopLoading();
         return false;
       }
@@ -100,9 +109,12 @@ export function useFileSave({
       // 삭제된 파일이 confirmedFiles에 남아있는지 확인
       if (filesToUpload.length < confirmedFileIds.length) {
         const missingFileIds = confirmedFileIds.filter(
-          (fileId) => !filesToUpload.some((f) => f.id === fileId)
+          (fileId) => !filesToUpload.some((f) => f.id === fileId),
         );
-        console.warn("삭제된 파일이 confirmedFiles에 남아있음:", missingFileIds);
+        console.warn(
+          "삭제된 파일이 confirmedFiles에 남아있음:",
+          missingFileIds,
+        );
         // 삭제된 파일을 confirmedFiles에서 제거
         missingFileIds.forEach((fileId) => {
           unconfirmFile(fileId);
@@ -141,8 +153,15 @@ export function useFileSave({
           }
         }
 
-        const isValid = checkFileValidation(fileToCheck);
-        if (!isValid) {
+        // 파일별 productIdMap 가져오기
+        const fileProductIdMap = fileToCheck.productIdMap || {};
+
+        const validationResult = checkFileValidation(fileToCheck, {
+          userGrade,
+          codes: productsToUse,
+          productIdMap: fileProductIdMap,
+        });
+        if (!validationResult.isValid) {
           const fileName =
             fileToCheck?.fileName || file?.fileName || "알 수 없는 파일";
           invalidFiles.push(fileName);
@@ -152,8 +171,8 @@ export function useFileSave({
       if (invalidFiles.length > 0) {
         alert(
           `다음 파일에 매핑코드나 업체명이 공란인 row가 있습니다:\n\n${invalidFiles.join(
-            "\n"
-          )}\n\n모든 row의 매핑코드와 업체명을 입력해주세요.`
+            "\n",
+          )}\n\n모든 row의 매핑코드와 업체명을 입력해주세요.`,
         );
         stopLoading();
         return false;
@@ -187,7 +206,7 @@ export function useFileSave({
           const headerRow = file.tableData[0];
           const vendorIdx = headerRow.findIndex(
             (h: any) =>
-              h && typeof h === "string" && (h === "업체명" || h === "업체")
+              h && typeof h === "string" && (h === "업체명" || h === "업체"),
           );
 
           if (vendorIdx !== -1 && file.tableData.length > 1) {
@@ -197,7 +216,7 @@ export function useFileSave({
             if (vendorFromTable && typeof vendorFromTable === "string") {
               fileVendorName = String(vendorFromTable).trim();
               console.warn(
-                `⚠️ 파일 "${file.fileName}": 파일 객체의 vendorName이 비어있어 테이블 데이터에서 업체명을 찾았습니다: "${fileVendorName}"`
+                `⚠️ 파일 "${file.fileName}": 파일 객체의 vendorName이 비어있어 테이블 데이터에서 업체명을 찾았습니다: "${fileVendorName}"`,
               );
             }
           }
@@ -205,12 +224,12 @@ export function useFileSave({
           // 여전히 비어있으면 경고 로그
           if (!fileVendorName || fileVendorName === "") {
             console.error(
-              `❌ 파일 "${file.fileName}": 업체명을 찾을 수 없습니다. 파일 객체의 vendorName도 비어있고 테이블 데이터에도 업체명 컬럼이 없습니다.`
+              `❌ 파일 "${file.fileName}": 업체명을 찾을 수 없습니다. 파일 객체의 vendorName도 비어있고 테이블 데이터에도 업체명 컬럼이 없습니다.`,
             );
           }
         } else {
           console.log(
-            `✅ 파일 "${file.fileName}": 파일 객체의 vendorName 사용: "${fileVendorName}"`
+            `✅ 파일 "${file.fileName}": 파일 객체의 vendorName 사용: "${fileVendorName}"`,
           );
         }
 
@@ -252,7 +271,7 @@ export function useFileSave({
         const productIdMap = file.productIdMap || {};
         return Object.keys(productIdMap).length > 0;
       });
-      
+
       if (hasProductIdInMap) {
         // productId가 있는 경우, 전체 상품 목록을 한 번 더 로드하여 확실히 포함
         try {
@@ -263,7 +282,7 @@ export function useFileSave({
             // productsToUse에 없는 상품들을 추가
             const existingIds = new Set(productsToUse.map((p: any) => p.id));
             const missingProducts = result.data.filter(
-              (p: any) => !existingIds.has(p.id)
+              (p: any) => !existingIds.has(p.id),
             );
             if (missingProducts.length > 0) {
               productsToUse = [...productsToUse, ...missingProducts];
@@ -322,7 +341,7 @@ export function useFileSave({
               nameIdx !== -1 ? String(row[nameIdx] || "").trim() : "";
 
             const foundCode = productsToUse.find(
-              (c: any) => String(c.name || "").trim() === name
+              (c: any) => String(c.name || "").trim() === name,
             );
             const rawCode =
               file.productCodeMap?.[name] || foundCode?.code || "";
@@ -354,13 +373,13 @@ export function useFileSave({
               if (selectedProductId !== undefined) {
                 // 사용자가 선택한 상품 ID가 있으면 그것으로 정확히 찾기 (무조건 사용자가 선택한 상품만 사용)
                 matchedProduct = productsToUse.find(
-                  (c: any) => c.id === selectedProductId
+                  (c: any) => c.id === selectedProductId,
                 );
-                
+
                 // productsToUse에 없어도 productId가 있으면 사용자가 검색 모달에서 선택한 상품이므로
                 // productId를 저장하고, 신규 상품 생성 시 해당 ID를 사용하여 DB에서 찾을 수 있도록 함
                 // (batchCreateProducts API가 ON CONFLICT를 사용하므로 상품명, 매핑코드, 택배사가 같으면 업데이트됨)
-                
+
                 // 사용자가 선택한 상품 ID 저장 (다운로드 시 정확한 상품을 찾기 위함)
                 productId = selectedProductId;
                 rowData["productId"] = selectedProductId;
@@ -369,7 +388,7 @@ export function useFileSave({
               if (!matchedProduct) {
                 // 사용자가 선택하지 않은 경우에만 상품명이 정확히 일치할 때만 찾기
                 matchedProduct = productsToUse.find(
-                  (c: any) => c.name && String(c.name).trim() === name
+                  (c: any) => c.name && String(c.name).trim() === name,
                 );
                 // 상품명으로 찾은 경우에도 ID 저장
                 if (matchedProduct?.id) {
@@ -461,20 +480,20 @@ export function useFileSave({
                   console.log(
                     "🔍 매핑코드로 찾은 상품 정보:",
                     code,
-                    matchedProduct
+                    matchedProduct,
                   );
                   console.log(
                     "📦 매핑된 상품 정보에서 가져온 모든 필드:",
-                    productInfo
+                    productInfo,
                   );
                 }
               } else if (productId && selectedProductId === productId) {
                 // 매핑된 상품을 찾지 못했지만 productId가 있으면,
                 // 검색 모달에서 선택한 상품이므로 전체 상품 목록에서 찾기
                 const selectedProduct = allProducts.find(
-                  (p: any) => p.id === productId
+                  (p: any) => p.id === productId,
                 );
-                
+
                 if (selectedProduct) {
                   // 선택한 상품의 정보를 복사하되, 상품명은 주문의 상품명 사용
                   Object.keys(selectedProduct).forEach((key) => {
@@ -498,11 +517,11 @@ export function useFileSave({
                     console.log(
                       "🔍 검색 모달에서 선택한 상품 정보:",
                       productId,
-                      selectedProduct
+                      selectedProduct,
                     );
                     console.log(
                       "📦 선택한 상품 정보에서 가져온 모든 필드:",
-                      productInfo
+                      productInfo,
                     );
                   }
                 } else {
@@ -515,7 +534,7 @@ export function useFileSave({
                       "code=",
                       code,
                       "productId=",
-                      productId
+                      productId,
                     );
                   }
                 }
@@ -527,7 +546,7 @@ export function useFileSave({
                     "name=",
                     name,
                     "code=",
-                    code
+                    code,
                   );
                 }
               }
@@ -551,7 +570,7 @@ export function useFileSave({
                     // 디버깅: 첫 번째 상품만 로그 출력
                     if (newProducts.length === 0) {
                       console.log(
-                        `  📝 필드 매핑: ${dbColumn} (인덱스 ${fieldIdx}) = "${trimmedValue}"`
+                        `  📝 필드 매핑: ${dbColumn} (인덱스 ${fieldIdx}) = "${trimmedValue}"`,
                       );
                     }
 
@@ -580,14 +599,14 @@ export function useFileSave({
                   // 디버깅: 값이 비어있는 경우
                   if (newProducts.length === 0) {
                     console.log(
-                      `  ⚠️ 필드 비어있음: ${dbColumn} (인덱스 ${fieldIdx}) = ${row[fieldIdx]}`
+                      `  ⚠️ 필드 비어있음: ${dbColumn} (인덱스 ${fieldIdx}) = ${row[fieldIdx]}`,
                     );
                   }
                 } else {
                   // 디버깅: 필드가 엑셀에 없는 경우
                   if (newProducts.length === 0) {
                     console.log(
-                      `  ℹ️ 필드 없음: ${dbColumn} (엑셀에 해당 헤더가 없음)`
+                      `  ℹ️ 필드 없음: ${dbColumn} (엑셀에 해당 헤더가 없음)`,
                     );
                   }
                 }
@@ -688,7 +707,7 @@ export function useFileSave({
         // 신규 상품이 있으면 먼저 products 테이블에 저장
         if (newProducts.length > 0) {
           updateLoadingMessage(
-            `신규 상품 저장 중... (${newProducts.length}개)`
+            `신규 상품 저장 중... (${newProducts.length}개)`,
           );
 
           console.log("newProducts", newProducts);
@@ -723,7 +742,7 @@ export function useFileSave({
 
           // uploadData에서 해당 파일의 업데이트된 productIdMap 찾기
           const uploadDataItem = uploadData.find(
-            (d: any) => d.fileName === file.fileName
+            (d: any) => d.fileName === file.fileName,
           );
           const updatedProductIdMap = uploadDataItem?.productIdMap || {};
 
@@ -788,16 +807,23 @@ export function useFileSave({
           if (!updateResult.success) {
             // 이미 저장된 파일인 경우
             if (updateResult.error === "ALREADY_SAVED") {
-              console.warn(`파일이 이미 저장됨: ${fileData.fileName} (${fileId})`);
+              console.warn(
+                `파일이 이미 저장됨: ${fileData.fileName} (${fileId})`,
+              );
               // 삭제된 파일을 confirmedFiles에서 제거하고 sessionStorage에서도 삭제
               unconfirmFile(fileId);
               sessionStorage.removeItem(`uploadedFile_${fileId}`);
               return null;
             }
-            
+
             // 파일을 찾을 수 없는 경우 (404 또는 파일이 삭제된 경우)
-            if (updateResult.error?.includes("찾을 수 없") || updateResponse.status === 404) {
-              console.warn(`파일이 서버에 존재하지 않음: ${fileData.fileName} (${fileId})`);
+            if (
+              updateResult.error?.includes("찾을 수 없") ||
+              updateResponse.status === 404
+            ) {
+              console.warn(
+                `파일이 서버에 존재하지 않음: ${fileData.fileName} (${fileId})`,
+              );
               // 삭제된 파일을 confirmedFiles에서 제거하고 sessionStorage에서도 삭제
               unconfirmFile(fileId);
               sessionStorage.removeItem(`uploadedFile_${fileId}`);
@@ -805,7 +831,7 @@ export function useFileSave({
             }
             console.error(
               `파일 ${fileData.fileName} 확인 상태 업데이트 실패:`,
-              updateResult.error
+              updateResult.error,
             );
             return null;
           }
@@ -813,17 +839,24 @@ export function useFileSave({
         });
 
         const updateResults = await Promise.all(updatePromises);
-        const successfullyUpdatedFileIds = updateResults.filter((id) => id !== null) as string[];
-        
+        const successfullyUpdatedFileIds = updateResults.filter(
+          (id) => id !== null,
+        ) as string[];
+
         // 업데이트 실패한 파일이 있으면 사용자에게 알림
         if (successfullyUpdatedFileIds.length < fileIdsToConfirm.length) {
-          const failedCount = fileIdsToConfirm.length - successfullyUpdatedFileIds.length;
-          console.warn(`${failedCount}개 파일이 업데이트에 실패했습니다. (삭제되었거나 찾을 수 없음)`);
+          const failedCount =
+            fileIdsToConfirm.length - successfullyUpdatedFileIds.length;
+          console.warn(
+            `${failedCount}개 파일이 업데이트에 실패했습니다. (삭제되었거나 찾을 수 없음)`,
+          );
         }
 
         // 업데이트된 파일이 없으면 저장 중단
         if (successfullyUpdatedFileIds.length === 0) {
-          alert("저장할 파일이 없습니다. 모든 파일이 삭제되었거나 찾을 수 없습니다.");
+          alert(
+            "저장할 파일이 없습니다. 모든 파일이 삭제되었거나 찾을 수 없습니다.",
+          );
           stopLoading();
           return false;
         }
@@ -870,7 +903,7 @@ export function useFileSave({
               ? result.duplicateFiles.join("\n• ")
               : "알 수 없는 파일";
             throw new Error(
-              `❌ 중복된 파일명이 발견되었습니다:\n\n• ${duplicateList}\n\n업로드가 취소되었습니다.`
+              `❌ 중복된 파일명이 발견되었습니다:\n\n• ${duplicateList}\n\n업로드가 취소되었습니다.`,
             );
           }
           throw new Error(result.error || result.message || "데이터 저장 실패");

@@ -27,3 +27,7 @@ export function formatDate(date: Date | string): string {
   const day = String(d.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
+
+export function kstTime(date: Date) {
+  return new Date(date.getTime() + 9 * 3600000).toISOString();
+}

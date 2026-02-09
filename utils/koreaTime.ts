@@ -89,3 +89,31 @@ export function isValidPromotionPeriod(
   // 행사 기간 내에 있으면 적용 (시작일과 종료일 포함)
   return true;
 }
+
+/**
+ * 현재 한국 시간을 PostgreSQL TIMESTAMP 형식 문자열로 반환
+ * @returns YYYY-MM-DD HH:mm:ss 형식의 한국 시간 문자열
+ */
+export function getKoreaTimestampString(): string {
+  const now = new Date();
+  const koreaTimeFormatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+
+  const parts = koreaTimeFormatter.formatToParts(now);
+  const year = parts.find((p) => p.type === "year")?.value;
+  const month = parts.find((p) => p.type === "month")?.value;
+  const day = parts.find((p) => p.type === "day")?.value;
+  const hour = parts.find((p) => p.type === "hour")?.value;
+  const minute = parts.find((p) => p.type === "minute")?.value;
+  const second = parts.find((p) => p.type === "second")?.value;
+
+  return `${year}-${month}-${day} ${hour}:${minute}:${second}`;
+}

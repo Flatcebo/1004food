@@ -8,6 +8,13 @@ interface UseFileMessageHandlerProps {
   confirmFile: (fileId: string) => void;
   updateValidationStatus: (fileId: string, isValid: boolean) => void;
   loadFilesFromServer?: () => Promise<void>;
+  userGrade?: string;
+  codes?: Array<{
+    name: string;
+    code: string;
+    id?: number | string;
+    [key: string]: any;
+  }>;
 }
 
 export function useFileMessageHandler({
@@ -16,6 +23,8 @@ export function useFileMessageHandler({
   confirmFile,
   updateValidationStatus,
   loadFilesFromServer,
+  userGrade,
+  codes = [],
 }: UseFileMessageHandlerProps) {
   useEffect(() => {
     const handleMessage = async (event: MessageEvent) => {
@@ -28,7 +37,8 @@ export function useFileMessageHandler({
           fileId,
           fileName: fileData?.fileName,
           rowCount: fileData?.rowCount,
-          productCodeMapSize: Object.keys(fileData?.productCodeMap || {}).length,
+          productCodeMapSize: Object.keys(fileData?.productCodeMap || {})
+            .length,
         });
 
         // vendorName을 즉시 반영 (메시지에서 받은 값 우선 사용)
@@ -43,9 +53,10 @@ export function useFileMessageHandler({
               ? {
                   ...f,
                   ...fileData,
-                  vendorName: vendorNameFromMessage || f.vendorName || undefined,
+                  vendorName:
+                    vendorNameFromMessage || f.vendorName || undefined,
                 }
-              : f
+              : f,
           );
           setUploadedFiles(updatedFiles);
           console.log("즉시 업데이트 성공:", {
@@ -59,7 +70,8 @@ export function useFileMessageHandler({
             ...uploadedFiles,
             {
               ...fileData,
-              vendorName: vendorNameFromMessage || fileData.vendorName || undefined,
+              vendorName:
+                vendorNameFromMessage || fileData.vendorName || undefined,
             },
           ]);
         }
@@ -69,12 +81,12 @@ export function useFileMessageHandler({
           try {
             // 서버 업데이트가 완료될 시간을 확보하기 위해 더 긴 지연
             await new Promise((resolve) => setTimeout(resolve, 500));
-            
+
             await loadFilesFromServer();
-            
+
             // loadFilesFromServer 내부에서 이미 vendorName을 보존하도록 수정했으므로
             // 추가 확인은 불필요 (서버에서 vendorName이 없으면 기존 값 유지)
-            
+
             console.log("서버에서 최신 데이터를 불러왔습니다.", {
               fileId,
               vendorName: vendorNameFromMessage,
@@ -91,12 +103,13 @@ export function useFileMessageHandler({
               tableData: [...(fileData.tableData || [])],
               headerIndex: {...(fileData.headerIndex || {})},
               productCodeMap: {...(fileData.productCodeMap || {})},
-              vendorName: vendorNameFromMessage || fileData.vendorName || undefined,
+              vendorName:
+                vendorNameFromMessage || fileData.vendorName || undefined,
             };
-            
+
             sessionStorage.setItem(
               `uploadedFile_${fileId}`,
-              JSON.stringify(fileDataToStore)
+              JSON.stringify(fileDataToStore),
             );
             console.log("sessionStorage 업데이트 성공:", fileData.fileName);
           } catch (error) {
@@ -109,7 +122,12 @@ export function useFileMessageHandler({
 
         // validation 상태 업데이트 (약간의 지연을 두어 setUploadedFiles 완료 후 실행)
         setTimeout(() => {
-          const validationResult = checkFileValidation(fileData);
+          const fileProductIdMap = fileData.productIdMap || {};
+          const validationResult = checkFileValidation(fileData, {
+            userGrade,
+            codes,
+            productIdMap: fileProductIdMap,
+          });
           updateValidationStatus(fileId, validationResult.isValid);
         }, 100);
       }
@@ -119,6 +137,13 @@ export function useFileMessageHandler({
     return () => {
       window.removeEventListener("message", handleMessage);
     };
-  }, [uploadedFiles, setUploadedFiles, confirmFile, updateValidationStatus, loadFilesFromServer]);
+  }, [
+    uploadedFiles,
+    setUploadedFiles,
+    confirmFile,
+    updateValidationStatus,
+    loadFilesFromServer,
+    userGrade,
+    codes,
+  ]);
 }
-

@@ -157,15 +157,18 @@ export async function POST(request: NextRequest) {
       // 키를 문자열로 통일하여 타입 불일치 방지
       const productSalePriceMap: {[id: string]: number | null} = {};
       const productSabangNameMap: {[id: string]: string | null} = {};
+      const productNameMap: {[id: string]: string | null} = {};
       const productVendorNameMap: {[id: string]: string | null} = {};
       const productSalePriceMapByCode: {[code: string]: number | null} = {};
       const productSabangNameMapByCode: {[code: string]: string | null} = {};
+      const productNameMapByCode: {[code: string]: {[name: string]: string}} =
+        {};
       const productVendorNameMapByCode: {[code: string]: string | null} = {};
 
       // 사용자가 선택한 상품 ID로만 조회
       if (productIds.length > 0) {
         const productsById = await sql`
-          SELECT id, code, sale_price, sabang_name as "sabangName", purchase as "vendorName"
+          SELECT id, code, name, sale_price, sabang_name as "sabangName", purchase as "vendorName"
           FROM products
           WHERE id = ANY(${productIds})
         `;
@@ -180,6 +183,9 @@ export async function POST(request: NextRequest) {
             if (p.sabangName !== undefined) {
               productSabangNameMap[idKey] = p.sabangName;
             }
+            if (p.name !== undefined) {
+              productNameMap[idKey] = p.name;
+            }
             if (p.vendorName !== undefined) {
               productVendorNameMap[idKey] = p.vendorName;
             }
@@ -188,25 +194,45 @@ export async function POST(request: NextRequest) {
       }
 
       // productId가 없는 경우 매핑코드로 조회
+      // 같은 매핑코드를 가진 여러 상품이 있을 수 있으므로 상품명별로 저장
       if (productCodes.length > 0) {
         const productsByCode = await sql`
-          SELECT code, sale_price, sabang_name as "sabangName", purchase as "vendorName"
+          SELECT code, name, sale_price, sabang_name as "sabangName", purchase as "vendorName"
           FROM products
           WHERE code = ANY(${productCodes})
+          ORDER BY id
         `;
 
         productsByCode.forEach((p: any) => {
           if (p.code) {
             // 키를 문자열로 통일하여 저장
             const codeKey = String(p.code);
-            if (p.sale_price !== null && p.sale_price !== undefined) {
-              productSalePriceMapByCode[codeKey] = p.sale_price;
+
+            // 같은 매핑코드를 가진 여러 상품이 있을 수 있으므로 상품명별로 저장
+            if (!productNameMapByCode[codeKey]) {
+              productNameMapByCode[codeKey] = {};
             }
-            if (p.sabangName !== undefined) {
-              productSabangNameMapByCode[codeKey] = p.sabangName;
+            if (p.name) {
+              productNameMapByCode[codeKey][String(p.name).trim()] = String(
+                p.name,
+              ).trim();
             }
-            if (p.vendorName !== undefined) {
-              productVendorNameMapByCode[codeKey] = p.vendorName;
+
+            // 가격과 사방넷명은 첫 번째 상품의 값만 사용 (같은 매핑코드면 가격도 같을 것으로 가정)
+            if (productSalePriceMapByCode[codeKey] === undefined) {
+              if (p.sale_price !== null && p.sale_price !== undefined) {
+                productSalePriceMapByCode[codeKey] = p.sale_price;
+              }
+            }
+            if (productSabangNameMapByCode[codeKey] === undefined) {
+              if (p.sabangName !== undefined) {
+                productSabangNameMapByCode[codeKey] = p.sabangName;
+              }
+            }
+            if (productVendorNameMapByCode[codeKey] === undefined) {
+              if (p.vendorName !== undefined) {
+                productVendorNameMapByCode[codeKey] = p.vendorName;
+              }
             }
           }
         });
@@ -337,6 +363,18 @@ export async function POST(request: NextRequest) {
             row["sale_price"] = calculatedPrice;
           }
 
+          // 상품명 설정: productId가 있으면 정확한 상품명 사용
+          if (productNameMap[productIdKey] !== undefined) {
+            const productName = productNameMap[productIdKey];
+            if (
+              productName !== null &&
+              productName !== undefined &&
+              String(productName).trim() !== ""
+            ) {
+              row["상품명"] = String(productName).trim();
+            }
+          }
+
           // 사방넷명 설정: productSabangNameMap에 있으면 사용, 없으면 null로 설정 (상품명으로 fallback)
           if (productSabangNameMap[productIdKey] !== undefined) {
             const sabangName = productSabangNameMap[productIdKey];
@@ -389,6 +427,19 @@ export async function POST(request: NextRequest) {
                 : salePrice * quantity;
             row["판매가"] = calculatedPrice;
             row["sale_price"] = calculatedPrice;
+          }
+
+          // 상품명 검증: 같은 매핑코드를 가진 여러 상품이 있을 경우 원본 수집 상품명과 일치하는지 확인
+          // 원본 수집 상품명이 DB의 상품명과 일치하지 않으면 원본 수집 상품명 유지
+          const originalProductName = String(row["상품명"] || "").trim();
+          if (originalProductName && productNameMapByCode[mappingCodeKey]) {
+            const matchingProductNames = productNameMapByCode[mappingCodeKey];
+            // 원본 수집 상품명이 DB의 상품명 중 하나와 일치하는지 확인
+            if (matchingProductNames[originalProductName]) {
+              // 일치하면 DB의 상품명 사용 (정규화된 형태)
+              row["상품명"] = matchingProductNames[originalProductName];
+            }
+            // 일치하지 않으면 원본 수집 상품명 유지 (다른 상품일 수 있음)
           }
 
           // 사방넷명 설정: productSabangNameMapByCode에 있으면 사용

@@ -1,6 +1,7 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
 import {getCompanyIdFromRequest, getUserIdFromRequest} from "@/lib/company";
+import {getKoreaTimestampString} from "@/utils/koreaTime";
 
 /**
  * 다운로드 히스토리 저장 API
@@ -14,14 +15,14 @@ export async function POST(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
     if (!userId) {
       return NextResponse.json(
         {success: false, error: "user_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -31,11 +32,12 @@ export async function POST(request: NextRequest) {
     if (!fileName || !formType) {
       return NextResponse.json(
         {success: false, error: "파일명과 양식 타입이 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
-    // 히스토리 저장
+    // 히스토리 저장 (한국 시간으로 저장)
+    const koreaTimestamp = getKoreaTimestampString();
     const result = await sql`
       INSERT INTO download_history (
         user_id,
@@ -44,7 +46,8 @@ export async function POST(request: NextRequest) {
         file_name,
         form_type,
         upload_id,
-        date_filter
+        date_filter,
+        downloaded_at
       ) VALUES (
         ${userId},
         ${companyId},
@@ -52,7 +55,8 @@ export async function POST(request: NextRequest) {
         ${fileName},
         ${formType},
         ${uploadId || null},
-        ${dateFilter || null}
+        ${dateFilter || null},
+        ${koreaTimestamp}::timestamp
       )
       RETURNING id, downloaded_at
     `;
@@ -65,7 +69,7 @@ export async function POST(request: NextRequest) {
     console.error("히스토리 저장 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
     );
   }
 }
