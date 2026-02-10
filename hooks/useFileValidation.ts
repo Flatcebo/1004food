@@ -2,6 +2,10 @@ import {useState, useEffect, useRef, useCallback} from "react";
 import {checkFileValidation} from "@/utils/fileValidation";
 import {UploadedFile} from "@/stores/uploadStore";
 
+// 매 렌더마다 새 참조가 생성되는 것을 방지 (useEffect 무한 루프 방지)
+const STABLE_EMPTY_CODES: any[] = [];
+const STABLE_EMPTY_PRODUCT_ID_MAP: {[name: string]: string | number} = {};
+
 interface UseFileValidationOptions {
   userGrade?: string;
   codes?: Array<{
@@ -18,7 +22,11 @@ export function useFileValidation(
   productCodeMap?: {[name: string]: string},
   options?: UseFileValidationOptions,
 ) {
-  const {userGrade, codes = [], productIdMap = {}} = options || {};
+  const {
+    userGrade,
+    codes = STABLE_EMPTY_CODES,
+    productIdMap = STABLE_EMPTY_PRODUCT_ID_MAP,
+  } = options || {};
   const [fileValidationStatus, setFileValidationStatus] = useState<{
     [fileId: string]: {isValid: boolean; errors: string[]};
   }>({});

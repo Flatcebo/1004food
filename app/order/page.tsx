@@ -479,7 +479,9 @@ function OrderPageContent() {
   );
 
   // ============================================================
-  // 일반 유저용 자동 매핑 함수 (상품코드(사방넷) + 상품명 기반 자동 매핑)
+  // 온라인 외 유저용 자동 매핑 함수 (상품명 완전 일치만 사용)
+  // - 원본 파일의 상품명과 DB(codes)의 상품명이 완전히 일치할 때만 자동 매핑
+  // - 상품코드(사방넷), 택배사 우선 등 2순위 기준 없음
   // ============================================================
   const applyAutoMappingForGeneralUser = useCallback(
     (
@@ -500,65 +502,11 @@ function OrderPageContent() {
       if (mappingIdx === -1 && typeIdx === -1 && postTypeIdx === -1)
         return null;
 
-      // 원본 헤더에서 "상품코드(사방넷)" 헤더 인덱스 찾기
-      let sabangnetCodeIdx = -1;
-      if (file.originalHeader && file.originalData) {
-        sabangnetCodeIdx = file.originalHeader.findIndex(
-          (h: any) =>
-            h &&
-            typeof h === "string" &&
-            h.replace(/\s+/g, "").toLowerCase() ===
-              "상품코드(사방넷)".replace(/\s+/g, "").toLowerCase(),
-        );
-      }
-
       let fileChanged = false;
       const fileProductCodeMap = {...file.productCodeMap};
       const fileProductIdMap = {...(file.productIdMap || {})};
 
-      // 일반 유저: 상품코드(사방넷)로 매핑코드 자동 매칭 (codes에서 조회)
-      if (
-        sabangnetCodeIdx !== -1 &&
-        file.originalData &&
-        file.originalData.length > 1 &&
-        codesData.length > 0
-      ) {
-        // 원본 데이터에서 상품코드(사방넷) 값 추출 및 매핑
-        for (let i = 1; i < file.originalData.length; i++) {
-          const originalRow = file.originalData[i];
-          if (originalRow && originalRow[sabangnetCodeIdx]) {
-            const sabangnetCode = String(originalRow[sabangnetCodeIdx]).trim();
-            if (sabangnetCode) {
-              // "-0001" 제거
-              const cleanedCode = sabangnetCode.replace(/-0001$/, "");
-              if (cleanedCode) {
-                // codes에서 코드로 상품 찾기
-                const matchedProduct = codesData.find(
-                  (p: any) => p.code && String(p.code).trim() === cleanedCode,
-                );
-                if (matchedProduct && file.tableData[i]) {
-                  const row = file.tableData[i];
-                  const productName = row[nameIdx];
-                  if (productName && typeof productName === "string") {
-                    const name = productName.trim();
-                    if (name && !fileProductCodeMap[name]) {
-                      fileProductCodeMap[name] = matchedProduct.code;
-                      if (matchedProduct.id) {
-                        fileProductIdMap[name] = matchedProduct.id;
-                      }
-                      console.log(
-                        `✅ [일반] 상품코드(사방넷) 자동 매핑: "${name}" → "${matchedProduct.code}" (원본 코드: ${sabangnetCode} → ${cleanedCode})`,
-                      );
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-
-      // 일반 유저: 테이블 데이터 업데이트 (상품코드(사방넷) + 상품명 기반 자동 매핑)
+      // 온라인 외 유저: 상품명 완전 일치만 사용 (2순위 없음)
       const updatedTableData = file.tableData.map((row: any[], idx: number) => {
         if (idx === 0) return row;
 
@@ -570,34 +518,16 @@ function OrderPageContent() {
         let rowChanged = false;
         let updatedRow = row;
 
-        // 코드 우선순위: 파일의 productCodeMap > 전역 productCodeMap > codes 자동 매칭 (상품명 기반)
-        let codeVal = fileProductCodeMap[name] || globalProductCodeMap[name];
-
-        // 일반 유저: 상품명으로 codes에서 자동 매칭
-        const productsWithPostType = codesData.filter(
-          (c: any) =>
-            c.name === name && c.postType && String(c.postType).trim() !== "",
+        // 온라인 외 유저: 원본 상품명과 DB(codes) 상품명이 완전히 일치하는 것만 자동 매핑
+        const found = codesData.find(
+          (c: any) => c.name && String(c.name).trim() === name,
         );
-        const productsWithoutPostType = codesData.filter(
-          (c: any) =>
-            c.name === name &&
-            (!c.postType || String(c.postType).trim() === ""),
-        );
-        const found =
-          productsWithPostType.length > 0
-            ? productsWithPostType[0]
-            : productsWithoutPostType[0];
+        const codeVal = found?.code ?? null;
 
-        if (!codeVal && found?.code) {
-          codeVal = found.code;
-          // 자동 매핑된 코드를 로그로 출력 (첫 번째 매칭만)
-          if (
-            idx === 1 &&
-            !fileProductCodeMap[name] &&
-            !globalProductCodeMap[name]
-          ) {
-            console.log(`✅ [일반] 상품명 자동 매핑: "${name}" → "${codeVal}"`);
-          }
+        if (idx === 1 && found?.code) {
+          console.log(
+            `✅ [온라인외] 상품명 완전 일치 자동 매핑: "${name}" → "${codeVal}"`,
+          );
         }
 
         if (mappingIdx >= 0 && codeVal && row[mappingIdx] !== codeVal) {
@@ -661,7 +591,7 @@ function OrderPageContent() {
   // ============================================================
   // 각 업로드된 파일에 자동 매핑 적용 (grade에 따라 분리된 함수 호출)
   // - 온라인 유저: productCodeMap(상품코드(사방넷))으로 DB 매칭
-  // - 일반 유저: 상품명으로 DB 매칭
+  // - 온라인 외 유저: 상품명 완전 일치만 자동 매핑 (2순위 없음)
   // ============================================================
   useEffect(() => {
     if (uploadedFiles.length === 0 || codes.length === 0) {

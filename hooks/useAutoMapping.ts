@@ -31,18 +31,19 @@ export function useAutoMapping({
     }
   }, [codes]);
 
-  // 상품명 인덱스 자동 추출
+  // 상품명 인덱스 자동 추출 (값이 실제로 변경된 경우에만 업데이트하여 무한 루프 방지)
   useEffect(() => {
     if (!tableData.length) {
-      setHeaderIndex(null);
+      if (headerIndex !== null) setHeaderIndex(null);
       return;
     }
     const headerRow = tableData[0];
     const nameIdx = headerRow.findIndex(
       (h: any) => h && typeof h === "string" && h.includes("상품명"),
     );
+    if (headerIndex?.nameIdx === nameIdx) return;
     setHeaderIndex({nameIdx});
-  }, [tableData, setHeaderIndex]);
+  }, [tableData, headerIndex, setHeaderIndex]);
 
   // 상품명 기준으로 매핑코드 + 타입(내외주) + postType(택배사) 컬럼 자동 연동
   useEffect(() => {
@@ -80,11 +81,13 @@ export function useAutoMapping({
       let rowChanged = false;
       let updatedRow = row;
 
-      // 코드 우선순위: 직접 입력(productCodeMap) > codes.json 자동 매칭
-      let codeVal = newMap[name];
+      // 온라인 유저: 직접 입력(productCodeMap) 사용
+      // 온라인 외 유저: 상품명 완전 일치만 사용 (productCodeMap 사용 안 함)
+      let codeVal: string | null | undefined =
+        userGrade === "온라인" ? newMap[name] : undefined;
 
       // 온라인 유저: 발주서에 이미 있는 매핑코드 사용, 상품명 기반 자동 매핑 스킵
-      // 일반 유저: 상품명 기반 자동 매핑도 수행
+      // 온라인 외 유저: 상품명 완전 일치만 자동 매핑
       let found: any = null;
 
       if (userGrade === "온라인") {
@@ -99,23 +102,13 @@ export function useAutoMapping({
         }
         // 온라인 유저는 매핑코드 컬럼을 덮어쓰지 않음 (발주서 원본 유지)
       } else {
-        // 일반 유저: 택배사가 있는 상품 우선 선택
-        const productsWithPostType = codes.filter(
-          (c: any) =>
-            c.name === name && c.postType && String(c.postType).trim() !== "",
+        // 온라인 외 유저: 원본 상품명과 DB(codes) 상품명이 완전히 일치하는 것만 자동 매핑 (2순위 없음)
+        found = codes.find(
+          (c: any) => c.name && String(c.name).trim() === name,
         );
-        const productsWithoutPostType = codes.filter(
-          (c: any) =>
-            c.name === name &&
-            (!c.postType || String(c.postType).trim() === ""),
-        );
-        found =
-          productsWithPostType.length > 0
-            ? productsWithPostType[0]
-            : productsWithoutPostType[0];
-        if (!codeVal && found?.code) codeVal = found.code;
+        codeVal = found?.code ?? null;
 
-        // 일반 유저만 매핑코드 컬럼 업데이트
+        // 온라인 외 유저만 매핑코드 컬럼 업데이트 (상품명 완전 일치 시에만)
         if (mappingIdx >= 0 && codeVal && row[mappingIdx] !== codeVal) {
           if (!rowChanged) {
             updatedRow = [...row];

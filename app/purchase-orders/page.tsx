@@ -141,6 +141,7 @@ export default function PurchaseOrdersPage() {
       return;
     }
 
+    setSelectedPurchaseIds(new Set());
     // 조회 버튼 클릭 시 선택된 주문 필터 적용
     setAppliedOrderFilter(orderFilter);
 
@@ -256,6 +257,9 @@ export default function PurchaseOrdersPage() {
       return;
     }
 
+    const purchaseIdsToSend =
+      selectedCount > 0 ? Array.from(selectedPurchaseIds) : undefined;
+    setSelectedPurchaseIds(new Set());
     startLoading(
       selectedCount > 0 ? `${selectedCount}건 전송` : "전체 전송",
       "미발주 주문을 전송 중입니다...",
@@ -268,8 +272,7 @@ export default function PurchaseOrdersPage() {
         body: JSON.stringify({
           startDate,
           endDate,
-          purchaseIds:
-            selectedCount > 0 ? Array.from(selectedPurchaseIds) : undefined,
+          purchaseIds: purchaseIdsToSend,
         }),
       });
 
@@ -569,9 +572,11 @@ export default function PurchaseOrdersPage() {
                       <th className="border border-gray-300 px-4 py-2 text-center">
                         총 주문 건수
                       </th>
-                      <th className="border border-gray-300 px-4 py-2 text-center">
-                        발주된 주문
-                      </th>
+                      {appliedOrderFilter !== "unordered" && (
+                        <th className="border border-gray-300 px-4 py-2 text-center">
+                          발주된 주문
+                        </th>
+                      )}
                       <th className="border border-gray-300 px-4 py-2 text-center">
                         미발주 주문
                       </th>
@@ -611,9 +616,11 @@ export default function PurchaseOrdersPage() {
                         >
                           {formatNumber(purchase.totalOrders)}
                         </td>
-                        <td className="border border-gray-300 px-4 py-2 text-center text-green-600">
-                          {formatNumber(purchase.orderedCount)}
-                        </td>
+                        {appliedOrderFilter !== "unordered" && (
+                          <td className="border border-gray-300 px-4 py-2 text-center text-green-600">
+                            {formatNumber(purchase.orderedCount)}
+                          </td>
+                        )}
                         <td className="border border-gray-300 px-4 py-2 text-center text-red-600 font-semibold">
                           {formatNumber(purchase.unorderedCount)}
                         </td>
@@ -650,9 +657,11 @@ export default function PurchaseOrdersPage() {
                         <td className="border border-gray-300 px-4 py-2 text-center">
                           {formatNumber(totals.totalOrders)}
                         </td>
-                        <td className="border border-gray-300 px-4 py-2 text-center text-green-600">
-                          {formatNumber(totals.orderedCount)}
-                        </td>
+                        {appliedOrderFilter !== "unordered" && (
+                          <td className="border border-gray-300 px-4 py-2 text-center text-green-600">
+                            {formatNumber(totals.orderedCount)}
+                          </td>
+                        )}
                         <td className="border border-gray-300 px-4 py-2 text-center text-red-600">
                           {formatNumber(totals.unorderedCount)}
                         </td>

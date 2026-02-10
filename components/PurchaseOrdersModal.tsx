@@ -7,6 +7,7 @@ import RowDetailWindow from "./RowDetailWindow";
 import Pagination from "./Pagination";
 import {getColumnWidth} from "@/utils/table";
 import {getAuthHeaders} from "@/utils/api";
+import {useLoadingStore} from "@/stores/loadingStore";
 import {
   mapRowToTemplateFormat,
   getTemplateHeaderNames,
@@ -87,6 +88,7 @@ export default function PurchaseOrdersModal({
   const [showTemplateView, setShowTemplateView] = useState(false);
   const [purchaseDetail, setPurchaseDetail] = useState<any>(null);
 
+  const {startLoading, stopLoading} = useLoadingStore();
   const itemsPerPage = 50;
 
   // 주문 데이터 조회
@@ -258,7 +260,9 @@ export default function PurchaseOrdersModal({
       return;
     }
 
+    setSelectedRows(new Set());
     setIsDownloading(true);
+    startLoading("다운로드", "발주서를 생성 중입니다...");
 
     try {
       const response = await fetch("/api/purchase-orders/download", {
@@ -288,7 +292,6 @@ export default function PurchaseOrdersModal({
       }
 
       saveAs(blob, fileName);
-      setSelectedRows(new Set());
       // 다운로드 후 주문 목록 새로고침 (발주 상태 업데이트 반영)
       await fetchOrders();
       // 부모 컴포넌트 데이터도 새로고침
@@ -299,6 +302,7 @@ export default function PurchaseOrdersModal({
       alert(`다운로드 오류: ${err.message}`);
     } finally {
       setIsDownloading(false);
+      stopLoading();
     }
   }, [
     selectedRows,
@@ -309,6 +313,8 @@ export default function PurchaseOrdersModal({
     endDate,
     fetchOrders,
     onDataUpdate,
+    startLoading,
+    stopLoading,
   ]);
 
   // 카카오톡 전송
@@ -334,7 +340,9 @@ export default function PurchaseOrdersModal({
       return;
     }
 
+    setSelectedRows(new Set());
     setIsSending(true);
+    startLoading("카카오톡 전송", "전송 중입니다...");
 
     try {
       const response = await fetch("/api/purchase-orders/send", {
@@ -364,6 +372,7 @@ export default function PurchaseOrdersModal({
       alert(`전송 오류: ${err.message}`);
     } finally {
       setIsSending(false);
+      stopLoading();
     }
   }, [
     purchase.id,
@@ -374,9 +383,11 @@ export default function PurchaseOrdersModal({
     endDate,
     fetchOrders,
     onDataUpdate,
+    startLoading,
+    stopLoading,
   ]);
 
-  // 이메일 전송
+  // 이메일 전송: 다운로드 로직으로 발주서 생성 후 NCP 메일 API로 전송
   const handleSendEmail = useCallback(async () => {
     if (!purchase.email) {
       alert("이메일 정보가 등록되지 않았습니다.");
@@ -397,10 +408,74 @@ export default function PurchaseOrdersModal({
       return;
     }
 
+    setSelectedRows(new Set());
     setIsSending(true);
+    startLoading("이메일 전송", "발주서 생성 및 전송 중입니다...");
 
     try {
-      const response = await fetch("/api/purchase-orders/send", {
+      // 1. 다운로드 API로 발주서 파일 생성 (템플릿 있으면 템플릿, 없으면 기본 외주 발주서)
+      const downloadResponse = await fetch("/api/purchase-orders/download", {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          purchaseId: purchase.id,
+          orderIds,
+          startDate,
+          endDate,
+          forEmail: true, // 주문 상태 업데이트는 이메일 전송 성공 후 처리
+        }),
+      });
+
+      if (!downloadResponse.ok) {
+        const errData = await downloadResponse.json().catch(() => ({}));
+        throw new Error(errData.error || "발주서 생성에 실패했습니다.");
+      }
+
+      const blob = await downloadResponse.blob();
+      const contentDisposition = downloadResponse.headers.get(
+        "Content-Disposition",
+      );
+      let fileName = `${purchase.name}_발주서.xlsx`;
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename\*=UTF-8''(.+)/);
+        if (match) {
+          fileName = decodeURIComponent(match[1]);
+        }
+      }
+
+      // 2. NCP 메일 API로 파일 전송
+      const formData = new FormData();
+      formData.append(
+        "file",
+        new Blob([blob], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }),
+        fileName,
+      );
+      formData.append("recipientEmail", purchase.email);
+      formData.append("purchaseName", purchase.name);
+
+      const authHeaders = getAuthHeaders() as Record<string, string>;
+      const mailHeaders: Record<string, string> = {};
+      if (authHeaders["company-id"])
+        mailHeaders["company-id"] = authHeaders["company-id"];
+      if (authHeaders["user-id"])
+        mailHeaders["user-id"] = authHeaders["user-id"];
+
+      const mailResponse = await fetch("/api/ncp/mail", {
+        method: "POST",
+        headers: mailHeaders,
+        body: formData,
+      });
+
+      const mailResult = await mailResponse.json();
+
+      if (!mailResult.success) {
+        throw new Error(mailResult.error || "이메일 전송에 실패했습니다.");
+      }
+
+      // 3. 이메일 전송 성공 시 발주 상태 업데이트
+      const sendResponse = await fetch("/api/purchase-orders/send", {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({
@@ -412,31 +487,37 @@ export default function PurchaseOrdersModal({
         }),
       });
 
-      const result = await response.json();
-      if (result.success) {
-        alert(`이메일 전송 완료: ${result.message}`);
-        await fetchOrders();
-        // 부모 컴포넌트 데이터도 새로고침
-        if (onDataUpdate) {
-          onDataUpdate();
-        }
+      const sendResult = await sendResponse.json();
+      if (sendResult.success) {
+        alert(`이메일 전송 완료: ${mailResult.message}`);
       } else {
-        alert(`전송 실패: ${result.error}`);
+        alert(
+          `이메일은 전송되었으나 발주 상태 업데이트에 실패했습니다: ${sendResult.error}`,
+        );
+      }
+
+      await fetchOrders();
+      if (onDataUpdate) {
+        onDataUpdate();
       }
     } catch (err: any) {
       alert(`전송 오류: ${err.message}`);
     } finally {
       setIsSending(false);
+      stopLoading();
     }
   }, [
     purchase.id,
     purchase.email,
+    purchase.name,
     selectedRows,
     orders,
     startDate,
     endDate,
     fetchOrders,
     onDataUpdate,
+    startLoading,
+    stopLoading,
   ]);
 
   // 선택된 항목 취소 처리
@@ -450,13 +531,17 @@ export default function PurchaseOrdersModal({
       return;
     }
 
+    const rowIdsToCancel = Array.from(selectedRows);
+    setSelectedRows(new Set());
     setIsCanceling(true);
+    startLoading("주문 취소", "취소 처리 중입니다...");
+
     try {
       const response = await fetch("/api/upload/cancel", {
         method: "PUT",
         headers: getAuthHeaders(),
         body: JSON.stringify({
-          rowIds: Array.from(selectedRows),
+          rowIds: rowIdsToCancel,
         }),
       });
 
@@ -464,7 +549,6 @@ export default function PurchaseOrdersModal({
 
       if (result.success) {
         alert(`${result.updatedCount}개의 주문이 취소되었습니다.`);
-        setSelectedRows(new Set());
         await fetchOrders();
         // 부모 컴포넌트 데이터도 새로고침
         if (onDataUpdate) {
@@ -478,8 +562,9 @@ export default function PurchaseOrdersModal({
       alert(`취소 중 오류가 발생했습니다: ${error.message}`);
     } finally {
       setIsCanceling(false);
+      stopLoading();
     }
-  }, [selectedRows, fetchOrders, onDataUpdate]);
+  }, [selectedRows, fetchOrders, onDataUpdate, startLoading, stopLoading]);
 
   // 선택된 항목 삭제 처리
   const handleDeleteSelected = useCallback(async () => {
@@ -496,13 +581,17 @@ export default function PurchaseOrdersModal({
       return;
     }
 
+    const rowIdsToDelete = Array.from(selectedRows);
+    setSelectedRows(new Set());
     setIsDeleting(true);
+    startLoading("데이터 삭제", "삭제 처리 중입니다...");
+
     try {
       const response = await fetch("/api/upload/delete", {
         method: "DELETE",
         headers: getAuthHeaders(),
         body: JSON.stringify({
-          rowIds: Array.from(selectedRows),
+          rowIds: rowIdsToDelete,
         }),
       });
 
@@ -510,7 +599,6 @@ export default function PurchaseOrdersModal({
 
       if (result.success) {
         alert(`${result.deletedCount}개의 데이터가 삭제되었습니다.`);
-        setSelectedRows(new Set());
         await fetchOrders();
         // 부모 컴포넌트 데이터도 새로고침
         if (onDataUpdate) {
@@ -524,8 +612,9 @@ export default function PurchaseOrdersModal({
       alert(`삭제 중 오류가 발생했습니다: ${error.message}`);
     } finally {
       setIsDeleting(false);
+      stopLoading();
     }
-  }, [selectedRows, fetchOrders, onDataUpdate]);
+  }, [selectedRows, fetchOrders, onDataUpdate, startLoading, stopLoading]);
 
   // 매핑코드 셀 클릭
   const handleMappingCodeClick = useCallback((order: OrderData) => {

@@ -110,16 +110,96 @@ export async function POST(request: NextRequest) {
         totalKakaoCount += kakaoSent;
       }
 
-      // 이메일 전송
+      // 이메일 전송: 다운로드 로직으로 발주서 생성 후 NCP 메일 API 전송
+      let emailSendSuccess = false;
       if (submitTypes.includes("email") && purchase.email) {
-        console.log(`[EMAIL] 전송: ${purchase.name} -> ${purchase.email}`);
-        emailSent = ordersData.length;
-        totalEmailCount += emailSent;
+        try {
+          const orderIds = ordersData.map((o: any) => o.id);
+          const base =
+            process.env.NEXT_PUBLIC_BASE_URL ||
+            (process.env.VERCEL_URL
+              ? `https://${process.env.VERCEL_URL}`
+              : null);
+          const origin = base || new URL(request.url).origin;
+          const companyIdHeader = request.headers.get("company-id") || "";
+
+          // 1. 다운로드 API로 발주서 파일 생성 (템플릿/기본 외주 발주서)
+          const downloadRes = await fetch(
+            `${origin}/api/purchase-orders/download`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "company-id": companyIdHeader,
+              },
+              body: JSON.stringify({
+                purchaseId: purchase.id,
+                orderIds,
+                startDate: queryStartDate,
+                endDate: queryEndDate,
+                forEmail: true,
+              }),
+            },
+          );
+
+          if (!downloadRes.ok) {
+            const errData = await downloadRes.json().catch(() => ({}));
+            throw new Error(errData.error || "발주서 생성 실패");
+          }
+
+          const blob = await downloadRes.blob();
+          const contentDisp = downloadRes.headers.get("Content-Disposition");
+          let fileName = `${purchase.name}_발주서.xlsx`;
+          if (contentDisp) {
+            const m = contentDisp.match(/filename\*=UTF-8''(.+)/);
+            if (m) fileName = decodeURIComponent(m[1]);
+          }
+
+          // 2. NCP 메일 API로 전송
+          const formData = new FormData();
+          formData.append(
+            "file",
+            new Blob([await blob.arrayBuffer()], {
+              type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            }),
+            fileName,
+          );
+          formData.append("recipientEmail", purchase.email);
+          formData.append("purchaseName", purchase.name);
+
+          const mailRes = await fetch(`${origin}/api/ncp/mail`, {
+            method: "POST",
+            headers: {"company-id": companyIdHeader},
+            body: formData,
+          });
+
+          const mailResult = await mailRes.json();
+          if (!mailResult.success) {
+            throw new Error(mailResult.error || "이메일 전송 실패");
+          }
+
+          emailSent = ordersData.length;
+          totalEmailCount += emailSent;
+          emailSendSuccess = true;
+          console.log(
+            `[EMAIL] 전송 완료: ${purchase.name} -> ${purchase.email}`,
+          );
+        } catch (emailErr: any) {
+          console.error(`[EMAIL] 전송 실패: ${purchase.name}`, emailErr);
+          results.push({
+            purchaseName: purchase.name,
+            kakaoSent,
+            emailSent: 0,
+            error: `이메일: ${emailErr?.message || "전송 실패"}`,
+          });
+          continue;
+        }
       }
 
-      // 발주 상태 업데이트 및 차수 정보 저장
+      // 발주 상태 업데이트 및 차수 정보 저장 (카카오/이메일 전송 시)
       const updatedOrderIds = ordersData.map((o: any) => o.id);
-      if (updatedOrderIds.length > 0 && (kakaoSent > 0 || emailSent > 0)) {
+      const shouldUpdateBatch = kakaoSent > 0 || emailSendSuccess;
+      if (updatedOrderIds.length > 0 && shouldUpdateBatch) {
         try {
           // 한국 시간 기준 오늘 날짜 계산
           // 한국 시간 계산

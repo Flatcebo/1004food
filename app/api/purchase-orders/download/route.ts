@@ -8,6 +8,7 @@ import {
 } from "@/utils/purchaseTemplateMapping";
 import {mapDataToTemplate} from "@/utils/excelDataMapping";
 import {createCJOutsourceTemplate} from "@/libs/cj-outsource-template";
+import {buildOutsourceOrderExcel} from "@/lib/outsourceOrderExcel";
 
 // 전화번호에 하이픈을 추가하여 형식 맞춤
 function formatPhoneNumber(phoneNumber: string): string {
@@ -87,7 +88,7 @@ function formatPhoneNumber1ForOnline(phoneNumber: string): string {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const {purchaseId, orderIds, startDate, endDate} = body;
+    const {purchaseId, orderIds, startDate, endDate, forEmail} = body;
 
     if (!purchaseId) {
       return NextResponse.json(
@@ -288,137 +289,159 @@ export async function POST(request: NextRequest) {
       // 엑셀 버퍼 생성
       buffer = (await wb.xlsx.writeBuffer()) as unknown as Buffer;
     } else {
-      // 템플릿이 없는 경우 외주 발주서 양식 사용
-      // 외주 발주서 기본 컬럼 순서: 보내는 분, 전화번호, 주소, 받는사람, 전화번호1, 전화번호2, 우편번호, 주소, 비어있는 열, 상품명, 배송메시지, 박스, 업체명
-      const outsourceColumnOrder = [
-        "보내는 분",
-        "전화번호",
-        "주소",
-        "받는사람",
-        "전화번호1",
-        "전화번호2",
-        "우편번호",
-        "주소",
-        "", // 비어있는 열
-        "상품명",
-        "배송메시지",
-        "박스",
-        "업체명",
-      ];
-
-      // 데이터를 2차원 배열로 변환
-      const excelData: any[][] = ordersData.map((order: any) => {
-        const rowData = order.row_data || {};
-
-        // 사방넷명 추가
-        if (order.sabang_name) {
-          rowData["사방넷명"] = order.sabang_name;
-          rowData["sabangName"] = order.sabang_name;
+      // 템플릿이 없는 경우: upload_templates의 "외주 발주서" 템플릿 사용 (download-outsource와 동일 양식)
+      // "외주" 포함, "CJ" 미포함 템플릿 조회
+      let outsourceTemplate: {template_data: any} | null = null;
+      try {
+        const outsourceResult = await sql`
+          SELECT template_data
+          FROM upload_templates
+          WHERE company_id = ${companyId}
+            AND template_data->>'name' IS NOT NULL
+            AND template_data->>'name' ILIKE '%외주%'
+            AND template_data->>'name' NOT ILIKE '%CJ%'
+          ORDER BY id ASC
+          LIMIT 1
+        `;
+        if (outsourceResult.length > 0) {
+          outsourceTemplate = {template_data: outsourceResult[0]};
         }
-
-        return outsourceColumnOrder.map((header: string, colIdx: number) => {
-          if (header === "") return "";
-
-          let value: any = "";
-
-          // 각 헤더에 맞는 데이터 매핑
-          switch (header) {
-            case "보내는 분":
-              value = purchase.name || "";
-              break;
-            case "전화번호":
-              value = "";
-              break;
-            case "받는사람":
-              value = mapDataToTemplate(rowData, "수취인명", {
-                formatPhone: false,
-              });
-              // 수취인명 앞에 ★ 붙이기
-              let receiverName = value != null ? String(value) : "";
-              receiverName = "★" + receiverName.replace(/^★/, "").trim();
-              value = receiverName;
-              break;
-            case "전화번호1":
-              value = mapDataToTemplate(rowData, "전화번호1", {
-                formatPhone: true,
-              });
-              let phone1Value = value != null ? String(value) : "";
-              if (phone1Value) {
-                phone1Value = formatPhoneNumber(phone1Value);
-                if (userGrade === "온라인") {
-                  phone1Value = formatPhoneNumber1ForOnline(phone1Value);
-                }
-                value = phone1Value;
-              }
-              break;
-            case "전화번호2":
-              value = mapDataToTemplate(rowData, "전화번호2", {
-                formatPhone: true,
-              });
-              break;
-            case "우편번호":
-              value = mapDataToTemplate(rowData, "우편번호", {
-                formatPhone: false,
-              });
-              break;
-            case "주소":
-              // 첫 번째 주소(인덱스 2)는 빈 값, 두 번째 주소(인덱스 7)는 실제 주소
-              const addressIndices = outsourceColumnOrder
-                .map((h, idx) => (h === "주소" ? idx : -1))
-                .filter((idx) => idx !== -1);
-              const isFirstAddress = colIdx === addressIndices[0];
-              value = isFirstAddress
-                ? ""
-                : mapDataToTemplate(rowData, "주소", {
-                    formatPhone: false,
-                  });
-              break;
-            case "상품명":
-              value = mapDataToTemplate(rowData, "상품명", {
-                formatPhone: false,
-              });
-              break;
-            case "배송메시지":
-              value = mapDataToTemplate(rowData, "배송메시지", {
-                formatPhone: false,
-              });
-              break;
-            case "박스":
-              value = "";
-              break;
-            case "업체명":
-              value = purchase.name || "";
-              break;
-            default:
-              value = mapDataToTemplate(rowData, header, {
-                formatPhone: false,
-              });
-          }
-
-          return value != null ? String(value) : "";
-        });
-      });
-
-      // 외주 발주서 템플릿 사용
-      const outsourceWorkbook = createCJOutsourceTemplate(
-        outsourceColumnOrder,
-        excelData,
-      );
-      // 워크시트 이름을 매입처 이름으로 변경
-      if (outsourceWorkbook.worksheets.length > 0) {
-        outsourceWorkbook.worksheets[0].name = purchase.name;
+      } catch (e) {
+        console.error("외주 발주서 템플릿 조회 실패:", e);
       }
-      buffer =
-        (await outsourceWorkbook.xlsx.writeBuffer()) as unknown as Buffer;
+
+      if (outsourceTemplate) {
+        // 외주 발주서 템플릿 사용 (download-outsource와 동일 양식)
+        const vendorRows = ordersData.map((o: any) => {
+          const r = {...(o.row_data || {})};
+          if (o.sabang_name) {
+            r["사방넷명"] = r["sabangName"] = o.sabang_name;
+          }
+          r["업체명"] = purchase.name;
+          return r;
+        });
+        buffer = await buildOutsourceOrderExcel({
+          templateData: outsourceTemplate.template_data,
+          vendorRows,
+          purchaseName: purchase.name,
+          isOnlineUser: userGrade === "온라인",
+        });
+      } else {
+        // 외주 발주서 템플릿이 없으면 CJ외주 발주서 양식 사용 (fallback)
+        const outsourceColumnOrder = [
+          "보내는 분",
+          "전화번호",
+          "주소",
+          "받는사람",
+          "전화번호1",
+          "전화번호2",
+          "우편번호",
+          "주소",
+          "",
+          "상품명",
+          "배송메시지",
+          "박스",
+          "업체명",
+        ];
+
+        const excelData: any[][] = ordersData.map((order: any) => {
+          const rowData = order.row_data || {};
+          if (order.sabang_name) {
+            rowData["사방넷명"] = order.sabang_name;
+            rowData["sabangName"] = order.sabang_name;
+          }
+          return outsourceColumnOrder.map((header: string, colIdx: number) => {
+            if (header === "") return "";
+            let value: any = "";
+            switch (header) {
+              case "보내는 분":
+                value = purchase.name || "";
+                break;
+              case "전화번호":
+                value = "";
+                break;
+              case "받는사람":
+                value = mapDataToTemplate(rowData, "수취인명", {
+                  formatPhone: false,
+                });
+                let rn = value != null ? String(value) : "";
+                value = "★" + rn.replace(/^★/, "").trim();
+                break;
+              case "전화번호1":
+                value = mapDataToTemplate(rowData, "전화번호1", {
+                  formatPhone: true,
+                });
+                let p1 = value != null ? String(value) : "";
+                if (p1) {
+                  p1 = formatPhoneNumber(p1);
+                  if (userGrade === "온라인")
+                    p1 = formatPhoneNumber1ForOnline(p1);
+                  value = p1;
+                }
+                break;
+              case "전화번호2":
+                value = mapDataToTemplate(rowData, "전화번호2", {
+                  formatPhone: true,
+                });
+                break;
+              case "우편번호":
+                value = mapDataToTemplate(rowData, "우편번호", {
+                  formatPhone: false,
+                });
+                break;
+              case "주소":
+                const addrIdx = outsourceColumnOrder
+                  .map((h, i) => (h === "주소" ? i : -1))
+                  .filter((i) => i !== -1);
+                value =
+                  colIdx === addrIdx[0]
+                    ? ""
+                    : mapDataToTemplate(rowData, "주소", {formatPhone: false});
+                break;
+              case "상품명":
+                value = mapDataToTemplate(rowData, "상품명", {
+                  formatPhone: false,
+                });
+                break;
+              case "배송메시지":
+                value = mapDataToTemplate(rowData, "배송메시지", {
+                  formatPhone: false,
+                });
+                break;
+              case "박스":
+                value = "";
+                break;
+              case "업체명":
+                value = purchase.name || "";
+                break;
+              default:
+                value = mapDataToTemplate(rowData, header, {
+                  formatPhone: false,
+                });
+            }
+            return value != null ? String(value) : "";
+          });
+        });
+
+        const outsourceWorkbook = createCJOutsourceTemplate(
+          outsourceColumnOrder,
+          excelData,
+        );
+        if (outsourceWorkbook.worksheets.length > 0) {
+          outsourceWorkbook.worksheets[0].name = purchase.name;
+        }
+        buffer =
+          (await outsourceWorkbook.xlsx.writeBuffer()) as unknown as Buffer;
+      }
     }
 
-    // 발주 상태 업데이트 및 차수 정보 저장
+    // 발주 상태 업데이트 및 차수 정보 저장 (forEmail인 경우 스킵 - 이메일 전송 후 별도 처리)
     const updatedOrderIds =
       orderIds && orderIds.length > 0
         ? orderIds
         : ordersData.map((o: any) => o.id);
 
-    if (updatedOrderIds.length > 0) {
+    if (updatedOrderIds.length > 0 && !forEmail) {
       try {
         // 한국 시간 계산
         const now = new Date();

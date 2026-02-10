@@ -397,13 +397,14 @@ export function useFileSave({
                 }
               }
 
-              if (!matchedProduct) {
-                // 상품명으로도 찾지 못했으면 매핑코드로 찾기 (같은 매핑코드를 가진 여러 상품 중 첫 번째가 선택될 수 있음)
+              // 온라인 외 유저: 상품명 완전 일치만 사용 - 매핑코드로 찾기 fallback 사용 안 함
+              // (DB에 없는 매핑코드나 다른 상품의 매핑코드로 잘못 매핑되는 것 방지)
+              if (!matchedProduct && userGrade === "온라인") {
+                // 상품명으로도 찾지 못했으면 매핑코드로 찾기 (온라인 유저만)
                 matchedProduct = productsToUse.find((c: any) => {
                   const cCode = String(c.code || "").trim();
                   return cCode === code;
                 });
-                // 매핑코드로 찾은 경우에도 ID 저장
                 if (matchedProduct?.id) {
                   productId = matchedProduct.id;
                   rowData["productId"] = matchedProduct.id;

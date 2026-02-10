@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     if (!templateId) {
       return NextResponse.json(
         {success: false, error: "템플릿 ID가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -44,11 +44,28 @@ export async function POST(request: NextRequest) {
     if (!templateResult.length) {
       return NextResponse.json(
         {success: false, error: "템플릿을 찾을 수 없습니다."},
-        {status: 404}
+        {status: 404},
       );
     }
 
     const templateData = templateResult[0].template_data;
+
+    // 내주 발주서: CJ외주 발주서의 매핑코드 제외 (DB CJ템플릿의 allowedMappingCodes 사용)
+    const cjTemplateResult = await sql`
+      SELECT template_data
+      FROM upload_templates
+      WHERE company_id = ${companyId}
+        AND name ILIKE '%CJ%' AND name ILIKE '%외주%'
+      LIMIT 1
+    `;
+    const cjOutsourceCodes =
+      cjTemplateResult.length > 0 &&
+      Array.isArray(cjTemplateResult[0].template_data?.allowedMappingCodes) &&
+      cjTemplateResult[0].template_data.allowedMappingCodes.length > 0
+        ? cjTemplateResult[0].template_data.allowedMappingCodes.filter(
+            (c: any) => c && String(c).trim() !== "",
+          )
+        : ["106464", "108640", "108788", "108879", "108221"]; // fallback
 
     const headers = Array.isArray(templateData.headers)
       ? templateData.headers
@@ -65,7 +82,7 @@ export async function POST(request: NextRequest) {
     if (!columnOrder || columnOrder.length === 0) {
       return NextResponse.json(
         {success: false, error: "템플릿의 컬럼 순서가 설정되지 않았습니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -142,18 +159,19 @@ export async function POST(request: NextRequest) {
       // rows가 직접 전달된 경우 ID 추적 불가
       downloadedRowIds = [];
     } else if (rowIds && rowIds.length > 0) {
-      // 선택된 행 ID들로 조회
+      // 선택된 행 ID들로 조회 (company_id 필터링)
       const rowData = await sql`
-        SELECT id, row_data
-        FROM upload_rows
-        WHERE id = ANY(${rowIds})
+        SELECT ur.id, ur.row_data
+        FROM upload_rows ur
+        INNER JOIN uploads u ON ur.upload_id = u.id
+        WHERE ur.id = ANY(${rowIds}) AND u.company_id = ${companyId}
       `;
       dataRowsWithIds = rowData.map((r: any) => ({
         id: r.id,
         row_data: r.row_data || {},
       }));
       dataRows = dataRowsWithIds.map((r: any) => r.row_data);
-      downloadedRowIds = rowIds;
+      downloadedRowIds = dataRowsWithIds.map((r: any) => r.id);
     } else if (filters && Object.keys(filters).length > 0) {
       // 필터 조건으로 조회
       const {conditions} = buildFilterConditions(filters as UploadFilters, {
@@ -172,14 +190,19 @@ export async function POST(request: NextRequest) {
       const isInhouseTemplate = templateName.includes("내주");
 
       // 내주 발주서인 경우: 필터가 없어도 "내주"만 조회
-      // CJ외주 발주서에 포함되는 매핑코드들(106464, 108640, 108788, 108879, 108221) 제외
+      // CJ외주 발주서에 포함되는 매핑코드들(DB 템플릿의 allowedMappingCodes) 제외
       if (isInhouseTemplate) {
+        const cjCodeCondition =
+          cjOutsourceCodes.length > 0
+            ? sql`AND (ur.row_data->>'매핑코드' IS NULL OR ur.row_data->>'매핑코드' != ALL(${cjOutsourceCodes}))`
+            : sql``;
         const allData = await sql`
           SELECT ur.id, ur.row_data
           FROM upload_rows ur
           INNER JOIN uploads u ON ur.upload_id = u.id
-          WHERE ur.row_data->>'내외주' = '내주'
-            AND (ur.row_data->>'매핑코드' IS NULL OR ur.row_data->>'매핑코드' NOT IN ('106464', '108640', '108788', '108879', '108221'))
+          WHERE u.company_id = ${companyId}
+            AND ur.row_data->>'내외주' = '내주'
+            ${cjCodeCondition}
           ORDER BY u.created_at DESC, ur.id DESC
         `;
         // ID와 row_data를 함께 저장
@@ -218,6 +241,7 @@ export async function POST(request: NextRequest) {
           } ur.row_data
           FROM upload_rows ur
           INNER JOIN uploads u ON ur.upload_id = u.id
+          WHERE u.company_id = ${companyId}
           ORDER BY u.created_at DESC, ur.id DESC
         `;
         // ID와 row_data를 함께 저장
@@ -259,7 +283,7 @@ export async function POST(request: NextRequest) {
       ...new Set(
         dataRows
           .filter((row: any) => !row.productId && row.매핑코드)
-          .map((row: any) => row.매핑코드)
+          .map((row: any) => row.매핑코드),
       ),
     ];
     const productSalePriceMap: {[id: string | number]: number | null} = {};
@@ -318,9 +342,8 @@ export async function POST(request: NextRequest) {
     // 템플릿명 확인 (내주 발주서인지 체크)
     const templateName = (templateData.name || "").normalize("NFC").trim();
     const isInhouse = templateName.includes("내주");
-    const cjOutsourceCodes = ["106464", "108640", "108788", "108879", "108221"];
 
-    // 내주 발주서인 경우: 내주 데이터만 필터링
+    // 내주 발주서인 경우: 내주 데이터만 필터링 (cjOutsourceCodes는 위에서 DB 조회)
     // CJ외주 발주서에 포함되는 매핑코드들(106464, 108640, 108788, 108879, 108221) 제외
     if (isInhouse) {
       if (dataRowsWithIds.length > 0) {
@@ -328,7 +351,7 @@ export async function POST(request: NextRequest) {
         const filteredRowsWithIds = dataRowsWithIds.filter(
           (item: any) =>
             item.row_data.내외주 === "내주" &&
-            !cjOutsourceCodes.includes(item.row_data.매핑코드)
+            !cjOutsourceCodes.includes(item.row_data.매핑코드),
         );
         dataRows = filteredRowsWithIds.map((item: any) => item.row_data);
         downloadedRowIds = filteredRowsWithIds.map((item: any) => item.id);
@@ -336,14 +359,14 @@ export async function POST(request: NextRequest) {
         // rows가 직접 전달된 경우
         dataRows = dataRows.filter(
           (row: any) =>
-            row.내외주 === "내주" && !cjOutsourceCodes.includes(row.매핑코드)
+            row.내외주 === "내주" && !cjOutsourceCodes.includes(row.매핑코드),
         );
       }
 
       if (dataRows.length === 0) {
         return NextResponse.json(
           {success: false, error: "내주 데이터가 없습니다."},
-          {status: 404}
+          {status: 404},
         );
       }
     } else if (dataRowsWithIds.length > 0) {
@@ -478,23 +501,23 @@ export async function POST(request: NextRequest) {
         h.includes("수취인명") ||
         h === "수취인명" ||
         h === "수취인" ||
-        h === "받는사람"
+        h === "받는사람",
     );
     const receiverPhoneIndex = headers.findIndex(
       (h: string) =>
         h.includes("수취인전화") ||
         h === "수취인전화번호" ||
-        h === "수취인 전화번호"
+        h === "수취인 전화번호",
     );
     const zipCodeIndex = headers.findIndex(
-      (h: string) => h.includes("우편") || h === "우편번호" || h === "우편"
+      (h: string) => h.includes("우편") || h === "우편번호" || h === "우편",
     );
     const receiverAddressIndex = headers.findIndex(
       (h: string) =>
         h.includes("수취인주소") ||
         h === "수취인주소" ||
         h === "수취인 주소" ||
-        h === "받는사람주소"
+        h === "받는사람주소",
     );
 
     // 중복값 찾기: 각 필드별로 값과 행 인덱스 매핑
@@ -646,7 +669,7 @@ export async function POST(request: NextRequest) {
     if (isInhouse) {
       // ExcelJS 워크북의 데이터를 추출하여 xlsx 라이브러리로 .xls 형식으로 변환
       const workbookData: any[][] = [];
-      
+
       // 헤더 행 추가
       const headerRow: any[] = [];
       headers.forEach((header: string) => {
@@ -674,7 +697,11 @@ export async function POST(request: NextRequest) {
       xlsxWorksheet["!cols"] = colWidths;
 
       // 워크시트를 워크북에 추가
-      XLSX.utils.book_append_sheet(xlsxWorkbook, xlsxWorksheet, templateData.worksheetName || "Sheet1");
+      XLSX.utils.book_append_sheet(
+        xlsxWorkbook,
+        xlsxWorksheet,
+        templateData.worksheetName || "Sheet1",
+      );
 
       // .xls 형식으로 변환 (bookType: 'biff8'는 Excel 97-2003 바이너리 형식)
       buffer = XLSX.write(xlsxWorkbook, {
@@ -700,7 +727,7 @@ export async function POST(request: NextRequest) {
         .replace(/\s+/g, "_") || "download";
     const safeFileName = `${asciiFallbackBase}${fileExtension}`; // 확장자 동적 변경
     const encodedFileName = encodeURIComponent(
-      fileName.replace(/\.xlsx$/, fileExtension)
+      fileName.replace(/\.xlsx$/, fileExtension),
     ); // UTF-8 인코딩
     // filename* 우선, filename ASCII fallback 병행
     const contentDisposition = `attachment; filename="${safeFileName}"; filename*=UTF-8''${encodedFileName}`;
@@ -712,8 +739,8 @@ export async function POST(request: NextRequest) {
     const idsToUpdate = isInhouse
       ? downloadedRowIds
       : rowIds && rowIds.length > 0
-      ? rowIds
-      : downloadedRowIds;
+        ? rowIds
+        : downloadedRowIds;
     if (idsToUpdate && idsToUpdate.length > 0) {
       try {
         // 효율적인 단일 쿼리로 모든 row의 주문상태를 "발주서 다운"으로 업데이트

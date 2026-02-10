@@ -131,7 +131,7 @@ const ProductsTable = memo(function ProductsTable({
         setSaving(false);
       }
     },
-    [codeEditWindow.product, onDataUpdate]
+    [codeEditWindow.product, onDataUpdate],
   );
 
   const handleAdd = () => {
@@ -191,7 +191,7 @@ const ProductsTable = memo(function ProductsTable({
 
       if (result.success) {
         alert(
-          "상품이 성공적으로 등록되었습니다. 새로고침 버튼을 눌러 목록을 업데이트하세요."
+          "상품이 성공적으로 등록되었습니다. 새로고침 버튼을 눌러 목록을 업데이트하세요.",
         );
         handleCloseDirectInputModal();
         // onDataUpdate 호출 제거 - 리렌더링 방지
@@ -225,7 +225,7 @@ const ProductsTable = memo(function ProductsTable({
 
       if (result.success) {
         alert(
-          "상품이 성공적으로 수정되었습니다. 새로고침 버튼을 눌러 목록을 업데이트하세요."
+          "상품이 성공적으로 수정되었습니다. 새로고침 버튼을 눌러 목록을 업데이트하세요.",
         );
         handleCloseEditDirectInputModal();
         // onDataUpdate 호출 제거 - 리렌더링 방지
@@ -251,7 +251,7 @@ const ProductsTable = memo(function ProductsTable({
         setSelectedRows(new Set());
       }
     },
-    [products]
+    [products],
   );
 
   const handleSelectRow = useCallback((id: number) => {
@@ -343,21 +343,23 @@ const ProductsTable = memo(function ProductsTable({
           <div className="text-sm text-gray-500">
             총 {products.length}개 {currentPage} / {totalPages}
           </div>
-          {selectedRows.size > 0 && (
+          <div className="flex gap-2">
+            {selectedRows.size > 0 && (
+              <button
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded transition-colors disabled:bg-gray-400"
+              >
+                {isDeleting ? "삭제 중..." : `${selectedRows.size}건 삭제`}
+              </button>
+            )}
             <button
-              onClick={handleDelete}
-              disabled={isDeleting}
-              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded transition-colors disabled:bg-gray-400"
+              onClick={handleAdd}
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded transition-colors"
             >
-              {isDeleting ? "삭제 중..." : `${selectedRows.size}건 삭제`}
+              상품 등록
             </button>
-          )}
-          <button
-            onClick={handleAdd}
-            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded transition-colors"
-          >
-            상품 등록
-          </button>
+          </div>
         </div>
 
         <table className="table-auto border border-collapse border-gray-400 w-full min-w-[1200px]">

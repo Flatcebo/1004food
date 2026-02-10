@@ -86,13 +86,27 @@ export async function POST(request: NextRequest) {
 
     const templateData = templateResult[0].template_data;
 
-    // CJ외주 발주서인 경우 템플릿에 저장된 매핑코드 가져오기
-    const allowedMappingCodes =
-      isCJOutsource &&
-      Array.isArray(templateData.allowedMappingCodes) &&
-      templateData.allowedMappingCodes.length > 0
-        ? templateData.allowedMappingCodes
-        : ["106464", "108640", "108788", "108879", "108221"]; // 기본값 (하위 호환성)
+    // CJ외주 발주서인 경우: DB 템플릿의 allowedMappingCodes만 사용 (내주/외주 발주서와 분리)
+    // DB에 없거나 비어있으면 빈 배열 → 해당하는 데이터 없음 (템플릿 페이지에서 매핑코드 설정 필요)
+    const allowedMappingCodes = isCJOutsource
+      ? Array.isArray(templateData.allowedMappingCodes)
+        ? templateData.allowedMappingCodes.filter(
+            (c: any) => c && String(c).trim() !== "",
+          )
+        : []
+      : ["106464", "108640", "108788", "108879", "108221"]; // isInhouse 블록용 (CJ 제외 목록)
+
+    // CJ외주 발주서인데 허용 매핑코드가 없으면: 템플릿 페이지에서 설정 후 이용
+    if (isCJOutsource && allowedMappingCodes.length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "CJ외주 발주서 템플릿에 허용된 매핑코드가 없습니다. /upload/templates 페이지에서 매핑코드를 설정해주세요.",
+        },
+        {status: 400},
+      );
+    }
 
     const headers = Array.isArray(templateData.headers)
       ? templateData.headers

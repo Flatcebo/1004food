@@ -1749,46 +1749,24 @@ function FileViewContent() {
         );
 
         if (user?.grade !== "온라인") {
-          // 일반 유저: 테이블의 기존 매핑코드 데이터를 productCodeMap에 동기화
-          if (
-            parsedFile.tableData &&
-            parsedFile.tableData.length > 1 &&
-            parsedFile.headerIndex
-          ) {
-            const headerRow = parsedFile.tableData[0];
-            const nameIdx = parsedFile.headerIndex.nameIdx;
-            const mappingIdx = headerRow.findIndex(
-              (h: any) => h === "매핑코드",
-            );
-
-            if (
-              typeof nameIdx === "number" &&
-              nameIdx !== -1 &&
-              mappingIdx !== -1
-            ) {
-              parsedFile.tableData.slice(1).forEach((row: any[]) => {
-                const productName = row[nameIdx];
-                const mappingCode = row[mappingIdx];
-
-                if (
-                  productName &&
-                  typeof productName === "string" &&
-                  mappingCode &&
-                  typeof mappingCode === "string"
-                ) {
-                  const trimmedName = productName.trim();
-                  const trimmedCode = mappingCode.trim();
-                  if (
-                    trimmedName &&
-                    trimmedCode &&
-                    !initialProductCodeMap[trimmedName]
-                  ) {
-                    initialProductCodeMap[trimmedName] = trimmedCode;
-                  }
-                }
-              });
-            }
-          }
+          // 온라인 외 유저: 상품명 완전 일치만 허용
+          // - 테이블/파일의 매핑코드를 그대로 신뢰하지 않고, DB(codes)에서 상품명이 완전 일치하는 것만 productCodeMap에 포함
+          // - Excel에 있던 상품코드/매핑코드 컬럼 값은 DB에 없는 잘못된 매핑일 수 있음
+          const codesToValidate =
+            codes.length > 0 ? codes : codesOriginRef.current;
+          const validatedMap: {[name: string]: string} = {};
+          Object.entries(initialProductCodeMap).forEach(
+            ([productName, mappingCode]) => {
+              const matched = codesToValidate.find(
+                (c: any) =>
+                  c.name && String(c.name).trim() === productName.trim(),
+              );
+              if (matched && matched.code === String(mappingCode).trim()) {
+                validatedMap[productName] = mappingCode;
+              }
+            },
+          );
+          initialProductCodeMap = validatedMap;
         }
 
         setProductCodeMap(initialProductCodeMap);

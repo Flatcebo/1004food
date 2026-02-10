@@ -35,6 +35,7 @@ const ProductsBatchEditTable = memo(function ProductsBatchEditTable({
 }: ProductsBatchEditTableProps) {
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // 일괄 수정할 필드 값들
   const [batchUpdates, setBatchUpdates] = useState<{
@@ -61,7 +62,7 @@ const ProductsBatchEditTable = memo(function ProductsBatchEditTable({
         setSelectedRows(new Set());
       }
     },
-    [products]
+    [products],
   );
 
   const handleSelectRow = useCallback((id: number) => {
@@ -84,7 +85,7 @@ const ProductsBatchEditTable = memo(function ProductsBatchEditTable({
         [field]: value === "" ? undefined : value,
       }));
     },
-    []
+    [],
   );
 
   // 일괄 수정 실행
@@ -120,8 +121,8 @@ const ProductsBatchEditTable = memo(function ProductsBatchEditTable({
         `선택한 ${
           selectedRows.size
         }개의 상품을 수정하시겠습니까?\n수정할 필드: ${Object.keys(
-          updates
-        ).join(", ")}`
+          updates,
+        ).join(", ")}`,
       )
     ) {
       return;
@@ -153,6 +154,37 @@ const ProductsBatchEditTable = memo(function ProductsBatchEditTable({
       setIsUpdating(false);
     }
   }, [selectedRows, batchUpdates, onDataUpdate]);
+
+  const handleDelete = useCallback(async () => {
+    if (selectedRows.size === 0) {
+      alert("삭제할 상품을 선택해주세요.");
+      return;
+    }
+
+    if (!confirm(`선택한 ${selectedRows.size}개의 상품을 삭제하시겠습니까?`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const {deleteProducts} = await import("@/utils/api");
+      const result = await deleteProducts(Array.from(selectedRows));
+
+      if (result.success) {
+        alert(result.message || "삭제되었습니다.");
+        setSelectedRows(new Set());
+        onDataUpdate();
+      } else {
+        throw new Error(result.error || "삭제 실패");
+      }
+    } catch (error) {
+      console.error("삭제 실패:", error);
+      const errorMessage = error instanceof Error ? error.message : "삭제 실패";
+      alert(`삭제 실패: ${errorMessage}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [selectedRows, onDataUpdate]);
 
   const isAllSelected = useMemo(() => {
     return products.length > 0 && selectedRows.size === products.length;
@@ -230,7 +262,7 @@ const ProductsBatchEditTable = memo(function ProductsBatchEditTable({
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
-                    )
+                    ),
                   )}
                 </select>
               </div>
@@ -270,7 +302,7 @@ const ProductsBatchEditTable = memo(function ProductsBatchEditTable({
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
-                    )
+                    ),
                   )}
                 </select>
               </div>
@@ -291,7 +323,7 @@ const ProductsBatchEditTable = memo(function ProductsBatchEditTable({
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
-                    )
+                    ),
                   )}
                 </select>
               </div>
@@ -390,6 +422,15 @@ const ProductsBatchEditTable = memo(function ProductsBatchEditTable({
           <div className="text-sm text-gray-500">
             총 {products.length}개 {currentPage} / {totalPages}
           </div>
+          {selectedRows.size > 0 && (
+            <button
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded transition-colors disabled:bg-gray-400"
+            >
+              {isDeleting ? "삭제 중..." : `${selectedRows.size}건 삭제`}
+            </button>
+          )}
         </div>
 
         <table className="table-auto border border-collapse border-gray-400 w-full min-w-[1200px]">

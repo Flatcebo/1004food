@@ -10,6 +10,7 @@ import {
 import {mapDataToTemplate} from "@/utils/excelDataMapping";
 import {getUserIdFromRequest} from "@/lib/company";
 import {createCJOutsourceTemplate} from "@/libs/cj-outsource-template";
+import {buildOutsourceOrderExcel} from "@/lib/outsourceOrderExcel";
 
 // 전화번호에 하이픈을 추가하여 형식 맞춤
 function formatPhoneNumber(phoneNumber: string): string {
@@ -142,6 +143,26 @@ export async function POST(request: NextRequest) {
       console.error("헤더 Alias 조회 실패:", error);
     }
 
+    // 외주 발주서 템플릿 조회 (템플릿 없는 매입처용)
+    let outsourceTemplate: {template_data: any} | null = null;
+    try {
+      const outsourceResult = await sql`
+        SELECT template_data
+        FROM upload_templates
+        WHERE company_id = ${companyId}
+          AND template_data->>'name' IS NOT NULL
+          AND template_data->>'name' ILIKE '%외주%'
+          AND template_data->>'name' NOT ILIKE '%CJ%'
+        ORDER BY id ASC
+        LIMIT 1
+      `;
+      if (outsourceResult.length > 0) {
+        outsourceTemplate = {template_data: outsourceResult[0]};
+      }
+    } catch (e) {
+      console.error("외주 발주서 템플릿 조회 실패:", e);
+    }
+
     // ZIP 파일 생성
     const zip = new JSZip();
     // 매입처별 주문 ID 그룹화 (차수 정보 생성을 위해)
@@ -262,9 +283,24 @@ export async function POST(request: NextRequest) {
 
         // 엑셀 버퍼 생성
         buffer = (await wb.xlsx.writeBuffer()) as unknown as Buffer;
+      } else if (outsourceTemplate) {
+        // 외주 발주서 템플릿 사용 (download-outsource와 동일 양식)
+        const vendorRows = ordersData.map((o: any) => {
+          const r = {...(o.row_data || {})};
+          if (o.sabang_name) {
+            r["사방넷명"] = r["sabangName"] = o.sabang_name;
+          }
+          r["업체명"] = purchase.name;
+          return r;
+        });
+        buffer = await buildOutsourceOrderExcel({
+          templateData: outsourceTemplate.template_data,
+          vendorRows,
+          purchaseName: purchase.name,
+          isOnlineUser: userGrade === "온라인",
+        });
       } else {
-        // 템플릿이 없는 경우 외주 발주서 양식 사용
-        // 외주 발주서 기본 컬럼 순서: 보내는 분, 전화번호, 주소, 받는사람, 전화번호1, 전화번호2, 우편번호, 주소, 비어있는 열, 상품명, 배송메시지, 박스, 업체명
+        // 외주 발주서 템플릿이 없으면 CJ외주 발주서 양식 사용 (fallback)
         const outsourceColumnOrder = [
           "보내는 분",
           "전화번호",
@@ -274,29 +310,22 @@ export async function POST(request: NextRequest) {
           "전화번호2",
           "우편번호",
           "주소",
-          "", // 비어있는 열
+          "",
           "상품명",
           "배송메시지",
           "박스",
           "업체명",
         ];
 
-        // 데이터를 2차원 배열로 변환
         const excelData: any[][] = ordersData.map((order: any) => {
           const rowData = order.row_data || {};
-
-          // 사방넷명 추가
           if (order.sabang_name) {
             rowData["사방넷명"] = order.sabang_name;
             rowData["sabangName"] = order.sabang_name;
           }
-
           return outsourceColumnOrder.map((header: string, colIdx: number) => {
             if (header === "") return "";
-
             let value: any = "";
-
-            // 각 헤더에 맞는 데이터 매핑
             switch (header) {
               case "보내는 분":
                 value = purchase.name || "";
@@ -308,22 +337,19 @@ export async function POST(request: NextRequest) {
                 value = mapDataToTemplate(rowData, "수취인명", {
                   formatPhone: false,
                 });
-                // 수취인명 앞에 ★ 붙이기
-                let receiverName = value != null ? String(value) : "";
-                receiverName = "★" + receiverName.replace(/^★/, "").trim();
-                value = receiverName;
+                let rn = value != null ? String(value) : "";
+                value = "★" + rn.replace(/^★/, "").trim();
                 break;
               case "전화번호1":
                 value = mapDataToTemplate(rowData, "전화번호1", {
                   formatPhone: true,
                 });
-                let phone1Value = value != null ? String(value) : "";
-                if (phone1Value) {
-                  phone1Value = formatPhoneNumber(phone1Value);
-                  if (userGrade === "온라인") {
-                    phone1Value = formatPhoneNumber1ForOnline(phone1Value);
-                  }
-                  value = phone1Value;
+                let p1 = value != null ? String(value) : "";
+                if (p1) {
+                  p1 = formatPhoneNumber(p1);
+                  if (userGrade === "온라인")
+                    p1 = formatPhoneNumber1ForOnline(p1);
+                  value = p1;
                 }
                 break;
               case "전화번호2":
@@ -337,16 +363,15 @@ export async function POST(request: NextRequest) {
                 });
                 break;
               case "주소":
-                // 첫 번째 주소(인덱스 2)는 빈 값, 두 번째 주소(인덱스 7)는 실제 주소
-                const addressIndices = outsourceColumnOrder
-                  .map((h, idx) => (h === "주소" ? idx : -1))
-                  .filter((idx) => idx !== -1);
-                const isFirstAddress = colIdx === addressIndices[0];
-                value = isFirstAddress
-                  ? ""
-                  : mapDataToTemplate(rowData, "주소", {
-                      formatPhone: false,
-                    });
+                const addrIdx = outsourceColumnOrder
+                  .map((h, i) => (h === "주소" ? i : -1))
+                  .filter((i) => i !== -1);
+                value =
+                  colIdx === addrIdx[0]
+                    ? ""
+                    : mapDataToTemplate(rowData, "주소", {
+                        formatPhone: false,
+                      });
                 break;
               case "상품명":
                 value = mapDataToTemplate(rowData, "상품명", {
@@ -369,17 +394,14 @@ export async function POST(request: NextRequest) {
                   formatPhone: false,
                 });
             }
-
             return value != null ? String(value) : "";
           });
         });
 
-        // 외주 발주서 템플릿 사용
         const outsourceWorkbook = createCJOutsourceTemplate(
           outsourceColumnOrder,
           excelData,
         );
-        // 워크시트 이름을 매입처 이름으로 변경
         if (outsourceWorkbook.worksheets.length > 0) {
           outsourceWorkbook.worksheets[0].name = purchase.name;
         }

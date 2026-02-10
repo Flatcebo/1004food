@@ -124,12 +124,16 @@ export default function Header({
         </h1>
       </div>
 
-      {/* <button
-        className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md text-sm font-medium transition-colors"
-        onClick={handleTest}
-      >
-        test
-      </button> */}
+      {(user?.grade === "관리자" || user?.grade === "온라인") && (
+        <>
+          <button
+            className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md text-sm font-medium transition-colors"
+            onClick={handleTest}
+          >
+            test
+          </button>
+        </>
+      )}
 
       {/* 우측: 사용자 정보 또는 로그인 버튼 */}
       <div className="flex items-center gap-4">
