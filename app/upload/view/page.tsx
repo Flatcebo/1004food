@@ -1664,23 +1664,39 @@ function FileViewContent() {
     if (!fileId) return;
 
     const loadFileData = async () => {
-      // 먼저 sessionStorage에서 파일 데이터 가져오기 시도
-      const storedFile = sessionStorage.getItem(`uploadedFile_${fileId}`);
       let parsedFile = null;
+      let loadSource = "server";
 
-      if (storedFile) {
+      // 먼저 sessionStorage에서 파일 데이터 가져오기 시도
+      const sessionFile = sessionStorage.getItem(`uploadedFile_${fileId}`);
+      if (sessionFile) {
         try {
-          parsedFile = JSON.parse(storedFile);
+          parsedFile = JSON.parse(sessionFile);
+          loadSource = "sessionStorage";
         } catch (error) {
           console.error("파일 데이터 파싱 실패:", error);
         }
       }
 
-      // sessionStorage에 없으면 store에서 찾기
+      // sessionStorage에 없으면 localStorage에서 시도 (새 창에서 열 경우 sessionStorage가 비어있을 수 있음)
+      if (!parsedFile && typeof window !== "undefined") {
+        const localFile = localStorage.getItem(`uploadedFile_${fileId}`);
+        if (localFile) {
+          try {
+            parsedFile = JSON.parse(localFile);
+            loadSource = "localStorage";
+          } catch (error) {
+            console.error("localStorage 파일 데이터 파싱 실패:", error);
+          }
+        }
+      }
+
+      // sessionStorage/localStorage에 없으면 store에서 찾기
       if (!parsedFile) {
         const foundFile = uploadedFiles.find((f) => f.id === fileId);
         if (foundFile) {
           parsedFile = foundFile;
+          loadSource = "store";
         }
       }
 
@@ -1718,6 +1734,7 @@ function FileViewContent() {
               const serverFile = result.data.find((f: any) => f.id === fileId);
               if (serverFile) {
                 parsedFile = serverFile;
+                loadSource = "server";
                 // sessionStorage와 store에 저장
                 sessionStorage.setItem(
                   `uploadedFile_${fileId}`,
@@ -1752,21 +1769,25 @@ function FileViewContent() {
           // 온라인 외 유저: 상품명 완전 일치만 허용
           // - 테이블/파일의 매핑코드를 그대로 신뢰하지 않고, DB(codes)에서 상품명이 완전 일치하는 것만 productCodeMap에 포함
           // - Excel에 있던 상품코드/매핑코드 컬럼 값은 DB에 없는 잘못된 매핑일 수 있음
+          // - codes가 아직 로드되지 않은 경우(새 창 초기 로드 등): 검증 스킵, 기존 productCodeMap 유지
           const codesToValidate =
             codes.length > 0 ? codes : codesOriginRef.current;
-          const validatedMap: {[name: string]: string} = {};
-          Object.entries(initialProductCodeMap).forEach(
-            ([productName, mappingCode]) => {
-              const matched = codesToValidate.find(
-                (c: any) =>
-                  c.name && String(c.name).trim() === productName.trim(),
-              );
-              if (matched && matched.code === String(mappingCode).trim()) {
-                validatedMap[productName] = mappingCode;
-              }
-            },
-          );
-          initialProductCodeMap = validatedMap;
+          if (codesToValidate.length > 0) {
+            const validatedMap: {[name: string]: string} = {};
+            Object.entries(initialProductCodeMap).forEach(
+              ([productName, mappingCode]) => {
+                const matched = codesToValidate.find(
+                  (c: any) =>
+                    c.name && String(c.name).trim() === productName.trim(),
+                );
+                if (matched && matched.code === String(mappingCode).trim()) {
+                  validatedMap[productName] = mappingCode;
+                }
+              },
+            );
+            initialProductCodeMap = validatedMap;
+          }
+          // codes가 비어있으면 initialProductCodeMap을 그대로 사용 (검증 통과)
         }
 
         setProductCodeMap(initialProductCodeMap);
@@ -2144,14 +2165,7 @@ function FileViewContent() {
           }
         }
 
-        console.log(
-          "Loaded file from:",
-          storedFile
-            ? "sessionStorage"
-            : uploadedFiles.find((f) => f.id === fileId)
-              ? "store"
-              : "server",
-        );
+        console.log("Loaded file from:", loadSource);
       }
     };
 

@@ -2098,11 +2098,17 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
     const file = uploadedFiles.find((f) => f.id === fileId);
     if (!file) return;
 
-    // sessionStorage에 파일 데이터 저장
+    const fileData = JSON.stringify(file);
+    const storageKey = `uploadedFile_${fileId}`;
+
+    // sessionStorage + localStorage에 파일 데이터 저장
+    // 새 창(window.open)은 sessionStorage를 공유하지 않는 브라우저가 있으므로
+    // localStorage에도 저장하여 loadFileData에서 fallback으로 사용
     try {
-      sessionStorage.setItem(`uploadedFile_${fileId}`, JSON.stringify(file));
+      sessionStorage.setItem(storageKey, fileData);
+      localStorage.setItem(storageKey, fileData);
     } catch (error) {
-      console.error("sessionStorage 저장 실패:", error);
+      console.error("파일 데이터 저장 실패:", error);
     }
 
     // 새 창 열기
