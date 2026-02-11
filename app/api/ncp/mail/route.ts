@@ -25,8 +25,8 @@ function makeSignature(timestamp: string, method: string, uri: string) {
  * - fileName: 첨부파일명 (선택)
  */
 export async function POST(request: NextRequest) {
-  const accessKey = process.env.NEXT_PUBLIC_NCP_ACCESS_KEY_ID;
-  const secretKey = process.env.NEXT_PUBLIC_NCP_SECRET_KEY;
+  const accessKey = process.env.NCP_ACCESS_KEY_ID;
+  const secretKey = process.env.NCP_SECRET_KEY;
 
   if (!accessKey || !secretKey) {
     return NextResponse.json(
