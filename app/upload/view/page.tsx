@@ -1664,39 +1664,23 @@ function FileViewContent() {
     if (!fileId) return;
 
     const loadFileData = async () => {
-      let parsedFile = null;
-      let loadSource = "server";
-
       // 먼저 sessionStorage에서 파일 데이터 가져오기 시도
-      const sessionFile = sessionStorage.getItem(`uploadedFile_${fileId}`);
-      if (sessionFile) {
+      const storedFile = sessionStorage.getItem(`uploadedFile_${fileId}`);
+      let parsedFile = null;
+
+      if (storedFile) {
         try {
-          parsedFile = JSON.parse(sessionFile);
-          loadSource = "sessionStorage";
+          parsedFile = JSON.parse(storedFile);
         } catch (error) {
           console.error("파일 데이터 파싱 실패:", error);
         }
       }
 
-      // sessionStorage에 없으면 localStorage에서 시도 (새 창에서 열 경우 sessionStorage가 비어있을 수 있음)
-      if (!parsedFile && typeof window !== "undefined") {
-        const localFile = localStorage.getItem(`uploadedFile_${fileId}`);
-        if (localFile) {
-          try {
-            parsedFile = JSON.parse(localFile);
-            loadSource = "localStorage";
-          } catch (error) {
-            console.error("localStorage 파일 데이터 파싱 실패:", error);
-          }
-        }
-      }
-
-      // sessionStorage/localStorage에 없으면 store에서 찾기
+      // sessionStorage에 없으면 store에서 찾기
       if (!parsedFile) {
         const foundFile = uploadedFiles.find((f) => f.id === fileId);
         if (foundFile) {
           parsedFile = foundFile;
-          loadSource = "store";
         }
       }
 
@@ -1734,7 +1718,6 @@ function FileViewContent() {
               const serverFile = result.data.find((f: any) => f.id === fileId);
               if (serverFile) {
                 parsedFile = serverFile;
-                loadSource = "server";
                 // sessionStorage와 store에 저장
                 sessionStorage.setItem(
                   `uploadedFile_${fileId}`,
@@ -1766,28 +1749,44 @@ function FileViewContent() {
         );
 
         if (user?.grade !== "온라인") {
-          // 온라인 외 유저: 상품명 완전 일치만 허용
-          // - 테이블/파일의 매핑코드를 그대로 신뢰하지 않고, DB(codes)에서 상품명이 완전 일치하는 것만 productCodeMap에 포함
-          // - Excel에 있던 상품코드/매핑코드 컬럼 값은 DB에 없는 잘못된 매핑일 수 있음
-          // - codes가 아직 로드되지 않은 경우(새 창 초기 로드 등): 검증 스킵, 기존 productCodeMap 유지
-          const codesToValidate =
-            codes.length > 0 ? codes : codesOriginRef.current;
-          if (codesToValidate.length > 0) {
-            const validatedMap: {[name: string]: string} = {};
-            Object.entries(initialProductCodeMap).forEach(
-              ([productName, mappingCode]) => {
-                const matched = codesToValidate.find(
-                  (c: any) =>
-                    c.name && String(c.name).trim() === productName.trim(),
-                );
-                if (matched && matched.code === String(mappingCode).trim()) {
-                  validatedMap[productName] = mappingCode;
-                }
-              },
+          // 일반 유저: 오로지 테이블의 상품명·매핑코드 데이터만으로 productCodeMap 구성
+          if (
+            parsedFile.tableData &&
+            parsedFile.tableData.length > 1 &&
+            parsedFile.headerIndex
+          ) {
+            const headerRow = parsedFile.tableData[0];
+            const nameIdx = parsedFile.headerIndex.nameIdx;
+            const mappingIdx = headerRow.findIndex(
+              (h: any) => h === "매핑코드",
             );
-            initialProductCodeMap = validatedMap;
+
+            if (
+              typeof nameIdx === "number" &&
+              nameIdx !== -1 &&
+              mappingIdx !== -1
+            ) {
+              const tableBasedMap: {[name: string]: string} = {};
+              parsedFile.tableData.slice(1).forEach((row: any[]) => {
+                const productName = row[nameIdx];
+                const mappingCode = row[mappingIdx];
+
+                if (
+                  productName &&
+                  typeof productName === "string" &&
+                  mappingCode &&
+                  typeof mappingCode === "string"
+                ) {
+                  const trimmedName = productName.trim();
+                  const trimmedCode = mappingCode.trim();
+                  if (trimmedName && trimmedCode) {
+                    tableBasedMap[trimmedName] = trimmedCode;
+                  }
+                }
+              });
+              initialProductCodeMap = tableBasedMap;
+            }
           }
-          // codes가 비어있으면 initialProductCodeMap을 그대로 사용 (검증 통과)
         }
 
         setProductCodeMap(initialProductCodeMap);
@@ -2165,7 +2164,14 @@ function FileViewContent() {
           }
         }
 
-        console.log("Loaded file from:", loadSource);
+        console.log(
+          "Loaded file from:",
+          storedFile
+            ? "sessionStorage"
+            : uploadedFiles.find((f) => f.id === fileId)
+              ? "store"
+              : "server",
+        );
       }
     };
 
