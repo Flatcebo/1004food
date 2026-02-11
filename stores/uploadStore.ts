@@ -1184,6 +1184,31 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
             );
           }
 
+          // 필수 헤더 검증: 수취인명/수취인 전화번호/주소/수량/상품명/주문자명
+          // (DB 설정에 따라 column_key가 다를 수 있으므로 가능한 키 목록으로 검사)
+          const REQUIRED_HEADERS: {keys: string[]; label: string}[] = [
+            {keys: ["receiverName"], label: "수취인명"},
+            {keys: ["receiverPhone"], label: "수취인 전화번호"},
+            {keys: ["address", "receiverAddr"], label: "주소"},
+            {keys: ["qty", "quantity"], label: "수량"},
+            {keys: ["productName"], label: "상품명"},
+            {keys: ["ordererName"], label: "주문자명"},
+          ];
+          const missingLabels: string[] = [];
+          for (const {keys, label} of REQUIRED_HEADERS) {
+            const found = keys.some(
+              (key) => indexMap[key] !== undefined && indexMap[key] !== -1,
+            );
+            if (!found) {
+              missingLabels.push(label);
+            }
+          }
+          if (missingLabels.length > 0) {
+            throw new Error(
+              `필수 헤더가 없습니다.\n없는 라벨: ${missingLabels.join(", ")}\n\n엑셀 파일에 위 헤더(또는 헤더 alias에 등록된 동의어)가 있는지 확인해주세요.`,
+            );
+          }
+
           // 내부 절대 순서로 헤더/데이터 재구성
           // 헤더 행 다음부터 데이터로 사용
           const canonicalHeader = internalColumns.map((c) => c.label);
@@ -1949,7 +1974,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       }
     } catch (error: any) {
       console.error("파일 처리 실패:", error);
-      // alert(`파일 처리 실패: ${error.message}`);
+      alert(error?.message || "파일 처리에 실패했습니다.");
     } finally {
       // 로딩 종료
       useLoadingStore.getState().stopLoading();
@@ -2070,7 +2095,7 @@ export const useUploadStore = create<UploadStoreState>((set, get) => ({
       }
     } catch (error: any) {
       console.error("파일 처리 실패:", error);
-      alert(`일부 파일 처리 실패: ${error}`);
+      alert(error?.message || "일부 파일 처리에 실패했습니다.");
     } finally {
       // 로딩 종료
       useLoadingStore.getState().stopLoading();

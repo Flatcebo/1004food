@@ -1,6 +1,6 @@
 "use client";
 
-import {useState, useEffect, useCallback, useMemo} from "react";
+import {useState, useEffect, useCallback, useMemo, useRef} from "react";
 import {saveAs} from "file-saver";
 import CodeEditWindow from "./CodeEditWindow";
 import RowDetailWindow from "./RowDetailWindow";
@@ -11,6 +11,7 @@ import {useLoadingStore} from "@/stores/loadingStore";
 import {
   mapRowToTemplateFormat,
   getTemplateHeaderNames,
+  headerIndexToRowDataKey,
 } from "@/utils/purchaseTemplateMapping";
 import {mapDataToTemplate} from "@/utils/excelDataMapping";
 
@@ -87,54 +88,77 @@ export default function PurchaseOrdersModal({
   const [isDeleting, setIsDeleting] = useState(false);
   const [showTemplateView, setShowTemplateView] = useState(false);
   const [purchaseDetail, setPurchaseDetail] = useState<any>(null);
+  const [templateViewEdits, setTemplateViewEdits] = useState<{
+    editableCells: {[key: string]: string};
+    editableHeaders: string[];
+  } | null>(null);
+  const templateViewEditsRef = useRef<{
+    editableCells: {[key: string]: string};
+    editableHeaders: string[];
+  } | null>(null);
+
+  const handleTemplateEditsChange = useCallback(
+    (edits: {
+      editableCells: {[key: string]: string};
+      editableHeaders: string[];
+    }) => {
+      templateViewEditsRef.current = edits;
+      setTemplateViewEdits(edits);
+    },
+    [],
+  );
 
   const {startLoading, stopLoading} = useLoadingStore();
   const itemsPerPage = 50;
 
-  // 주문 데이터 조회
-  const fetchOrders = useCallback(async () => {
-    setLoading(true);
-    setError("");
+  // 주문 데이터 조회 (forceFilter: 다운로드/전송 후 'all'로 갱신 시 사용)
+  const fetchOrders = useCallback(
+    async (forceFilter?: "all" | "ordered" | "unordered") => {
+      setLoading(true);
+      setError("");
 
-    try {
-      const params = new URLSearchParams({
-        purchaseId: purchase.id.toString(),
-        startDate,
-        endDate,
-        orderFilter,
-      });
+      const filterToUse = forceFilter ?? orderFilter;
 
-      const response = await fetch(
-        `/api/purchase-orders/orders?${params.toString()}`,
-        {
-          headers: getAuthHeaders(),
-        },
-      );
+      try {
+        const params = new URLSearchParams({
+          purchaseId: purchase.id.toString(),
+          startDate,
+          endDate,
+          orderFilter: filterToUse,
+        });
 
-      const result = await response.json();
-      if (result.success) {
-        // 중복 제거 (id 기준)
-        const uniqueOrders = (result.data || []).reduce(
-          (acc: OrderData[], order: OrderData) => {
-            if (!acc.find((o) => o.id === order.id)) {
-              acc.push(order);
-            }
-            return acc;
+        const response = await fetch(
+          `/api/purchase-orders/orders?${params.toString()}`,
+          {
+            headers: getAuthHeaders(),
           },
-          [],
         );
-        setOrders(uniqueOrders);
-        setBatches(result.batches || []);
-        setPurchaseDetail(result.purchase);
-      } else {
-        setError(result.error || "조회에 실패했습니다.");
+
+        const result = await response.json();
+        if (result.success) {
+          const uniqueOrders = (result.data || []).reduce(
+            (acc: OrderData[], order: OrderData) => {
+              if (!acc.find((o) => o.id === order.id)) {
+                acc.push(order);
+              }
+              return acc;
+            },
+            [],
+          );
+          setOrders(uniqueOrders);
+          setBatches(result.batches || []);
+          setPurchaseDetail(result.purchase);
+        } else {
+          setError(result.error || "조회에 실패했습니다.");
+        }
+      } catch (err: any) {
+        setError(err.message || "조회 중 오류가 발생했습니다.");
+      } finally {
+        setLoading(false);
       }
-    } catch (err: any) {
-      setError(err.message || "조회 중 오류가 발생했습니다.");
-    } finally {
-      setLoading(false);
-    }
-  }, [purchase.id, startDate, endDate, orderFilter]);
+    },
+    [purchase.id, startDate, endDate, orderFilter],
+  );
 
   useEffect(() => {
     fetchOrders();
@@ -248,6 +272,90 @@ export default function PurchaseOrdersModal({
     });
   }, []);
 
+  // 양식 보기에서 수정한 값을 DB에 저장, 업데이트된 ID 배열 반환
+  const saveTemplateEditsToDb = useCallback(
+    async (
+      orderIds: number[],
+      edits: {
+        editableCells: {[key: string]: string};
+        editableHeaders: string[];
+      },
+    ): Promise<number[]> => {
+      const templateHeaders = purchaseDetail?.templateHeaders;
+      const orderIdSet = new Set(orderIds);
+      const updatedIds: number[] = [];
+
+      for (const orderId of orderIdSet) {
+        const rowDataUpdate: {[key: string]: string} = {};
+        for (let colIdx = 0; colIdx < edits.editableHeaders.length; colIdx++) {
+          const header = edits.editableHeaders[colIdx];
+          const cellKey = `${orderId}-${header}`;
+          const value = edits.editableCells[cellKey];
+          if (value === undefined) continue;
+
+          const rowKey = headerIndexToRowDataKey(colIdx, templateHeaders);
+          if (rowKey) {
+            rowDataUpdate[rowKey] = value;
+          }
+        }
+        if (Object.keys(rowDataUpdate).length === 0) continue;
+
+        const res = await fetch("/api/upload/update-row", {
+          method: "PUT",
+          headers: getAuthHeaders(),
+          body: JSON.stringify({rowId: orderId, rowData: rowDataUpdate}),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "데이터 저장 실패");
+        }
+        updatedIds.push(orderId);
+      }
+      return updatedIds;
+    },
+    [purchaseDetail?.templateHeaders],
+  );
+
+  // 양식 수정값을 row_data 형식으로 변환 (다운로드 API 전달용)
+  const buildRowDataOverrides = useCallback(
+    (
+      orderIds: number[],
+      orders: OrderData[],
+      edits: {
+        editableCells: {[key: string]: string};
+        editableHeaders: string[];
+      },
+    ): {[orderId: number]: Record<string, unknown>} => {
+      const templateHeaders = purchaseDetail?.templateHeaders;
+      const result: {[orderId: number]: Record<string, unknown>} = {};
+      const orderMap = new Map(orders.map((o) => [o.id, o]));
+
+      for (const orderId of orderIds) {
+        const order = orderMap.get(orderId);
+        const base = (
+          order?.rowData && typeof order.rowData === "object"
+            ? {...order.rowData}
+            : {}
+        ) as Record<string, unknown>;
+
+        for (let colIdx = 0; colIdx < edits.editableHeaders.length; colIdx++) {
+          const header = edits.editableHeaders[colIdx];
+          const cellKey = `${orderId}-${header}`;
+          const value = edits.editableCells[cellKey];
+          if (value === undefined) continue;
+
+          const rowKey = headerIndexToRowDataKey(colIdx, templateHeaders);
+          if (rowKey) {
+            base[rowKey] = value;
+          }
+        }
+        result[orderId] = base;
+      }
+      return result;
+    },
+    [purchaseDetail?.templateHeaders],
+  );
+
   // 다운로드
   const handleDownload = useCallback(async () => {
     const orderIds =
@@ -265,6 +373,20 @@ export default function PurchaseOrdersModal({
     startLoading("다운로드", "발주서를 생성 중입니다...");
 
     try {
+      let rowDataOverrides: {[k: number]: Record<string, unknown>} | undefined;
+      let headerOverrides: string[] | undefined;
+
+      const editsToSave = templateViewEditsRef.current || templateViewEdits;
+      if (editsToSave) {
+        const hasCellEdits = Object.keys(editsToSave.editableCells).length > 0;
+        if (hasCellEdits) {
+          await saveTemplateEditsToDb(orderIds, editsToSave);
+          await fetchOrders();
+        }
+        rowDataOverrides = buildRowDataOverrides(orderIds, orders, editsToSave);
+        headerOverrides = editsToSave.editableHeaders;
+      }
+
       const response = await fetch("/api/purchase-orders/download", {
         method: "POST",
         headers: getAuthHeaders(),
@@ -273,6 +395,8 @@ export default function PurchaseOrdersModal({
           orderIds,
           startDate,
           endDate,
+          ...(rowDataOverrides && {rowDataOverrides}),
+          ...(headerOverrides && {headerOverrides}),
         }),
       });
 
@@ -292,9 +416,9 @@ export default function PurchaseOrdersModal({
       }
 
       saveAs(blob, fileName);
-      // 다운로드 후 주문 목록 새로고침 (발주 상태 업데이트 반영)
-      await fetchOrders();
-      // 부모 컴포넌트 데이터도 새로고침
+      // 다운로드 후 주문 목록 새로고침 - '전체'로 전환하여 발주된/미발주 모두 표시
+      setOrderFilter("all");
+      await fetchOrders("all");
       if (onDataUpdate) {
         onDataUpdate();
       }
@@ -315,6 +439,9 @@ export default function PurchaseOrdersModal({
     onDataUpdate,
     startLoading,
     stopLoading,
+    templateViewEdits,
+    saveTemplateEditsToDb,
+    buildRowDataOverrides,
   ]);
 
   // 카카오톡 전송
@@ -345,6 +472,43 @@ export default function PurchaseOrdersModal({
     startLoading("카카오톡 전송", "전송 중입니다...");
 
     try {
+      let rowDataOverrides: {[k: number]: Record<string, unknown>} | undefined;
+      let headerOverrides: string[] | undefined;
+
+      const editsToSave = templateViewEditsRef.current || templateViewEdits;
+      if (editsToSave) {
+        const hasCellEdits = Object.keys(editsToSave.editableCells).length > 0;
+        if (hasCellEdits) {
+          await saveTemplateEditsToDb(orderIds, editsToSave);
+          await fetchOrders();
+        }
+        rowDataOverrides = buildRowDataOverrides(orderIds, orders, editsToSave);
+        headerOverrides = editsToSave.editableHeaders;
+      }
+
+      // 발주서 생성 및 DB 스냅샷 저장 (forKakao)
+      const downloadResponse = await fetch("/api/purchase-orders/download", {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          purchaseId: purchase.id,
+          orderIds,
+          startDate,
+          endDate,
+          forKakao: true,
+          ...(rowDataOverrides && {rowDataOverrides}),
+          ...(headerOverrides && {headerOverrides}),
+        }),
+      });
+
+      if (!downloadResponse.ok) {
+        const errData = await downloadResponse.json().catch(() => ({}));
+        throw new Error(errData.error || "발주서 생성에 실패했습니다.");
+      }
+
+      const batchIdHeader = downloadResponse.headers.get("X-Order-Batch-Id");
+      const batchId = batchIdHeader ? parseInt(batchIdHeader, 10) : undefined;
+
       const response = await fetch("/api/purchase-orders/send", {
         method: "POST",
         headers: getAuthHeaders(),
@@ -354,14 +518,15 @@ export default function PurchaseOrdersModal({
           sendType: "kakaotalk",
           startDate,
           endDate,
+          ...(batchId && {batchId}),
         }),
       });
 
       const result = await response.json();
       if (result.success) {
         alert(`카카오톡 전송 완료: ${result.message}`);
-        await fetchOrders();
-        // 부모 컴포넌트 데이터도 새로고침
+        setOrderFilter("all");
+        await fetchOrders("all");
         if (onDataUpdate) {
           onDataUpdate();
         }
@@ -385,6 +550,9 @@ export default function PurchaseOrdersModal({
     onDataUpdate,
     startLoading,
     stopLoading,
+    templateViewEdits,
+    saveTemplateEditsToDb,
+    buildRowDataOverrides,
   ]);
 
   // 이메일 전송: 다운로드 로직으로 발주서 생성 후 NCP 메일 API로 전송
@@ -413,7 +581,21 @@ export default function PurchaseOrdersModal({
     startLoading("이메일 전송", "발주서 생성 및 전송 중입니다...");
 
     try {
-      // 1. 다운로드 API로 발주서 파일 생성 (템플릿 있으면 템플릿, 없으면 기본 외주 발주서)
+      let rowDataOverrides: {[k: number]: Record<string, unknown>} | undefined;
+      let headerOverrides: string[] | undefined;
+
+      const editsToSave = templateViewEditsRef.current || templateViewEdits;
+      if (editsToSave) {
+        const hasCellEdits = Object.keys(editsToSave.editableCells).length > 0;
+        if (hasCellEdits) {
+          await saveTemplateEditsToDb(orderIds, editsToSave);
+          await fetchOrders();
+        }
+        rowDataOverrides = buildRowDataOverrides(orderIds, orders, editsToSave);
+        headerOverrides = editsToSave.editableHeaders;
+      }
+
+      // 1. 다운로드 API로 발주서 파일 생성 (수정 데이터 전달하여 발송 원본과 동일하게)
       const downloadResponse = await fetch("/api/purchase-orders/download", {
         method: "POST",
         headers: getAuthHeaders(),
@@ -422,7 +604,9 @@ export default function PurchaseOrdersModal({
           orderIds,
           startDate,
           endDate,
-          forEmail: true, // 주문 상태 업데이트는 이메일 전송 성공 후 처리
+          forEmail: true,
+          ...(rowDataOverrides && {rowDataOverrides}),
+          ...(headerOverrides && {headerOverrides}),
         }),
       });
 
@@ -432,6 +616,10 @@ export default function PurchaseOrdersModal({
       }
 
       const blob = await downloadResponse.blob();
+      const batchIdHeader = downloadResponse.headers.get("X-Order-Batch-Id");
+      const batchId = batchIdHeader ? parseInt(batchIdHeader, 10) : undefined;
+
+      const arrayBuffer = await blob.arrayBuffer();
       const contentDisposition = downloadResponse.headers.get(
         "Content-Disposition",
       );
@@ -443,11 +631,11 @@ export default function PurchaseOrdersModal({
         }
       }
 
-      // 2. NCP 메일 API로 파일 전송
+      // 2. 이메일 API로 파일 전송 (nodemailer)
       const formData = new FormData();
       formData.append(
         "file",
-        new Blob([blob], {
+        new Blob([arrayBuffer], {
           type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         }),
         fileName,
@@ -474,7 +662,7 @@ export default function PurchaseOrdersModal({
         throw new Error(mailResult.error || "이메일 전송에 실패했습니다.");
       }
 
-      // 3. 이메일 전송 성공 시 발주 상태 업데이트
+      // 3. 이메일 전송 성공 시 발주 상태 업데이트 (download API에서 생성한 batchId 사용)
       const sendResponse = await fetch("/api/purchase-orders/send", {
         method: "POST",
         headers: getAuthHeaders(),
@@ -484,6 +672,7 @@ export default function PurchaseOrdersModal({
           sendType: "email",
           startDate,
           endDate,
+          ...(batchId && {batchId}),
         }),
       });
 
@@ -496,7 +685,8 @@ export default function PurchaseOrdersModal({
         );
       }
 
-      await fetchOrders();
+      setOrderFilter("all");
+      await fetchOrders("all");
       if (onDataUpdate) {
         onDataUpdate();
       }
@@ -518,6 +708,9 @@ export default function PurchaseOrdersModal({
     onDataUpdate,
     startLoading,
     stopLoading,
+    templateViewEdits,
+    saveTemplateEditsToDb,
+    buildRowDataOverrides,
   ]);
 
   // 선택된 항목 취소 처리
@@ -772,8 +965,18 @@ export default function PurchaseOrdersModal({
               주문 데이터가 없습니다.
             </div>
           ) : showTemplateView ? (
-            // 양식 보기 뷰
-            <TemplateView orders={orders} purchase={purchaseDetail} />
+            // 양식 보기 뷰 - 체크박스 선택한 주문만 표시
+            selectedRows.size > 0 ? (
+              <TemplateView
+                orders={orders.filter((o) => selectedRows.has(o.id))}
+                purchase={purchaseDetail}
+                onEditsChange={handleTemplateEditsChange}
+              />
+            ) : (
+              <div className="text-center py-12 text-gray-500">
+                양식 보기를 위해 목록에서 체크박스로 항목을 선택해주세요.
+              </div>
+            )
           ) : orderFilter === "ordered" && !hasOrderedOrders ? (
             // ordered 필터인데 발주된 주문이 없는 경우
             <div className="text-center py-8 text-gray-500">
@@ -792,9 +995,15 @@ export default function PurchaseOrdersModal({
                 </div>
               )}
               {Object.keys(orderedOrdersByBatch).length > 0 ? (
-                // 차수별 아코디언 표시
+                // 차수별 아코디언 표시 (오래된 순: batchDate → batchNumber)
                 Object.entries(orderedOrdersByBatch)
-                  .sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
+                  .sort(([, {batch: a}], [, {batch: b}]) => {
+                    const dateCompare = (a.batchDate || "").localeCompare(
+                      b.batchDate || "",
+                    );
+                    if (dateCompare !== 0) return dateCompare;
+                    return (a.batchNumber ?? 0) - (b.batchNumber ?? 0);
+                  })
                   .map(([batchKey, {batch, orders: batchOrders}]) => (
                     <div
                       key={batchKey}
@@ -1531,9 +1740,14 @@ export default function PurchaseOrdersModal({
 function TemplateView({
   orders,
   purchase,
+  onEditsChange,
 }: {
   orders: OrderData[];
   purchase: any;
+  onEditsChange?: (edits: {
+    editableCells: {[key: string]: string};
+    editableHeaders: string[];
+  }) => void;
 }) {
   const [editableHeaders, setEditableHeaders] = useState<string[]>([]);
   const [editableCells, setEditableCells] = useState<{[key: string]: string}>(
@@ -1718,6 +1932,16 @@ function TemplateView({
       setMappedDataCache({});
     }
   }, [orders, purchase?.templateHeaders, purchase?.name, headerAliases]);
+
+  // 수정 내용 부모로 전달 (다운로드/전송 시 DB 저장용)
+  useEffect(() => {
+    if (onEditsChange) {
+      onEditsChange({
+        editableCells,
+        editableHeaders,
+      });
+    }
+  }, [editableCells, editableHeaders, onEditsChange]);
 
   // 헤더 수정
   const handleHeaderChange = useCallback((index: number, value: string) => {

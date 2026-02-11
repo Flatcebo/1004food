@@ -1,6 +1,6 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
-import {getCompanyIdFromRequest} from "@/lib/company";
+import {getCompanyIdFromRequest, getUserIdFromRequest} from "@/lib/company";
 
 /**
  * 선택된 매입처 또는 모든 매입처에 미발주 주문 전송 API
@@ -20,6 +20,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const userId = await getUserIdFromRequest(request);
     const today = new Date().toISOString().split("T")[0];
     const queryStartDate = startDate || today;
     const queryEndDate = endDate || today;
@@ -121,17 +122,19 @@ export async function POST(request: NextRequest) {
               ? `https://${process.env.VERCEL_URL}`
               : null);
           const origin = base || new URL(request.url).origin;
-          const companyIdHeader = request.headers.get("company-id") || "";
+          const companyIdHeader = String(companyId);
 
           // 1. 다운로드 API로 발주서 파일 생성 (템플릿/기본 외주 발주서)
+          const downloadHeaders: Record<string, string> = {
+            "Content-Type": "application/json",
+            "company-id": companyIdHeader,
+          };
+          if (userId) downloadHeaders["user-id"] = userId;
           const downloadRes = await fetch(
             `${origin}/api/purchase-orders/download`,
             {
               method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "company-id": companyIdHeader,
-              },
+              headers: downloadHeaders,
               body: JSON.stringify({
                 purchaseId: purchase.id,
                 orderIds,
@@ -155,7 +158,7 @@ export async function POST(request: NextRequest) {
             if (m) fileName = decodeURIComponent(m[1]);
           }
 
-          // 2. NCP 메일 API로 전송
+          // 2. 이메일 API로 전송 (nodemailer)
           const formData = new FormData();
           formData.append(
             "file",

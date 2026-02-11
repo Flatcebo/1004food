@@ -7,6 +7,7 @@ import {useLoadingStore} from "@/stores/loadingStore";
 import {useAuthStore} from "@/stores/authStore";
 import LoadingOverlay from "@/components/LoadingOverlay";
 import PurchaseOrdersModal from "@/components/PurchaseOrdersModal";
+import OrderHistoryModal from "@/components/OrderHistoryModal";
 import MultiSelectDropdown from "@/components/MultiSelectDropdown";
 
 interface PurchaseStats {
@@ -50,7 +51,10 @@ export default function PurchaseOrdersPage() {
 
   // 모달 상태
   const [modalOpen, setModalOpen] = useState(false);
+  const [orderHistoryOpen, setOrderHistoryOpen] = useState(false);
   const [selectedPurchase, setSelectedPurchase] =
+    useState<PurchaseStats | null>(null);
+  const [historyPurchase, setHistoryPurchase] =
     useState<PurchaseStats | null>(null);
 
   // 체크박스 선택 상태
@@ -642,6 +646,18 @@ export default function PurchaseOrdersPage() {
                             )}
                           </div>
                         </td>
+                        <td className="border border-gray-300 px-4 py-2 text-center">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setHistoryPurchase(purchase);
+                              setOrderHistoryOpen(true);
+                            }}
+                            className="px-2 py-1 bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs rounded"
+                          >
+                            발주 내역
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -685,6 +701,18 @@ export default function PurchaseOrdersPage() {
             endDate={endDate}
             onClose={handleCloseModal}
             onDataUpdate={fetchPurchases}
+          />
+        )}
+
+        {/* 발주 내역 모달 */}
+        {orderHistoryOpen && historyPurchase && (
+          <OrderHistoryModal
+            purchaseId={historyPurchase.id}
+            purchaseName={historyPurchase.name}
+            onClose={() => {
+              setOrderHistoryOpen(false);
+              setHistoryPurchase(null);
+            }}
           />
         )}
       </div>

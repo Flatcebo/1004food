@@ -90,11 +90,12 @@ export async function POST(request: NextRequest) {
       // rows가 직접 전달된 경우 ID 추적 불가
       downloadedRowIds = [];
     } else if (rowIds && rowIds.length > 0) {
-      // 선택된 행 ID들로 조회
+      // 선택된 행 ID들로 조회 (company_id 필터로 본인 회사 데이터만)
       const rowData = await sql`
-        SELECT id, row_data
-        FROM upload_rows
-        WHERE id = ANY(${rowIds})
+        SELECT ur.id, ur.row_data
+        FROM upload_rows ur
+        INNER JOIN uploads u ON ur.upload_id = u.id AND u.company_id = ${companyId}
+        WHERE ur.id = ANY(${rowIds})
       `;
       dataRowsWithIds = rowData.map((r: any) => ({
         id: r.id,
@@ -116,11 +117,11 @@ export async function POST(request: NextRequest) {
       dataRows = dataRowsWithIds.map((r: any) => r.row_data);
       downloadedRowIds = dataRowsWithIds.map((r: any) => r.id);
     } else {
-      // 조건 없으면 모든 데이터 조회
+      // 조건 없으면 모든 데이터 조회 (company_id 필터로 본인 회사 데이터만)
       const allData = await sql`
         SELECT ur.id, ur.row_data
         FROM upload_rows ur
-        INNER JOIN uploads u ON ur.upload_id = u.id
+        INNER JOIN uploads u ON ur.upload_id = u.id AND u.company_id = ${companyId}
         ORDER BY u.created_at DESC, ur.id DESC
       `;
       dataRowsWithIds = allData.map((r: any) => ({
@@ -165,12 +166,12 @@ export async function POST(request: NextRequest) {
         {};
       const productVendorNameMapByCode: {[code: string]: string | null} = {};
 
-      // 사용자가 선택한 상품 ID로만 조회
+      // 사용자가 선택한 상품 ID로만 조회 (company_id 필터로 올바른 회사 상품만 조회)
       if (productIds.length > 0) {
         const productsById = await sql`
           SELECT id, code, name, sale_price, sabang_name as "sabangName", purchase as "vendorName"
           FROM products
-          WHERE id = ANY(${productIds})
+          WHERE id = ANY(${productIds}) AND company_id = ${companyId}
         `;
 
         productsById.forEach((p: any) => {
@@ -193,13 +194,13 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // productId가 없는 경우 매핑코드로 조회
+      // productId가 없는 경우 매핑코드로 조회 (company_id 필터로 올바른 회사 상품만 조회)
       // 같은 매핑코드를 가진 여러 상품이 있을 수 있으므로 상품명별로 저장
       if (productCodes.length > 0) {
         const productsByCode = await sql`
           SELECT code, name, sale_price, sabang_name as "sabangName", purchase as "vendorName"
           FROM products
-          WHERE code = ANY(${productCodes})
+          WHERE code = ANY(${productCodes}) AND company_id = ${companyId}
           ORDER BY id
         `;
 

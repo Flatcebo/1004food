@@ -5,7 +5,7 @@ import ExcelJS from "exceljs";
  */
 export function createCJOutsourceTemplate(
   columnOrder: string[],
-  excelData: any[][]
+  excelData: any[][],
 ): ExcelJS.Workbook {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet("Sheet1");
@@ -17,7 +17,7 @@ export function createCJOutsourceTemplate(
   const row1 = worksheet.getRow(1);
   row1.height = 36;
 
-  // 헤더 순서: 보내는 분, 전화번호, 주소, 받는사람, 전화번호1, 전화번호2, 우편번호, 주소, 비어있는 열, 상품명, 배송메시지, 박스, 업체명
+  // 헤더 순서: 보내는 분, 전화번호, 주소, 받는사람, 전화번호1, 전화번호2, 우편번호, 주소, 수량, 상품명, 배송메시지, 박스, 업체명
   // 열 너비 설정
   const columnWidths: {[key: number]: number} = {
     1: 17.5, // A: 보내는 분
@@ -28,7 +28,7 @@ export function createCJOutsourceTemplate(
     6: 5.25, // F: 전화번호2
     7: 4.5, // G: 우편번호
     8: 102.75, // H: 주소 (두번째)
-    9: 7.5, // I: 비어있는 열
+    9: 7.5, // I: 수량
     10: 24.38, // J: 상품명
     11: 22.38, // K: 배송메시지
     12: 21.88, // L: 박스

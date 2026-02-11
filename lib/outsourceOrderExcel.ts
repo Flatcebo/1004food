@@ -70,6 +70,27 @@ export async function buildOutsourceOrderExcel(
     : Array.isArray(templateData.columnOrder)
       ? templateData.columnOrder
       : [];
+
+  // template_data에 headers/columnOrder가 없거나 비어있으면 download-outsource와 동일한 외주 발주서 기본 양식 사용
+  const defaultOutsourceHeaders = [
+    "주문번호",
+    "주문하신분",
+    "전화번호",
+    "받는사람",
+    "전화번호1",
+    "전화번호2",
+    "우편번호",
+    "주소",
+    "",
+    "상품명",
+    "배송메시지",
+    "박스",
+    "업체명",
+  ];
+  if (!headers || headers.length === 0) {
+    headers = [...defaultOutsourceHeaders];
+  }
+
   const columnWidths =
     templateData.columnWidths && typeof templateData.columnWidths === "object"
       ? templateData.columnWidths

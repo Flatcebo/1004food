@@ -7,10 +7,7 @@ import {
   getTemplateHeaderNames,
   mapRowToTemplateFormat,
 } from "@/utils/purchaseTemplateMapping";
-import {mapDataToTemplate} from "@/utils/excelDataMapping";
 import {getUserIdFromRequest} from "@/lib/company";
-import {createCJOutsourceTemplate} from "@/libs/cj-outsource-template";
-import {buildOutsourceOrderExcel} from "@/lib/outsourceOrderExcel";
 
 // 전화번호에 하이픈을 추가하여 형식 맞춤
 function formatPhoneNumber(phoneNumber: string): string {
@@ -143,12 +140,11 @@ export async function POST(request: NextRequest) {
       console.error("헤더 Alias 조회 실패:", error);
     }
 
-    // 외주 발주서 템플릿 조회 (템플릿 없는 매입처용)
-    let outsourceTemplate: {template_data: any} | null = null;
+    // 외주 발주서 템플릿 조회 (template_headers 없는 매입처용 - order 페이지와 동일 양식)
+    let outsourceTemplateId: number | null = null;
     try {
       const outsourceResult = await sql`
-        SELECT template_data
-        FROM upload_templates
+        SELECT id FROM upload_templates
         WHERE company_id = ${companyId}
           AND template_data->>'name' IS NOT NULL
           AND template_data->>'name' ILIKE '%외주%'
@@ -157,11 +153,18 @@ export async function POST(request: NextRequest) {
         LIMIT 1
       `;
       if (outsourceResult.length > 0) {
-        outsourceTemplate = {template_data: outsourceResult[0]};
+        outsourceTemplateId = outsourceResult[0].id;
       }
     } catch (e) {
       console.error("외주 발주서 템플릿 조회 실패:", e);
     }
+
+    const base =
+      process.env.NEXT_PUBLIC_BASE_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null);
+    const origin = base || new URL(request.url).origin;
+    const companyIdHeader = request.headers.get("company-id") || "";
+    const userIdHeader = request.headers.get("user-id") || "";
 
     // ZIP 파일 생성
     const zip = new JSZip();
@@ -283,130 +286,70 @@ export async function POST(request: NextRequest) {
 
         // 엑셀 버퍼 생성
         buffer = (await wb.xlsx.writeBuffer()) as unknown as Buffer;
-      } else if (outsourceTemplate) {
-        // 외주 발주서 템플릿 사용 (download-outsource와 동일 양식)
-        const vendorRows = ordersData.map((o: any) => {
-          const r = {...(o.row_data || {})};
-          if (o.sabang_name) {
-            r["사방넷명"] = r["sabangName"] = o.sabang_name;
-          }
-          r["업체명"] = purchase.name;
-          return r;
-        });
-        buffer = await buildOutsourceOrderExcel({
-          templateData: outsourceTemplate.template_data,
-          vendorRows,
-          purchaseName: purchase.name,
-          isOnlineUser: userGrade === "온라인",
-        });
       } else {
-        // 외주 발주서 템플릿이 없으면 CJ외주 발주서 양식 사용 (fallback)
-        const outsourceColumnOrder = [
-          "보내는 분",
-          "전화번호",
-          "주소",
-          "받는사람",
-          "전화번호1",
-          "전화번호2",
-          "우편번호",
-          "주소",
-          "",
-          "상품명",
-          "배송메시지",
-          "박스",
-          "업체명",
-        ];
-
-        const excelData: any[][] = ordersData.map((order: any) => {
-          const rowData = order.row_data || {};
-          if (order.sabang_name) {
-            rowData["사방넷명"] = order.sabang_name;
-            rowData["sabangName"] = order.sabang_name;
-          }
-          return outsourceColumnOrder.map((header: string, colIdx: number) => {
-            if (header === "") return "";
-            let value: any = "";
-            switch (header) {
-              case "보내는 분":
-                value = purchase.name || "";
-                break;
-              case "전화번호":
-                value = "";
-                break;
-              case "받는사람":
-                value = mapDataToTemplate(rowData, "수취인명", {
-                  formatPhone: false,
-                });
-                let rn = value != null ? String(value) : "";
-                value = "★" + rn.replace(/^★/, "").trim();
-                break;
-              case "전화번호1":
-                value = mapDataToTemplate(rowData, "전화번호1", {
-                  formatPhone: true,
-                });
-                let p1 = value != null ? String(value) : "";
-                if (p1) {
-                  p1 = formatPhoneNumber(p1);
-                  if (userGrade === "온라인")
-                    p1 = formatPhoneNumber1ForOnline(p1);
-                  value = p1;
-                }
-                break;
-              case "전화번호2":
-                value = mapDataToTemplate(rowData, "전화번호2", {
-                  formatPhone: true,
-                });
-                break;
-              case "우편번호":
-                value = mapDataToTemplate(rowData, "우편번호", {
-                  formatPhone: false,
-                });
-                break;
-              case "주소":
-                const addrIdx = outsourceColumnOrder
-                  .map((h, i) => (h === "주소" ? i : -1))
-                  .filter((i) => i !== -1);
-                value =
-                  colIdx === addrIdx[0]
-                    ? ""
-                    : mapDataToTemplate(rowData, "주소", {
-                        formatPhone: false,
-                      });
-                break;
-              case "상품명":
-                value = mapDataToTemplate(rowData, "상품명", {
-                  formatPhone: false,
-                });
-                break;
-              case "배송메시지":
-                value = mapDataToTemplate(rowData, "배송메시지", {
-                  formatPhone: false,
-                });
-                break;
-              case "박스":
-                value = "";
-                break;
-              case "업체명":
-                value = purchase.name || "";
-                break;
-              default:
-                value = mapDataToTemplate(rowData, header, {
-                  formatPhone: false,
-                });
-            }
-            return value != null ? String(value) : "";
-          });
-        });
-
-        const outsourceWorkbook = createCJOutsourceTemplate(
-          outsourceColumnOrder,
-          excelData,
-        );
-        if (outsourceWorkbook.worksheets.length > 0) {
-          outsourceWorkbook.worksheets[0].name = purchase.name;
+        // order 페이지 "외주 발주서" 셀렉트 시와 동일한 양식 (download-outsource API 호출)
+        if (!outsourceTemplateId) {
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                "외주 발주서 템플릿이 없습니다. /upload/templates에서 order 페이지와 동일한 외주 발주서 템플릿을 먼저 생성해주세요.",
+            },
+            {status: 404},
+          );
         }
-        buffer =
-          (await outsourceWorkbook.xlsx.writeBuffer()) as unknown as Buffer;
+
+        const outsourceRes = await fetch(
+          `${origin}/api/upload/download-outsource`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "company-id": companyIdHeader,
+              ...(userIdHeader && {"user-id": userIdHeader}),
+            },
+            body: JSON.stringify({
+              templateId: outsourceTemplateId,
+              rowIds: orderIds,
+              preferSabangName: true,
+              useInternalCode: true,
+            }),
+          },
+        );
+
+        if (!outsourceRes.ok) {
+          const errData = await outsourceRes.json().catch(() => ({}));
+          return NextResponse.json(
+            {
+              success: false,
+              error:
+                errData.error || `외주 발주서 생성 실패 (${purchase.name})`,
+            },
+            {status: outsourceRes.status},
+          );
+        }
+
+        const zipBlob = await outsourceRes.blob();
+        const zipBuffer = Buffer.from(await zipBlob.arrayBuffer());
+        const outsourceZip = await JSZip.loadAsync(zipBuffer);
+
+        const xlsxFiles = Object.entries(outsourceZip.files).filter(
+          ([path, file]) => !file.dir && path.endsWith(".xlsx"),
+        );
+        const match = xlsxFiles.find(([path]) =>
+          path.includes(`_${purchase.name}.xlsx`),
+        );
+        const targetFile = match || xlsxFiles[0];
+        if (!targetFile) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `외주 발주서 엑셀 파일을 찾을 수 없습니다 (${purchase.name})`,
+            },
+            {status: 500},
+          );
+        }
+        buffer = Buffer.from(await targetFile[1].async("nodebuffer"));
       }
       const fileName = `${queryStartDate}_${purchase.name}_발주서.xlsx`;
       zip.file(fileName, buffer);

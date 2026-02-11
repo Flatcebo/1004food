@@ -48,7 +48,7 @@ const menuConfigs: AccordionMenuConfig[] = [
         name: "주문 수정",
       },
     ],
-    autoOpenPaths: ["/order", "/order/upload","/order/edit"],
+    autoOpenPaths: ["/order", "/order/upload", "/order/edit"],
   },
   {
     id: "purchase-orders",
@@ -97,7 +97,11 @@ const menuConfigs: AccordionMenuConfig[] = [
         name: "쇼핑몰 프로모션 관리",
       },
     ],
-    autoOpenPaths: ["/analytics/sales-by-mall", "/analytics/sales-by-purchase", "/mall-promotions"],
+    autoOpenPaths: [
+      "/analytics/sales-by-mall",
+      "/analytics/sales-by-purchase",
+      "/mall-promotions",
+    ],
   },
   {
     id: "template",
@@ -153,8 +157,20 @@ const menuConfigs: AccordionMenuConfig[] = [
         path: "/logs",
         name: "로그",
       },
+      {
+        path: "/companies",
+        name: "회사 관리",
+      },
     ],
-    autoOpenPaths: ["/products/upload", "/users", "/vendors", "/malls", "/purchase-management", "/logs"],
+    autoOpenPaths: [
+      "/companies",
+      "/products/upload",
+      "/users",
+      "/vendors",
+      "/malls",
+      "/purchase-management",
+      "/logs",
+    ],
     requiresAdmin: true,
   },
 ];

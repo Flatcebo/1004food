@@ -8,7 +8,7 @@ import {getCompanyIdFromRequest} from "@/lib/company";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const {purchaseId, orderIds, sendType, startDate, endDate} = body;
+    const {purchaseId, orderIds, sendType, startDate, endDate, batchId} = body;
 
     if (!purchaseId || !sendType) {
       return NextResponse.json(
@@ -119,63 +119,69 @@ export async function POST(request: NextRequest) {
     );
     console.log(`주문 건수: ${ordersData.length}건`);
 
-    // 발주 상태 업데이트 및 차수 정보 저장
     const updatedOrderIds = ordersData.map((o: any) => o.id);
     if (updatedOrderIds.length > 0) {
       try {
-        // 한국 시간 계산
-        const now = new Date();
-        const koreaTimeMs = now.getTime() + 9 * 60 * 60 * 1000; // UTC + 9시간
-        const koreaDate = new Date(koreaTimeMs);
-        const batchDate = koreaDate.toISOString().split("T")[0];
+        let newBatchId: number;
 
-        // 한국 시간을 PostgreSQL timestamp 형식으로 변환 (YYYY-MM-DD HH:mm:ss)
-        const koreaYear = koreaDate.getUTCFullYear();
-        const koreaMonth = String(koreaDate.getUTCMonth() + 1).padStart(2, "0");
-        const koreaDay = String(koreaDate.getUTCDate()).padStart(2, "0");
-        const koreaHours = String(koreaDate.getUTCHours()).padStart(2, "0");
-        const koreaMinutes = String(koreaDate.getUTCMinutes()).padStart(2, "0");
-        const koreaSeconds = String(koreaDate.getUTCSeconds()).padStart(2, "0");
-        const koreaTimestamp = `${koreaYear}-${koreaMonth}-${koreaDay} ${koreaHours}:${koreaMinutes}:${koreaSeconds}`;
+        if (batchId) {
+          newBatchId = batchId;
+        } else {
+          const now = new Date();
+          const koreaTimeMs = now.getTime() + 9 * 60 * 60 * 1000;
+          const koreaDate = new Date(koreaTimeMs);
+          const batchDate = koreaDate.toISOString().split("T")[0];
 
-        // 해당 매입처의 오늘 마지막 batch_number 조회
-        const lastBatchResult = await sql`
-          SELECT COALESCE(MAX(batch_number), 0) as last_batch
-          FROM order_batches
-          WHERE company_id = ${companyId}
-            AND purchase_id = ${purchase.id}
-            AND batch_date = ${batchDate}::date
-        `;
-        const lastBatchNumber = lastBatchResult[0]?.last_batch || 0;
-        const newBatchNumber = lastBatchNumber + 1;
+          const koreaYear = koreaDate.getUTCFullYear();
+          const koreaMonth = String(
+            koreaDate.getUTCMonth() + 1,
+          ).padStart(2, "0");
+          const koreaDay = String(koreaDate.getUTCDate()).padStart(2, "0");
+          const koreaHours = String(koreaDate.getUTCHours()).padStart(2, "0");
+          const koreaMinutes = String(
+            koreaDate.getUTCMinutes(),
+          ).padStart(2, "0");
+          const koreaSeconds = String(
+            koreaDate.getUTCSeconds(),
+          ).padStart(2, "0");
+          const koreaTimestamp = `${koreaYear}-${koreaMonth}-${koreaDay} ${koreaHours}:${koreaMinutes}:${koreaSeconds}`;
 
-        // 새 batch 생성 (한국 시간으로 created_at 설정)
-        const newBatchResult = await sql`
-          INSERT INTO order_batches (company_id, purchase_id, batch_number, batch_date, created_at)
-          VALUES (
-            ${companyId}, 
-            ${purchase.id}, 
-            ${newBatchNumber}, 
-            ${batchDate}::date,
-            ${koreaTimestamp}::timestamp
-          )
-          RETURNING id
-        `;
-        const newBatchId = newBatchResult[0]?.id;
+          const lastBatchResult = await sql`
+            SELECT COALESCE(MAX(batch_number), 0) as last_batch
+            FROM order_batches
+            WHERE company_id = ${companyId}
+              AND purchase_id = ${purchase.id}
+              AND batch_date = ${batchDate}::date
+          `;
+          const lastBatchNumber = lastBatchResult[0]?.last_batch || 0;
+          const newBatchNumber = lastBatchNumber + 1;
 
-        // upload_rows 업데이트 (is_ordered = true, order_batch_id 설정)
+          const newBatchResult = await sql`
+            INSERT INTO order_batches (company_id, purchase_id, batch_number, batch_date, created_at)
+            VALUES (
+              ${companyId},
+              ${purchase.id},
+              ${newBatchNumber},
+              ${batchDate}::date,
+              ${koreaTimestamp}::timestamp
+            )
+            RETURNING id
+          `;
+          newBatchId = newBatchResult[0]?.id;
+        }
+
         await sql`
           UPDATE upload_rows ur
           SET is_ordered = true,
               order_batch_id = ${newBatchId}
           FROM uploads u
-          WHERE ur.upload_id = u.id 
+          WHERE ur.upload_id = u.id
             AND u.company_id = ${companyId}
             AND ur.id = ANY(${updatedOrderIds})
         `;
 
         console.log(
-          `[${sendType.toUpperCase()}] ${purchase.name}: ${newBatchNumber}차 발주 (${updatedOrderIds.length}건)`,
+          `[${sendType.toUpperCase()}] ${purchase.name}: ${updatedOrderIds.length}건 발주 완료`,
         );
       } catch (updateError) {
         console.error("발주 상태 업데이트 실패:", updateError);

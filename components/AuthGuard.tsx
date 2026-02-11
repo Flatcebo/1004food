@@ -15,14 +15,13 @@ const protectedRoutes = [
   "/products",
   "/header-aliases",
   "/users",
+  "/companies",
 ];
 
 /**
  * 인증이 필요 없는 경로 목록 (공개 경로)
  */
-const publicRoutes = [
-  "/login",
-];
+const publicRoutes = ["/login"];
 
 /**
  * AuthGuard 컴포넌트
@@ -33,7 +32,7 @@ export default function AuthGuard({children}: {children: React.ReactNode}) {
   const pathname = usePathname();
   const {isAuthenticated, user} = useAuthStore();
   const [mounted, setMounted] = useState(false);
-  
+
   // 자동 로그아웃 기능 활성화 (인증된 사용자만)
   useAutoLogout();
 
@@ -57,10 +56,10 @@ export default function AuthGuard({children}: {children: React.ReactNode}) {
 
     // 보호된 경로인지 확인
     // 루트 경로는 정확히 일치해야 함
-    const isProtectedRoute = 
-      pathname === "/" || 
-      protectedRoutes.some((route) => 
-        route !== "/" && pathname?.startsWith(route)
+    const isProtectedRoute =
+      pathname === "/" ||
+      protectedRoutes.some(
+        (route) => route !== "/" && pathname?.startsWith(route),
       );
 
     if (isProtectedRoute && !isAuthenticated) {
@@ -80,12 +79,12 @@ export default function AuthGuard({children}: {children: React.ReactNode}) {
   }
 
   // 보호된 경로이고 인증되지 않은 경우 로딩 표시 (리다이렉트 중)
-  const isProtectedRoute = 
-    pathname === "/" || 
-    protectedRoutes.some((route) => 
-      route !== "/" && pathname?.startsWith(route)
+  const isProtectedRoute =
+    pathname === "/" ||
+    protectedRoutes.some(
+      (route) => route !== "/" && pathname?.startsWith(route),
     );
-  
+
   if (isProtectedRoute) {
     return (
       <div className="w-full h-screen flex items-center justify-center">

@@ -25,7 +25,7 @@ ChartJS.register(
   Title,
   Tooltip,
   Legend,
-  ArcElement
+  ArcElement,
 );
 
 interface DashboardChartData {
@@ -67,7 +67,7 @@ export default function App() {
   useEffect(() => {
     // 대시보드 통계 데이터 로드
     loadDashboardStats();
-    loadChartData();
+    // loadChartData();
   }, []);
 
   const loadDashboardStats = async () => {
@@ -120,56 +120,56 @@ export default function App() {
     }
   };
 
-  const loadChartData = async () => {
-    try {
-      setLoading(true);
-      const headers: HeadersInit = {};
+  // const loadChartData = async () => {
+  //   try {
+  //     setLoading(true);
+  //     const headers: HeadersInit = {};
 
-      if (typeof window !== "undefined") {
-        try {
-          const stored = localStorage.getItem("auth-storage");
-          if (stored) {
-            const parsed = JSON.parse(stored);
-            const user = parsed.state?.user;
-            if (user?.companyId) {
-              headers["company-id"] = user.companyId.toString();
-            }
-          }
-        } catch (e) {
-          console.error("인증 정보 로드 실패:", e);
-        }
-      }
+  //     if (typeof window !== "undefined") {
+  //       try {
+  //         const stored = localStorage.getItem("auth-storage");
+  //         if (stored) {
+  //           const parsed = JSON.parse(stored);
+  //           const user = parsed.state?.user;
+  //           if (user?.companyId) {
+  //             headers["company-id"] = user.companyId.toString();
+  //           }
+  //         }
+  //       } catch (e) {
+  //         console.error("인증 정보 로드 실패:", e);
+  //       }
+  //     }
 
-      // 일일 주문 수량, 일일 매출과 이익액은 30일 기준
-      const response30 = await fetch(
-        "/api/dashboard/stats?days=30&topLimit=10",
-        {
-          headers,
-        }
-      );
-      const result30 = await response30.json();
+  //     // 일일 주문 수량, 일일 매출과 이익액은 30일 기준
+  //     const response30 = await fetch(
+  //       "/api/dashboard/stats?days=30&topLimit=10",
+  //       {
+  //         headers,
+  //       }
+  //     );
+  //     const result30 = await response30.json();
 
-      // 주문수 많은 업체, 매출 높은 업체, 주문수 많은 상품은 당일 기준
-      const response1 = await fetch("/api/dashboard/stats?days=1&topLimit=10", {
-        headers,
-      });
-      const result1 = await response1.json();
+  //     // 주문수 많은 업체, 매출 높은 업체, 주문수 많은 상품은 당일 기준
+  //     const response1 = await fetch("/api/dashboard/stats?days=1&topLimit=10", {
+  //       headers,
+  //     });
+  //     const result1 = await response1.json();
 
-      if (result30.success && result1.success) {
-        setChartData({
-          dailyOrders: result30.data.dailyOrders,
-          dailySalesProfit: result30.data.dailySalesProfit,
-          topVendorsByOrders: result1.data.topVendorsByOrders,
-          topVendorsBySales: result1.data.topVendorsBySales,
-          topProductsByOrders: result1.data.topProductsByOrders,
-        });
-      }
-    } catch (error) {
-      console.error("차트 데이터 로드 실패:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  //     if (result30.success && result1.success) {
+  //       setChartData({
+  //         dailyOrders: result30.data.dailyOrders,
+  //         dailySalesProfit: result30.data.dailySalesProfit,
+  //         topVendorsByOrders: result1.data.topVendorsByOrders,
+  //         topVendorsBySales: result1.data.topVendorsBySales,
+  //         topProductsByOrders: result1.data.topProductsByOrders,
+  //       });
+  //     }
+  //   } catch (error) {
+  //     console.error("차트 데이터 로드 실패:", error);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
   // 날짜 포맷팅 (MM/DD)
   const formatDate = (dateStr: string) => {
@@ -345,13 +345,13 @@ export default function App() {
                 <Bar
                   data={{
                     labels: chartData.dailyOrders.map((item) =>
-                      formatDate(item.date)
+                      formatDate(item.date),
                     ),
                     datasets: [
                       {
                         label: "주문 수량",
                         data: chartData.dailyOrders.map(
-                          (item) => item.orderCount
+                          (item) => item.orderCount,
                         ),
                         backgroundColor: "#3b82f6",
                       },
@@ -419,14 +419,14 @@ export default function App() {
                   type="bar"
                   data={{
                     labels: chartData.dailySalesProfit.map((item) =>
-                      formatDate(item.date)
+                      formatDate(item.date),
                     ),
                     datasets: [
                       {
                         type: "bar" as const,
                         label: "매출",
                         data: chartData.dailySalesProfit.map(
-                          (item) => item.sales
+                          (item) => item.sales,
                         ),
                         backgroundColor: "#10b981",
                         yAxisID: "y",
@@ -435,7 +435,7 @@ export default function App() {
                         type: "line" as const,
                         label: "이익",
                         data: chartData.dailySalesProfit.map(
-                          (item) => item.profit
+                          (item) => item.profit,
                         ),
                         borderColor: "#f59e0b",
                         backgroundColor: "#f59e0b",
@@ -463,7 +463,7 @@ export default function App() {
                               return `이익: ${formatCurrency(value)}`;
                             }
                             return `${context.dataset.label}: ${formatCurrency(
-                              value
+                              value,
                             )}`;
                           },
                         },
@@ -516,13 +516,13 @@ export default function App() {
                 <Bar
                   data={{
                     labels: chartData.topVendorsByOrders.map(
-                      (item) => item.vendorName
+                      (item) => item.vendorName,
                     ),
                     datasets: [
                       {
                         label: "주문 수량",
                         data: chartData.topVendorsByOrders.map(
-                          (item) => item.orderCount
+                          (item) => item.orderCount,
                         ),
                         backgroundColor: chartData.topVendorsByOrders.map(
                           (_, index) => {
@@ -534,7 +534,7 @@ export default function App() {
                               "#4c1d95",
                             ];
                             return colors[index % 5];
-                          }
+                          },
                         ),
                       },
                     ],
@@ -585,13 +585,13 @@ export default function App() {
                 <Bar
                   data={{
                     labels: chartData.topVendorsBySales.map(
-                      (item) => item.vendorName
+                      (item) => item.vendorName,
                     ),
                     datasets: [
                       {
                         label: "매출",
                         data: chartData.topVendorsBySales.map(
-                          (item) => item.sales
+                          (item) => item.sales,
                         ),
                         backgroundColor: chartData.topVendorsBySales.map(
                           (_, index) => {
@@ -603,7 +603,7 @@ export default function App() {
                               "#064e3b",
                             ];
                             return colors[index % 5];
-                          }
+                          },
                         ),
                       },
                     ],
@@ -655,13 +655,13 @@ export default function App() {
                 <Bar
                   data={{
                     labels: chartData.topProductsByOrders.map(
-                      (item) => item.sabangName
+                      (item) => item.sabangName,
                     ),
                     datasets: [
                       {
                         label: "주문 수량",
                         data: chartData.topProductsByOrders.map(
-                          (item) => item.orderCount
+                          (item) => item.orderCount,
                         ),
                         backgroundColor: chartData.topProductsByOrders.map(
                           (_, index) => {
@@ -673,7 +673,7 @@ export default function App() {
                               "#831843",
                             ];
                             return colors[index % 5];
-                          }
+                          },
                         ),
                       },
                     ],

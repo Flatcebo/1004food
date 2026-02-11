@@ -138,11 +138,11 @@ export async function POST(request: NextRequest) {
           (typeof nextAfterAddress === "string" &&
             nextAfterAddress.trim() === "");
 
-        // 빈 열이 없을 때만 추가
+        // 빈 열이 없을 때만 추가 (I열: 수량)
         if (!isNextEmpty) {
           columnOrder = [
             ...columnOrder.slice(0, secondAddressIndex + 1),
-            "", // 두 번째 주소 바로 다음에 빈 열 추가
+            "수량", // 두 번째 주소 바로 다음에 수량 열 추가 (I열)
             ...columnOrder.slice(secondAddressIndex + 1),
           ];
         }
@@ -749,9 +749,15 @@ export async function POST(request: NextRequest) {
 
         // CJ외주 발주서인 경우 특별 처리
         if (isCJOutsource) {
-          // 빈 헤더인 경우 빈 값 반환
+          // 빈 헤더인 경우(과거 호환): 각 주문의 수량 입력
           if (!headerStr || headerStr.trim() === "") {
-            return "";
+            const qty =
+              row["수량"] ??
+              row["quantity"] ??
+              row["주문수량"] ??
+              row["총수량"] ??
+              "";
+            return qty !== "" && qty != null ? String(qty) : "";
           }
 
           // 업체명 헤더인 경우 납품업체명(업체명) 값 반환
