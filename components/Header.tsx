@@ -2,6 +2,7 @@
 
 import {usePathname, useRouter} from "next/navigation";
 import {useAuthStore} from "@/stores/authStore";
+import {useTabStore, loadTabConfigFromStorage} from "@/stores/tabStore";
 import Link from "next/link";
 import {useState, useEffect} from "react";
 
@@ -12,16 +13,33 @@ const menuNames: {[key: string]: string} = {
   "/upload/templates": "양식 템플릿 관리",
 };
 
+interface TabItem {
+  id: string;
+  path: string;
+  name: string;
+}
+
 interface HeaderProps {
   onToggleSidebar?: () => void;
   isSidebarOpen?: boolean;
+  activeTab?: TabItem | null;
 }
 
 export default function Header({
   onToggleSidebar,
   isSidebarOpen = false,
+  activeTab = null,
 }: HeaderProps) {
   const pathname = usePathname();
+  const {tabs, setTabs} = useTabStore();
+  const [hasSavedConfig, setHasSavedConfig] = useState(false);
+
+  useEffect(() => {
+    setHasSavedConfig(
+      typeof localStorage !== "undefined" &&
+        !!localStorage.getItem("tab-saved-config"),
+    );
+  }, [tabs]);
   const router = useRouter();
   const {user, isAuthenticated, logout} = useAuthStore();
   const [mounted, setMounted] = useState(false);
@@ -30,8 +48,9 @@ export default function Header({
     setMounted(true);
   }, []);
 
-  // 현재 경로에 맞는 메뉴명 가져오기
+  // 탭 모드일 때는 활성 탭 이름, 아니면 경로 기반 메뉴명
   const currentMenuName =
+    activeTab?.name ||
     menuNames[pathname || ""] ||
     (pathname === "/upload"
       ? "발주서 업로드"
@@ -82,7 +101,7 @@ export default function Header({
   };
 
   return (
-    <header className="w-full h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 shadow-sm">
+    <header className="w-full h-14 bg-white border-b border-gray-200 flex items-center justify-between px-6 shadow-sm">
       {/* 좌측: 사이드바 토글 버튼 + 현재 메뉴명 */}
       <div className="flex items-center gap-4">
         {onToggleSidebar && (
@@ -118,9 +137,20 @@ export default function Header({
             )}
           </button>
         )}
-        <h1 className="text-lg font-semibold text-gray-800">
+        <h1 className="text-md font-semibold text-gray-800">
           {currentMenuName}
         </h1>
+        {hasSavedConfig && tabs.length === 0 && (
+          <button
+            onClick={() => {
+              const saved = loadTabConfigFromStorage();
+              if (saved?.length) setTabs(saved);
+            }}
+            className="ml-2 px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-md"
+          >
+            탭 불러오기
+          </button>
+        )}
       </div>
 
       {/* {mounted && (user?.grade === "관리자" || user?.grade === "온라인") && (

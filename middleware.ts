@@ -30,6 +30,11 @@ const publicRoutes = [
 export function middleware(request: NextRequest) {
   const {pathname} = request.nextUrl;
 
+  // embed=1 쿼리 파라미터: 탭 iframe용, 사이드바 없이 렌더 (깜빡임 방지)
+  const isEmbed = request.nextUrl.searchParams.get("embed") === "1";
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-embed-mode", isEmbed ? "1" : "0");
+
   // API 경로는 별도 처리 (API 라우트는 자체 인증 처리)
   if (pathname.startsWith("/api/")) {
     // 인증 API는 항상 허용
@@ -42,32 +47,32 @@ export function middleware(request: NextRequest) {
 
   // 공개 경로는 항상 허용
   if (publicRoutes.includes(pathname)) {
-    return NextResponse.next();
+    return NextResponse.next({request: {headers: requestHeaders}});
   }
 
   // 보호된 경로인지 확인
   // 루트 경로는 정확히 일치해야 함
-  const isProtectedRoute = 
-    pathname === "/" || 
-    protectedRoutes.some((route) => 
-      route !== "/" && pathname.startsWith(route)
+  const isProtectedRoute =
+    pathname === "/" ||
+    protectedRoutes.some(
+      (route) => route !== "/" && pathname.startsWith(route),
     );
 
   if (isProtectedRoute) {
     // 쿠키에서 인증 정보 확인 (서버 사이드에서는 localStorage 접근 불가)
     // 클라이언트 사이드에서 리다이렉트하도록 처리
-    // 여기서는 쿠키나 헤더를 확인할 수 있지만, 
+    // 여기서는 쿠키나 헤더를 확인할 수 있지만,
     // 실제로는 클라이언트 사이드에서 localStorage를 확인하는 것이 더 안전
-    
+
     // 쿠키 확인 (선택사항 - 향후 JWT 토큰 사용 시)
     const authCookie = request.cookies.get("auth-token");
-    
+
     // 현재는 클라이언트 사이드에서 처리하도록 허용
     // 실제 프로덕션에서는 서버 사이드 세션이나 JWT 토큰을 사용해야 함
-    return NextResponse.next();
+    return NextResponse.next({request: {headers: requestHeaders}});
   }
 
-  return NextResponse.next();
+  return NextResponse.next({request: {headers: requestHeaders}});
 }
 
 /**

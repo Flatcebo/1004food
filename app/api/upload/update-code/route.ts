@@ -9,7 +9,7 @@ export async function PUT(request: NextRequest) {
     if (!companyId) {
       return NextResponse.json(
         {success: false, error: "company_id가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -19,7 +19,7 @@ export async function PUT(request: NextRequest) {
     if (!rowId || !codeData) {
       return NextResponse.json(
         {success: false, error: "rowId와 codeData가 필요합니다."},
-        {status: 400}
+        {status: 400},
       );
     }
 
@@ -34,7 +34,7 @@ export async function PUT(request: NextRequest) {
     if (existingRow.length === 0) {
       return NextResponse.json(
         {success: false, error: "해당 행을 찾을 수 없습니다."},
-        {status: 404}
+        {status: 404},
       );
     }
 
@@ -65,7 +65,9 @@ export async function PUT(request: NextRequest) {
     }
 
     // 디버깅: 업데이트 전 로그
-    console.log(`📝 [update-code] rowId=${rowId}, 새 매핑코드=${codeData.code}, 새 productId=${codeData.productId || 'N/A'}`);
+    console.log(
+      `📝 [update-code] rowId=${rowId}, 새 매핑코드=${codeData.code}, 새 productId=${codeData.productId || "N/A"}`,
+    );
     console.log(`📝 [update-code] 업데이트할 row_data:`, {
       매핑코드: updatedRowData.매핑코드,
       productId: updatedRowData.productId,
@@ -80,17 +82,19 @@ export async function PUT(request: NextRequest) {
           SELECT pr.purchase FROM products pr
           WHERE pr.id = ${codeData.productId} AND pr.company_id = ${companyId}
         `;
-        
+
         if (productResult.length > 0 && productResult[0].purchase) {
           // purchase 이름으로 purchase 테이블에서 id 조회
           const purchaseResult = await sql`
             SELECT id FROM purchase
             WHERE name = ${productResult[0].purchase} AND company_id = ${companyId}
           `;
-          
+
           if (purchaseResult.length > 0) {
             purchaseId = purchaseResult[0].id;
-            console.log(`📝 [update-code] 매입처 연결: productId=${codeData.productId}, purchase=${productResult[0].purchase}, purchaseId=${purchaseId}`);
+            console.log(
+              `📝 [update-code] 매입처 연결: productId=${codeData.productId}, purchase=${productResult[0].purchase}, purchaseId=${purchaseId}`,
+            );
           }
         }
       } catch (error) {
@@ -120,7 +124,7 @@ export async function PUT(request: NextRequest) {
     if (result.length === 0) {
       return NextResponse.json(
         {success: false, error: "업데이트 실패"},
-        {status: 500}
+        {status: 500},
       );
     }
 
@@ -132,7 +136,7 @@ export async function PUT(request: NextRequest) {
     console.error("매핑코드 업데이트 실패:", error);
     return NextResponse.json(
       {success: false, error: error.message},
-      {status: 500}
+      {status: 500},
     );
   }
 }

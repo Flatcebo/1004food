@@ -888,14 +888,16 @@ export async function POST(request: NextRequest) {
             "";
           let messageStr = String(currentMessage).trim();
 
-          // 기존 ★ 이후 부분 제거 (이전에 추가된 ★ 코드 모두 제거)
-          if (messageStr.includes("★")) {
-            messageStr = messageStr.split("★")[0].trim();
-          }
+          // 기존 ★코드 패턴만 제거 (★내부코드, ★주문번호 등) - 실제 배송 요청 메시지는 유지
+          const pureMessage = messageStr
+            .replace(/★\s*[0-9]+/g, "") // ★ 뒤 숫자(내부코드/주문번호) 제거
+            .replace(/★\s*주문번호/g, "") // ★주문번호 제거
+            .replace(/\s+/g, " ") // 연속 공백 정리
+            .trim();
 
-          // ★내부코드 추가
-          const newMessage = messageStr
-            ? `${messageStr}★${currentInternalCode}`
+          // ★내부코드를 맨 앞에 배치, 기존 배송메시지 유지
+          const newMessage = pureMessage
+            ? `★${currentInternalCode} ${pureMessage}`
             : `★${currentInternalCode}`;
 
           // 해당하는 컬럼명에 저장

@@ -25,22 +25,27 @@ function formatPhoneNumber(phoneNumber: string): string {
 
   // 02 지역번호 (02-XXXX-XXXX)
   if (numOnly.startsWith("02")) {
-    if (numOnly.length === 9) { // 02-XXX-XXXX
+    if (numOnly.length === 9) {
+      // 02-XXX-XXXX
       return `${numOnly.slice(0, 2)}-${numOnly.slice(2, 5)}-${numOnly.slice(5)}`;
-    } else if (numOnly.length === 10) { // 02-XXXX-XXXX
+    } else if (numOnly.length === 10) {
+      // 02-XXXX-XXXX
       return `${numOnly.slice(0, 2)}-${numOnly.slice(2, 6)}-${numOnly.slice(6)}`;
     }
   }
   // 휴대폰 및 기타 지역번호 (0XX-XXXX-XXXX)
-  else if (numOnly.startsWith("0") && numOnly.length === 11) { // 010-XXXX-XXXX 등
+  else if (numOnly.startsWith("0") && numOnly.length === 11) {
+    // 010-XXXX-XXXX 등
     return `${numOnly.slice(0, 3)}-${numOnly.slice(3, 7)}-${numOnly.slice(7)}`;
   }
   // 0508 대역 (0508-XXXX-XXXX)
-  else if (numOnly.startsWith("0508") && numOnly.length === 12) { // 0508-XXXX-XXXX
+  else if (numOnly.startsWith("0508") && numOnly.length === 12) {
+    // 0508-XXXX-XXXX
     return `${numOnly.slice(0, 4)}-${numOnly.slice(4, 8)}-${numOnly.slice(8)}`;
   }
   // 050X 대역 (050X-XXXX-XXXX) - 0508 제외
-  else if (numOnly.startsWith("050") && numOnly.length === 12) { // 050X-XXXX-XXXX (0500, 0501, 0502, 0503, 0504, 0505, 0506, 0507, 0509)
+  else if (numOnly.startsWith("050") && numOnly.length === 12) {
+    // 050X-XXXX-XXXX (0500, 0501, 0502, 0503, 0504, 0505, 0506, 0507, 0509)
     return `${numOnly.slice(0, 4)}-${numOnly.slice(4, 8)}-${numOnly.slice(8)}`;
   }
 
@@ -52,7 +57,12 @@ function formatPhoneNumber(phoneNumber: string): string {
 export function mapDataToTemplate(
   row: any,
   header: string,
-  options?: {templateName?: string; preferSabangName?: boolean; isInhouse?: boolean; formatPhone?: boolean}
+  options?: {
+    templateName?: string;
+    preferSabangName?: boolean;
+    isInhouse?: boolean;
+    formatPhone?: boolean;
+  },
 ): any {
   // 절대값으로 설정할 필드들
   const normalizedHeader = header.replace(/\s+/g, "").toLowerCase();
@@ -161,7 +171,12 @@ export function mapDataToTemplate(
           "";
       }
       // 전화번호 (주문자 전화번호)
-      else if (header === "전화번호" || (normalizedHeader === "전화번호" && !header.includes("1") && !header.includes("2"))) {
+      else if (
+        header === "전화번호" ||
+        (normalizedHeader === "전화번호" &&
+          !header.includes("1") &&
+          !header.includes("2"))
+      ) {
         phoneValue =
           row["전화번호"] ||
           row["주문자전화번호"] ||
@@ -200,6 +215,22 @@ export function mapDataToTemplate(
     return numValue === "" ? "" : prepareExcelCellValue(numValue, true);
   }
 
+  // 판매가 헤더 (사방넷 등록 양식 등): productId 기반 sale_price가 주입된 값 사용
+  if (
+    normalizedHeader.includes("판매가") ||
+    header === "판매가" ||
+    header.includes("판매가")
+  ) {
+    const priceValue =
+      row["판매가"] ||
+      row["sale_price"] ||
+      row["salePrice"] ||
+      row["가격"] ||
+      "";
+    const numValue = normalizeNumberValue(priceValue);
+    return numValue === "" ? "" : prepareExcelCellValue(numValue, true);
+  }
+
   // 일반 가격 필드 처리 (공급가가 아닌 경우, 숫자로 변환)
   if (
     normalizedHeader.includes("가격") &&
@@ -231,12 +262,16 @@ export function mapDataToTemplate(
   ) {
     // preferSabangName이 true이고 사방넷명이 있으면 사방넷명 사용
     const shouldUseSabangName = options?.preferSabangName !== false; // 기본값은 true
-    
+
     if (shouldUseSabangName) {
       // 사방넷명이 있으면 사방넷명 사용
       const sabangValue =
         row["사방넷명"] || row["sabangName"] || row["sabang_name"] || "";
-      if (sabangValue !== null && sabangValue !== undefined && sabangValue !== "") {
+      if (
+        sabangValue !== null &&
+        sabangValue !== undefined &&
+        sabangValue !== ""
+      ) {
         const sabangStr = normalizeStringValue(sabangValue);
         // 빈 문자열이 아닌 경우에만 사방넷명 사용
         if (sabangStr && sabangStr.trim() !== "") {
@@ -291,21 +326,21 @@ export function mapDataToTemplate(
 export function sortExcelData(
   excelData: any[][],
   columnOrder: string[],
-  options?: {preferSabangName?: boolean; originalData?: any[]}
+  options?: {preferSabangName?: boolean; originalData?: any[]},
 ): any[][] {
   const 수취인명Idx = columnOrder.findIndex(
     (h: string) =>
       h === "수취인명" ||
       h === "수취인" ||
       (h && h.includes("수취인명")) ||
-      (h && h.includes("수취인"))
+      (h && h.includes("수취인")),
   );
   const 상품명Idx = columnOrder.findIndex(
     (h: string) =>
       h === "상품명" ||
       h === "상품" ||
       (h && h.includes("상품명")) ||
-      (h && h.includes("상품"))
+      (h && h.includes("상품")),
   );
 
   if (수취인명Idx === -1 && 상품명Idx === -1) {
@@ -319,21 +354,21 @@ export function sortExcelData(
     if (상품명Idx !== -1) {
       const a상품명 = String(a[상품명Idx] || "").trim();
       const b상품명 = String(b[상품명Idx] || "").trim();
-      
+
       // 상품명이 다르면 상품명으로 정렬
       const 상품명비교 = a상품명.localeCompare(b상품명, "ko");
       if (상품명비교 !== 0) {
         return 상품명비교;
       }
     }
-    
+
     // 2차 정렬: 수취인명 (상품명이 같은 경우 수취인명으로 정렬)
     if (수취인명Idx !== -1) {
       const a수취인명 = String(a[수취인명Idx] || "").trim();
       const b수취인명 = String(b[수취인명Idx] || "").trim();
       return a수취인명.localeCompare(b수취인명, "ko");
     }
-    
+
     return 0;
   });
 }

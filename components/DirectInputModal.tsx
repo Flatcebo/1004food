@@ -1,6 +1,7 @@
 "use client";
 
 import {useState, useEffect, useRef, useCallback, useMemo} from "react";
+import ModalPortal from "@/components/ModalPortal";
 import {
   TYPE_OPTIONS,
   POST_TYPE_OPTIONS,
@@ -86,7 +87,7 @@ export default function DirectInputModal({
         }
       }, 300);
     },
-    [handleSearchPurchase, onValueChange]
+    [handleSearchPurchase, onValueChange],
   );
 
   // purchase 선택 핸들러
@@ -106,7 +107,7 @@ export default function DirectInputModal({
         isSelectingRef.current = false;
       }, 200);
     },
-    [onValueChange]
+    [onValueChange],
   );
 
   // 외부 클릭 시 드롭다운 닫기
@@ -174,188 +175,190 @@ export default function DirectInputModal({
   if (!open) return null;
 
   return (
-    <div
-      onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[#00000080] bg-opacity-30"
-    >
+    <ModalPortal>
       <div
-        onClick={(e) => e.stopPropagation()}
-        className="bg-white shadow-xl rounded-xl px-8 py-7 min-w-[340px] max-w-[90vw] overflow-y-auto relative flex flex-col items-start"
+        onClick={onClose}
+        className="fixed inset-0 z-50 flex items-center justify-center bg-[#00000080] bg-opacity-30"
       >
-        <div className="font-bold text-lg mb-4 text-center text-[#333]">
-          신규 상품정보 직접 입력
-        </div>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            onSave();
-          }}
-          className="w-full"
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="bg-white shadow-xl rounded-xl px-8 py-7 min-w-[340px] max-w-[90vw] overflow-y-auto relative flex flex-col items-start"
         >
-          <table className="w-full text-xs mb-3 ">
-            <tbody className="w-full flex flex-col gap-[10px]">
-              {fields.map((key) => (
-                <tr key={key} className="flex gap-[6px]">
-                  <td className="pr-2 py-1 text-right font-medium text-gray-500 w-[75px]">
-                    {fieldNameMap[key] || key}
-                  </td>
-                  <td className="w-full">
-                    {key === "name" ? (
-                      <input
-                        type="text"
-                        className={`border border-[#e1e0e0] px-2 py-1 rounded w-full text-[#333] ${
-                          nameReadOnly ? "bg-gray-100" : ""
-                        }`}
-                        value={values.name || ""}
-                        readOnly={nameReadOnly}
-                        onChange={
-                          nameReadOnly
-                            ? undefined
-                            : (e) => onValueChange(key, e.target.value)
-                        }
-                      />
-                    ) : key === "type" ? (
-                      <select
-                        className="border border-[#e1e0e0] px-2 py-1 rounded w-full text-[#333]"
-                        value={values[key] || ""}
-                        onChange={(e) => onValueChange(key, e.target.value)}
-                      >
-                        {TYPE_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    ) : key === "postType" ? (
-                      <select
-                        className="border border-[#e1e0e0] px-2 py-1 rounded w-full text-[#333]"
-                        value={values[key] || ""}
-                        onChange={(e) => onValueChange(key, e.target.value)}
-                      >
-                        {POST_TYPE_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    ) : key === "billType" ? (
-                      <select
-                        className="border border-[#e1e0e0] px-2 py-1 rounded w-full text-[#333]"
-                        value={values[key] || ""}
-                        onChange={(e) => onValueChange(key, e.target.value)}
-                      >
-                        {BILL_TYPE_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    ) : key === "productType" ? (
-                      <select
-                        className="border border-[#e1e0e0] px-2 py-1 rounded w-full text-[#333]"
-                        value={values[key] || ""}
-                        onChange={(e) => onValueChange(key, e.target.value)}
-                      >
-                        {PRODUCT_TYPE_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    ) : key === "category" ? (
-                      <select
-                        className="border border-[#e1e0e0] px-2 py-1 rounded w-full text-[#333]"
-                        value={values[key] || ""}
-                        onChange={(e) => onValueChange(key, e.target.value)}
-                      >
-                        {CATEGORY_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    ) : key === "purchase" ? (
-                      <div className="relative w-full">
+          <div className="font-bold text-lg mb-4 text-center text-[#333]">
+            신규 상품정보 직접 입력
+          </div>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              onSave();
+            }}
+            className="w-full"
+          >
+            <table className="w-full text-xs mb-3 ">
+              <tbody className="w-full flex flex-col gap-[10px]">
+                {fields.map((key) => (
+                  <tr key={key} className="flex gap-[6px]">
+                    <td className="pr-2 py-1 text-right font-medium text-gray-500 w-[75px]">
+                      {fieldNameMap[key] || key}
+                    </td>
+                    <td className="w-full">
+                      {key === "name" ? (
                         <input
-                          ref={purchaseInputRef}
+                          type="text"
+                          className={`border border-[#e1e0e0] px-2 py-1 rounded w-full text-[#333] ${
+                            nameReadOnly ? "bg-gray-100" : ""
+                          }`}
+                          value={values.name || ""}
+                          readOnly={nameReadOnly}
+                          onChange={
+                            nameReadOnly
+                              ? undefined
+                              : (e) => onValueChange(key, e.target.value)
+                          }
+                        />
+                      ) : key === "type" ? (
+                        <select
+                          className="border border-[#e1e0e0] px-2 py-1 rounded w-full text-[#333]"
+                          value={values[key] || ""}
+                          onChange={(e) => onValueChange(key, e.target.value)}
+                        >
+                          {TYPE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : key === "postType" ? (
+                        <select
+                          className="border border-[#e1e0e0] px-2 py-1 rounded w-full text-[#333]"
+                          value={values[key] || ""}
+                          onChange={(e) => onValueChange(key, e.target.value)}
+                        >
+                          {POST_TYPE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : key === "billType" ? (
+                        <select
+                          className="border border-[#e1e0e0] px-2 py-1 rounded w-full text-[#333]"
+                          value={values[key] || ""}
+                          onChange={(e) => onValueChange(key, e.target.value)}
+                        >
+                          {BILL_TYPE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : key === "productType" ? (
+                        <select
+                          className="border border-[#e1e0e0] px-2 py-1 rounded w-full text-[#333]"
+                          value={values[key] || ""}
+                          onChange={(e) => onValueChange(key, e.target.value)}
+                        >
+                          {PRODUCT_TYPE_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : key === "category" ? (
+                        <select
+                          className="border border-[#e1e0e0] px-2 py-1 rounded w-full text-[#333]"
+                          value={values[key] || ""}
+                          onChange={(e) => onValueChange(key, e.target.value)}
+                        >
+                          {CATEGORY_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : key === "purchase" ? (
+                        <div className="relative w-full">
+                          <input
+                            ref={purchaseInputRef}
+                            type="text"
+                            className="border border-[#e1e0e0] px-2 py-1 rounded w-full text-[#333]"
+                            value={purchaseSearchQuery}
+                            onChange={(e) =>
+                              handlePurchaseInputChange(e.target.value)
+                            }
+                            onFocus={() => {
+                              if (
+                                purchaseSuggestions.length > 0 &&
+                                !isSelectingRef.current
+                              ) {
+                                setShowPurchaseDropdown(true);
+                              }
+                            }}
+                            placeholder="매입처 입력 또는 선택"
+                          />
+                          {showPurchaseDropdown &&
+                            purchaseSuggestions.length > 0 && (
+                              <div
+                                ref={purchaseDropdownRef}
+                                className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto"
+                              >
+                                {purchaseSuggestions.map((option) => (
+                                  <div
+                                    key={option.id}
+                                    className="px-3 py-2 hover:bg-blue-100 cursor-pointer text-sm"
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      handlePurchaseSelect(e, option.name);
+                                    }}
+                                  >
+                                    {option.name}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                        </div>
+                      ) : (
+                        <input
                           type="text"
                           className="border border-[#e1e0e0] px-2 py-1 rounded w-full text-[#333]"
-                          value={purchaseSearchQuery}
-                          onChange={(e) =>
-                            handlePurchaseInputChange(e.target.value)
-                          }
-                          onFocus={() => {
-                            if (
-                              purchaseSuggestions.length > 0 &&
-                              !isSelectingRef.current
-                            ) {
-                              setShowPurchaseDropdown(true);
-                            }
-                          }}
-                          placeholder="매입처 입력 또는 선택"
+                          value={values[key] || ""}
+                          onChange={(e) => onValueChange(key, e.target.value)}
                         />
-                        {showPurchaseDropdown &&
-                          purchaseSuggestions.length > 0 && (
-                            <div
-                              ref={purchaseDropdownRef}
-                              className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto"
-                            >
-                              {purchaseSuggestions.map((option) => (
-                                <div
-                                  key={option.id}
-                                  className="px-3 py-2 hover:bg-blue-100 cursor-pointer text-sm"
-                                  onMouseDown={(e) => {
-                                    e.preventDefault();
-                                    handlePurchaseSelect(e, option.name);
-                                  }}
-                                >
-                                  {option.name}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                      </div>
-                    ) : (
-                      <input
-                        type="text"
-                        className="border border-[#e1e0e0] px-2 py-1 rounded w-full text-[#333]"
-                        value={values[key] || ""}
-                        onChange={(e) => onValueChange(key, e.target.value)}
-                      />
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="flex flex-row gap-4 justify-end mt-4">
-            <button
-              type="button"
-              className="bg-gray-200 px-4 py-2 rounded hover:bg-gray-300 text-xs font-semibold"
-              onClick={onClose}
-            >
-              닫기
-            </button>
-            <button
-              type="submit"
-              disabled={!isFormValid}
-              className={`px-4 py-2 rounded text-xs text-white font-semibold ${
-                isFormValid
-                  ? "bg-blue-600 hover:bg-blue-700 cursor-pointer"
-                  : "bg-gray-400 cursor-not-allowed"
-              }`}
-            >
-              저장
-            </button>
-          </div>
-        </form>
-        <button
-          className="absolute top-2 right-4 text-gray-400 hover:text-black text-[24px]"
-          onClick={onClose}
-        >
-          ×
-        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="flex flex-row gap-4 justify-end mt-4">
+              <button
+                type="button"
+                className="bg-gray-200 px-4 py-2 rounded hover:bg-gray-300 text-xs font-semibold"
+                onClick={onClose}
+              >
+                닫기
+              </button>
+              <button
+                type="submit"
+                disabled={!isFormValid}
+                className={`px-4 py-2 rounded text-xs text-white font-semibold ${
+                  isFormValid
+                    ? "bg-blue-600 hover:bg-blue-700 cursor-pointer"
+                    : "bg-gray-400 cursor-not-allowed"
+                }`}
+              >
+                저장
+              </button>
+            </div>
+          </form>
+          <button
+            className="absolute top-2 right-4 text-gray-400 hover:text-black text-[24px]"
+            onClick={onClose}
+          >
+            ×
+          </button>
+        </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }

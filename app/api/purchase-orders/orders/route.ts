@@ -1,6 +1,7 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
 import {getCompanyIdFromRequest} from "@/lib/company";
+import {getTodayDate} from "@/utils/date";
 
 /**
  * 특정 매입처의 주문 상세 목록 조회 API
@@ -32,10 +33,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 오늘 날짜 기본값
-    const today = new Date().toISOString().split("T")[0];
+    // 오늘 날짜 기본값 (한국 시간 기준)
+    const today = getTodayDate();
     const queryStartDate = startDate || today;
     const queryEndDate = endDate || today;
+
+    // 한국 시간(KST) 기준으로 날짜 범위를 UTC로 변환
+    // 예: 2026-02-12 → 한국 00:00:00 ~ 23:59:59 = UTC 2026-02-11 15:00 ~ 2026-02-12 14:59
+    const startKoreaStr = `${queryStartDate}T00:00:00+09:00`;
+    const endKoreaStr = `${queryEndDate}T23:59:59.999+09:00`;
+    const dateFromUTC = new Date(startKoreaStr);
+    const dateToUTC = new Date(endKoreaStr);
 
     // 매입처 정보 조회
     let purchase;
@@ -70,6 +78,10 @@ export async function GET(request: NextRequest) {
       orderFilterCondition = sql`AND (ur.is_ordered = false OR ur.is_ordered IS NULL)`;
     }
 
+    // 날짜 조건: 업로드일(u.created_at) 또는 발주일(ob.batch_date)이 기간 내
+    // - 미발주 주문: 업로드일만 해당
+    // - 발주된 주문: 업로드일 또는 배치 발주일(batch_date)이 기간 내면 포함
+    //   (1차가 전날 업로드·당일 발주된 경우도 당일 조회에 포함)
     const orders = await sql`
       SELECT DISTINCT ON (ur.id)
         ur.id,
@@ -102,8 +114,16 @@ export async function GET(request: NextRequest) {
       LEFT JOIN order_batches ob ON ur.order_batch_id = ob.id
       WHERE ur.purchase_id = ${purchase.id}
         AND ur.row_data->>'주문상태' NOT IN ('취소')
-        AND u.created_at >= ${queryStartDate}::date
-        AND u.created_at < (${queryEndDate}::date + INTERVAL '1 day')
+        AND (
+          (u.created_at >= ${dateFromUTC.toISOString()}::timestamptz
+            AND u.created_at <= ${dateToUTC.toISOString()}::timestamptz)
+          OR (
+            ur.is_ordered = true
+            AND ob.id IS NOT NULL
+            AND ob.batch_date >= ${queryStartDate}::date
+            AND ob.batch_date <= ${queryEndDate}::date
+          )
+        )
         ${orderFilterCondition}
       ORDER BY ur.id, u.created_at DESC
     `;

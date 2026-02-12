@@ -1,3 +1,7 @@
+"use client";
+
+import ModalPortal from "@/components/ModalPortal";
+
 export default function ModalTable({
   open,
   onClose,
@@ -15,47 +19,49 @@ export default function ModalTable({
 }) {
   if (!open) return null;
   return (
-    <div
-      onClick={onClose}
-      className="fixed inset-0 backdrop-blur-xs flex justify-center items-center z-50 bg-[#00000053]"
-    >
+    <ModalPortal>
       <div
-        className="bg-white p-10 rounded-lg w-[90vw] h-[90vh] overflow-auto relative z-60"
-        onClick={(e) => e.stopPropagation()}
+        onClick={onClose}
+        className="fixed inset-0 backdrop-blur-xs flex justify-center items-center z-50 bg-[#00000053]"
       >
-        <button
-          onClick={onClose}
-          className="absolute top-0 right-4 text-gray-500 hover:text-gray-700 text-[32px]"
-          aria-label="Close"
+        <div
+          className="bg-white p-10 rounded-lg w-[90vw] h-[90vh] overflow-auto relative z-60"
+          onClick={(e) => e.stopPropagation()}
         >
-          ×
-        </button>
-        {children}
+          <button
+            onClick={onClose}
+            className="absolute top-0 right-4 text-gray-500 hover:text-gray-700 text-[32px]"
+            aria-label="Close"
+          >
+            ×
+          </button>
+          {children}
 
-        <div className="relative bottom-0 w-full h-[80px] flex flex-col items-end gap-[8px] mt-4">
-          <div className="flex flex-row items-center justify-end gap-[16px] text-white font-semibold">
-            {!hideSubmitButton && (
+          <div className="relative bottom-0 w-full h-[80px] flex flex-col items-end gap-[8px] mt-4">
+            <div className="flex flex-row items-center justify-end gap-[16px] text-white font-semibold">
+              {!hideSubmitButton && (
+                <button
+                  onClick={onSubmit}
+                  disabled={disabled}
+                  className={`px-[32px] py-[10px] rounded-md transition-colors ${
+                    disabled
+                      ? "bg-gray-400 cursor-not-allowed"
+                      : "bg-[#1ca2fb] hover:bg-[#1ca2fba0]"
+                  }`}
+                >
+                  Upload
+                </button>
+              )}
               <button
-                onClick={onSubmit}
-                disabled={disabled}
-                className={`px-[32px] py-[10px] rounded-md transition-colors ${
-                  disabled
-                    ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-[#1ca2fb] hover:bg-[#1ca2fba0]"
-                }`}
+                onClick={onClose}
+                className="bg-[#fc5656] hover:bg-[#fc5656a0] px-[32px] py-[10px] rounded-md transition-colors"
               >
-                Upload
+                Cancel
               </button>
-            )}
-            <button
-              onClick={onClose}
-              className="bg-[#fc5656] hover:bg-[#fc5656a0] px-[32px] py-[10px] rounded-md transition-colors"
-            >
-              Cancel
-            </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }

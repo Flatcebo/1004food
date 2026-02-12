@@ -4,9 +4,20 @@ import {usePathname} from "next/navigation";
 import {useState, useEffect} from "react";
 import SideBar from "@/components/SideBar";
 import Header from "@/components/Header";
+import TabBar from "@/components/TabBar";
+import {useTabStore} from "@/stores/tabStore";
 
-export default function LayoutWrapper({children}: {children: React.ReactNode}) {
+interface LayoutWrapperProps {
+  children: React.ReactNode;
+  isEmbedFromServer?: boolean;
+}
+
+export default function LayoutWrapper({
+  children,
+  isEmbedFromServer = false,
+}: LayoutWrapperProps) {
   const pathname = usePathname();
+  const {tabs, activeTabId} = useTabStore();
   const isViewPage = pathname?.startsWith("/upload/view");
   const isPreviewPage = pathname?.startsWith("/upload/preview");
   const isLoginPage = pathname === "/login";
@@ -15,6 +26,10 @@ export default function LayoutWrapper({children}: {children: React.ReactNode}) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobile, setIsMobile] = useState<boolean | null>(null); // null로 초기화하여 hydration mismatch 방지
   const [mounted, setMounted] = useState(false);
+  // 서버에서 embed=1로 판단했거나, 클라이언트에서 iframe 내부인 경우
+  const isEmbed =
+    isEmbedFromServer ||
+    (typeof window !== "undefined" && window.self !== window.top);
 
   useEffect(() => {
     setMounted(true);
@@ -38,7 +53,19 @@ export default function LayoutWrapper({children}: {children: React.ReactNode}) {
     setIsSidebarOpen(!isSidebarOpen);
   };
 
-  if (isViewPage || isPreviewPage || isLoginPage || isRegisterPage || isUserLogPage) {
+  // iframe 안에서 로드된 경우: 레이아웃 없이 콘텐츠만 표시 (탭 전환 시 상태 유지)
+  // isEmbed면 mounted 여부와 상관없이 즉시 embed 콘텐츠만 렌더 (사이드바 노출 방지)
+  if (isEmbed) {
+    return <div className="w-full h-full overflow-auto">{children}</div>;
+  }
+
+  if (
+    isViewPage ||
+    isPreviewPage ||
+    isLoginPage ||
+    isRegisterPage ||
+    isUserLogPage
+  ) {
     return <>{children}</>;
   }
 
@@ -50,7 +77,10 @@ export default function LayoutWrapper({children}: {children: React.ReactNode}) {
           <SideBar />
         </div>
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Header onToggleSidebar={toggleSidebar} isSidebarOpen={isSidebarOpen} />
+          <Header
+            onToggleSidebar={toggleSidebar}
+            isSidebarOpen={isSidebarOpen}
+          />
           <div className="flex-1 overflow-auto">{children}</div>
         </div>
       </div>
@@ -84,8 +114,34 @@ export default function LayoutWrapper({children}: {children: React.ReactNode}) {
       )}
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header onToggleSidebar={toggleSidebar} isSidebarOpen={isSidebarOpen} />
-        <div className="flex-1 overflow-auto">{children}</div>
+        <Header
+          onToggleSidebar={toggleSidebar}
+          isSidebarOpen={isSidebarOpen}
+          activeTab={tabs.find((t) => t.id === activeTabId)}
+        />
+        {tabs.length > 0 ? (
+          <>
+            <TabBar />
+            <div className="flex-1 relative overflow-hidden">
+              {tabs.map((tab) => (
+                <div
+                  key={tab.id}
+                  className={`absolute inset-0 w-full h-full ${
+                    activeTabId === tab.id ? "block" : "hidden"
+                  }`}
+                >
+                  <iframe
+                    src={`${tab.path}${tab.path.includes("?") ? "&" : "?"}embed=1`}
+                    title={tab.name}
+                    className="w-full h-full border-0"
+                  />
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 overflow-auto">{children}</div>
+        )}
       </div>
     </div>
   );

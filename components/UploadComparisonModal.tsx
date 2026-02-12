@@ -1,6 +1,7 @@
 "use client";
 
 import {useState, useEffect} from "react";
+import ModalPortal from "@/components/ModalPortal";
 import {getAuthHeaders} from "@/utils/api";
 import {IoClose} from "react-icons/io5";
 
@@ -41,7 +42,7 @@ export default function UploadComparisonModal({
         `/api/logs/uploads/${uploadId}?source=${source}`,
         {
           headers,
-        }
+        },
       );
       const result = await response.json();
 
@@ -74,7 +75,7 @@ export default function UploadComparisonModal({
     row: any,
     index: number,
     isOriginal: boolean,
-    headers: string[]
+    headers: string[],
   ) => {
     if (!row) return null;
     const savedRow =
@@ -191,113 +192,115 @@ export default function UploadComparisonModal({
 
   // 숨길 헤더 제거
   const visibleHeaders = allHeaders.filter(
-    (header) => !hiddenHeaders.includes(header)
+    (header) => !hiddenHeaders.includes(header),
   );
 
   return (
-    <div className="fixed inset-0 bg-black/30 bg-opacity-50 flex items-center justify-center z-50 p-2">
-      <div className="bg-white rounded-lg w-[98vw] h-[98vh] flex flex-col shadow-2xl">
-        {/* 헤더 */}
-        <div className="flex justify-between items-center p-4 border-b border-gray-200 shrink-0">
-          <div>
-            <h2 className="text-xl font-bold text-gray-800">{fileName}</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              업체명: {data.vendorName || "-"} | 업로드 시간:{" "}
-              {new Date(data.uploadTime).toLocaleString("ko-KR")}
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-gray-500 hover:text-gray-700 transition-colors"
-          >
-            <IoClose size={24} />
-          </button>
-        </div>
-
-        {/* 내용 */}
-        <div className="flex-1 overflow-hidden p-4 flex flex-col gap-4">
-          {/* 상단: 원본 데이터 */}
-          <div className="flex flex-col flex-1 min-h-0">
-            <h3 className="text-lg font-semibold text-gray-800 mb-2 bg-blue-50 p-2 rounded shrink-0">
-              업로드 당시 주문 Row (원본)
-            </h3>
-            <div className="flex-1 overflow-auto border border-gray-200 rounded min-h-0">
-              {data.originalData.length === 0 ? (
-                <div className="p-4 text-center text-gray-500">
-                  원본 데이터가 없습니다.
-                </div>
-              ) : (
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50 sticky top-0 z-10">
-                    <tr>
-                      {visibleHeaders.map((header) => (
-                        <th
-                          key={header}
-                          className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border"
-                          style={{height: "40px"}}
-                        >
-                          {header}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {data.originalData.map((row, index) =>
-                      renderRow(row, index, true, visibleHeaders)
-                    )}
-                  </tbody>
-                </table>
-              )}
+    <ModalPortal>
+      <div className="fixed inset-0 bg-black/30 bg-opacity-50 flex items-center justify-center z-50 p-2">
+        <div className="bg-white rounded-lg w-[98vw] h-[98vh] flex flex-col shadow-2xl">
+          {/* 헤더 */}
+          <div className="flex justify-between items-center p-4 border-b border-gray-200 shrink-0">
+            <div>
+              <h2 className="text-xl font-bold text-gray-800">{fileName}</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                업체명: {data.vendorName || "-"} | 업로드 시간:{" "}
+                {new Date(data.uploadTime).toLocaleString("ko-KR")}
+              </p>
             </div>
+            <button
+              onClick={onClose}
+              className="text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              <IoClose size={24} />
+            </button>
           </div>
 
-          {/* 하단: 저장된 데이터 */}
-          <div className="flex flex-col flex-1 min-h-0">
-            <h3 className="text-lg font-semibold text-gray-800 mb-2 bg-green-50 p-2 rounded shrink-0">
-              DB에 저장한 주문 Row
-            </h3>
-            <div className="flex-1 overflow-auto border border-gray-200 rounded min-h-0">
-              {data.savedData.length === 0 ? (
-                <div className="p-4 text-center text-gray-500">
-                  저장된 데이터가 없습니다.
-                </div>
-              ) : (
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50 sticky top-0 z-10">
-                    <tr>
-                      {visibleHeaders.map((header) => (
-                        <th
-                          key={header}
-                          className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border"
-                          style={{height: "40px"}}
-                        >
-                          {header}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {data.savedData.map((row, index) =>
-                      renderRow(row, index, false, visibleHeaders)
-                    )}
-                  </tbody>
-                </table>
-              )}
+          {/* 내용 */}
+          <div className="flex-1 overflow-hidden p-4 flex flex-col gap-4">
+            {/* 상단: 원본 데이터 */}
+            <div className="flex flex-col flex-1 min-h-0">
+              <h3 className="text-lg font-semibold text-gray-800 mb-2 bg-blue-50 p-2 rounded shrink-0">
+                업로드 당시 주문 Row (원본)
+              </h3>
+              <div className="flex-1 overflow-auto border border-gray-200 rounded min-h-0">
+                {data.originalData.length === 0 ? (
+                  <div className="p-4 text-center text-gray-500">
+                    원본 데이터가 없습니다.
+                  </div>
+                ) : (
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50 sticky top-0 z-10">
+                      <tr>
+                        {visibleHeaders.map((header) => (
+                          <th
+                            key={header}
+                            className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border"
+                            style={{height: "40px"}}
+                          >
+                            {header}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {data.originalData.map((row, index) =>
+                        renderRow(row, index, true, visibleHeaders),
+                      )}
+                    </tbody>
+                  </table>
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* 변경 사항 안내 */}
-          <div className="p-3 bg-yellow-50 border border-yellow-200 rounded shrink-0">
-            <p className="text-sm text-yellow-800">
-              <strong>참고:</strong> 상단 원본 데이터에서{" "}
-              <span className="bg-red-100 px-1 rounded">
-                빨간색으로 표시된 셀
-              </span>
-              은 하단 저장된 데이터와 다른 부분입니다.
-            </p>
+            {/* 하단: 저장된 데이터 */}
+            <div className="flex flex-col flex-1 min-h-0">
+              <h3 className="text-lg font-semibold text-gray-800 mb-2 bg-green-50 p-2 rounded shrink-0">
+                DB에 저장한 주문 Row
+              </h3>
+              <div className="flex-1 overflow-auto border border-gray-200 rounded min-h-0">
+                {data.savedData.length === 0 ? (
+                  <div className="p-4 text-center text-gray-500">
+                    저장된 데이터가 없습니다.
+                  </div>
+                ) : (
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50 sticky top-0 z-10">
+                      <tr>
+                        {visibleHeaders.map((header) => (
+                          <th
+                            key={header}
+                            className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border"
+                            style={{height: "40px"}}
+                          >
+                            {header}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {data.savedData.map((row, index) =>
+                        renderRow(row, index, false, visibleHeaders),
+                      )}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+
+            {/* 변경 사항 안내 */}
+            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded shrink-0">
+              <p className="text-sm text-yellow-800">
+                <strong>참고:</strong> 상단 원본 데이터에서{" "}
+                <span className="bg-red-100 px-1 rounded">
+                  빨간색으로 표시된 셀
+                </span>
+                은 하단 저장된 데이터와 다른 부분입니다.
+              </p>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }

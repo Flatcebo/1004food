@@ -1,5 +1,7 @@
 "use client";
 
+import ModalPortal from "@/components/ModalPortal";
+
 import {useState, useEffect, useCallback, useMemo, useRef} from "react";
 import {saveAs} from "file-saver";
 import CodeEditWindow from "./CodeEditWindow";
@@ -75,6 +77,11 @@ export default function PurchaseOrdersModal({
   const [orderFilter, setOrderFilter] = useState<
     "all" | "ordered" | "unordered"
   >("unordered");
+  // 모달 내 기간 선택 (조회 시 사용)
+  const [modalStartDate, setModalStartDate] = useState(startDate);
+  const [modalEndDate, setModalEndDate] = useState(endDate);
+  const [appliedStartDate, setAppliedStartDate] = useState(startDate);
+  const [appliedEndDate, setAppliedEndDate] = useState(endDate);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
   const [editingRow, setEditingRow] = useState<{
@@ -111,6 +118,14 @@ export default function PurchaseOrdersModal({
   const {startLoading, stopLoading} = useLoadingStore();
   const itemsPerPage = 50;
 
+  // 부모의 기간 변경 시 모달 기간 동기화
+  useEffect(() => {
+    setModalStartDate(startDate);
+    setModalEndDate(endDate);
+    setAppliedStartDate(startDate);
+    setAppliedEndDate(endDate);
+  }, [startDate, endDate]);
+
   // 주문 데이터 조회 (forceFilter: 다운로드/전송 후 'all'로 갱신 시 사용)
   const fetchOrders = useCallback(
     async (forceFilter?: "all" | "ordered" | "unordered") => {
@@ -122,8 +137,8 @@ export default function PurchaseOrdersModal({
       try {
         const params = new URLSearchParams({
           purchaseId: purchase.id.toString(),
-          startDate,
-          endDate,
+          startDate: appliedStartDate,
+          endDate: appliedEndDate,
           orderFilter: filterToUse,
         });
 
@@ -157,12 +172,26 @@ export default function PurchaseOrdersModal({
         setLoading(false);
       }
     },
-    [purchase.id, startDate, endDate, orderFilter],
+    [purchase.id, appliedStartDate, appliedEndDate, orderFilter],
   );
 
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
+
+  // 조회 버튼 클릭
+  const handleSearch = useCallback(() => {
+    if (!modalStartDate || !modalEndDate) {
+      alert("기간을 선택해주세요.");
+      return;
+    }
+    if (modalStartDate > modalEndDate) {
+      alert("시작일이 종료일보다 늦을 수 없습니다.");
+      return;
+    }
+    setAppliedStartDate(modalStartDate);
+    setAppliedEndDate(modalEndDate);
+  }, [modalStartDate, modalEndDate]);
 
   // 필터 변경 시 체크박스 선택 해제
   useEffect(() => {
@@ -393,8 +422,8 @@ export default function PurchaseOrdersModal({
         body: JSON.stringify({
           purchaseId: purchase.id,
           orderIds,
-          startDate,
-          endDate,
+          startDate: appliedStartDate,
+          endDate: appliedEndDate,
           ...(rowDataOverrides && {rowDataOverrides}),
           ...(headerOverrides && {headerOverrides}),
         }),
@@ -433,8 +462,8 @@ export default function PurchaseOrdersModal({
     orders,
     purchase.id,
     purchase.name,
-    startDate,
-    endDate,
+    appliedStartDate,
+    appliedEndDate,
     fetchOrders,
     onDataUpdate,
     startLoading,
@@ -493,8 +522,8 @@ export default function PurchaseOrdersModal({
         body: JSON.stringify({
           purchaseId: purchase.id,
           orderIds,
-          startDate,
-          endDate,
+          startDate: appliedStartDate,
+          endDate: appliedEndDate,
           forKakao: true,
           ...(rowDataOverrides && {rowDataOverrides}),
           ...(headerOverrides && {headerOverrides}),
@@ -516,8 +545,8 @@ export default function PurchaseOrdersModal({
           purchaseId: purchase.id,
           orderIds,
           sendType: "kakaotalk",
-          startDate,
-          endDate,
+          startDate: appliedStartDate,
+          endDate: appliedEndDate,
           ...(batchId && {batchId}),
         }),
       });
@@ -544,8 +573,8 @@ export default function PurchaseOrdersModal({
     purchase.kakaotalk,
     selectedRows,
     orders,
-    startDate,
-    endDate,
+    appliedStartDate,
+    appliedEndDate,
     fetchOrders,
     onDataUpdate,
     startLoading,
@@ -602,8 +631,8 @@ export default function PurchaseOrdersModal({
         body: JSON.stringify({
           purchaseId: purchase.id,
           orderIds,
-          startDate,
-          endDate,
+          startDate: appliedStartDate,
+          endDate: appliedEndDate,
           forEmail: true,
           ...(rowDataOverrides && {rowDataOverrides}),
           ...(headerOverrides && {headerOverrides}),
@@ -670,8 +699,8 @@ export default function PurchaseOrdersModal({
           purchaseId: purchase.id,
           orderIds,
           sendType: "email",
-          startDate,
-          endDate,
+          startDate: appliedStartDate,
+          endDate: appliedEndDate,
           ...(batchId && {batchId}),
         }),
       });
@@ -702,8 +731,8 @@ export default function PurchaseOrdersModal({
     purchase.name,
     selectedRows,
     orders,
-    startDate,
-    endDate,
+    appliedStartDate,
+    appliedEndDate,
     fetchOrders,
     onDataUpdate,
     startLoading,
@@ -899,494 +928,180 @@ export default function PurchaseOrdersModal({
   }, [orderedOrders]);
 
   return (
-    <div className="fixed inset-0 bg-[#00000080] flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-[90vw] h-[90vh] flex flex-col">
-        {/* 헤더 */}
-        <div className="flex items-center justify-between p-4 border-b">
-          <div>
-            <h2 className="text-xl font-bold">{purchase.name} - 주문 목록</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              기간: {startDate} ~ {endDate} ({orders.length}건)
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowTemplateView(!showTemplateView)}
-              className="px-4 py-2 bg-gray-500 text-white text-sm rounded hover:bg-gray-600"
-            >
-              {showTemplateView ? "목록 보기" : "양식 보기"}
-            </button>
-            <button
-              onClick={onClose}
-              className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
-            >
-              닫기
-            </button>
-          </div>
-        </div>
-
-        {/* 필터 영역 */}
-        <div className="flex items-center justify-between p-4 bg-gray-50 border-b">
-          <div className="flex items-center gap-4">
-            <label className="text-sm font-medium">필터:</label>
-            <select
-              value={orderFilter}
-              onChange={(e) => setOrderFilter(e.target.value as any)}
-              className="px-3 py-1.5 border border-gray-300 rounded text-sm"
-            >
-              <option value="all">전체 주문</option>
-              <option value="ordered">발주된 주문</option>
-              <option value="unordered">미발주 주문</option>
-            </select>
-          </div>
-
-          {/* 다운로드 버튼 */}
-          <button
-            onClick={handleDownload}
-            disabled={isDownloading || orders.length === 0}
-            className="px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:bg-gray-400"
-          >
-            {isDownloading
-              ? "다운로드 중..."
-              : selectedRows.size > 0
-                ? `${selectedRows.size}건 다운로드`
-                : "전체 다운로드"}
-          </button>
-        </div>
-
-        {/* 테이블 */}
-        <div className="flex-1 overflow-auto p-4">
-          {loading ? (
-            <div className="text-center py-8">조회 중...</div>
-          ) : error ? (
-            <div className="text-center py-8 text-red-500">{error}</div>
-          ) : orders.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              주문 데이터가 없습니다.
+    <ModalPortal>
+      <div className="fixed inset-0 bg-[#00000080] flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg shadow-xl w-[90vw] h-[90vh] flex flex-col">
+          {/* 헤더 */}
+          <div className="flex items-center justify-between p-4 border-b">
+            <div>
+              <h2 className="text-xl font-bold">{purchase.name} - 주문 목록</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                기간: {appliedStartDate} ~ {appliedEndDate} ({orders.length}건)
+              </p>
             </div>
-          ) : showTemplateView ? (
-            // 양식 보기 뷰 - 체크박스 선택한 주문만 표시
-            selectedRows.size > 0 ? (
-              <TemplateView
-                orders={orders.filter((o) => selectedRows.has(o.id))}
-                purchase={purchaseDetail}
-                onEditsChange={handleTemplateEditsChange}
-              />
-            ) : (
-              <div className="text-center py-12 text-gray-500">
-                양식 보기를 위해 목록에서 체크박스로 항목을 선택해주세요.
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowTemplateView(!showTemplateView)}
+                className="px-4 py-2 bg-gray-500 text-white text-sm rounded hover:bg-gray-600"
+              >
+                {showTemplateView ? "목록 보기" : "양식 보기"}
+              </button>
+              <button
+                onClick={onClose}
+                className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+
+          {/* 필터 영역 */}
+          <div className="flex items-center justify-between p-4 bg-gray-50 border-b flex-wrap gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
+              {/* 주문 필터 */}
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">필터:</label>
+                <select
+                  value={orderFilter}
+                  onChange={(e) => setOrderFilter(e.target.value as any)}
+                  className="px-3 py-1.5 border border-gray-300 rounded text-sm"
+                >
+                  <option value="all">전체 주문</option>
+                  <option value="ordered">발주된 주문</option>
+                  <option value="unordered">미발주 주문</option>
+                </select>
               </div>
-            )
-          ) : orderFilter === "ordered" && !hasOrderedOrders ? (
-            // ordered 필터인데 발주된 주문이 없는 경우
-            <div className="text-center py-8 text-gray-500">
-              발주된 주문이 없습니다.
+
+              {/* 기간 선택 */}
+              <div className="flex items-center gap-2">
+                <label className="text-sm font-medium">기간:</label>
+                <input
+                  type="date"
+                  value={modalStartDate}
+                  onChange={(e) => setModalStartDate(e.target.value)}
+                  className="px-3 py-1.5 border border-gray-300 rounded text-sm"
+                />
+                <span className="text-gray-500">~</span>
+                <input
+                  type="date"
+                  value={modalEndDate}
+                  onChange={(e) => setModalEndDate(e.target.value)}
+                  className="px-3 py-1.5 border border-gray-300 rounded text-sm"
+                />
+                <button
+                  onClick={handleSearch}
+                  disabled={loading}
+                  className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded hover:bg-blue-700 disabled:bg-gray-400"
+                >
+                  조회
+                </button>
+              </div>
             </div>
-          ) : (orderFilter === "ordered" || orderFilter === "all") &&
-            hasOrderedOrders ? (
-            // 발주된 주문 - 차수별 아코디언 뷰 (ordered 또는 all 필터)
-            <div className="space-y-6">
-              {/* 발주된 주문 - 차수별 아코디언 */}
-              {orderFilter === "all" && hasOrderedOrders && (
-                <div className="mb-4">
-                  <h3 className="text-lg font-bold text-green-600 mb-2">
-                    발주된 주문
-                  </h3>
-                </div>
-              )}
-              {Object.keys(orderedOrdersByBatch).length > 0 ? (
-                // 차수별 아코디언 표시 (오래된 순: batchDate → batchNumber)
-                Object.entries(orderedOrdersByBatch)
-                  .sort(([, {batch: a}], [, {batch: b}]) => {
-                    const dateCompare = (a.batchDate || "").localeCompare(
-                      b.batchDate || "",
-                    );
-                    if (dateCompare !== 0) return dateCompare;
-                    return (a.batchNumber ?? 0) - (b.batchNumber ?? 0);
-                  })
-                  .map(([batchKey, {batch, orders: batchOrders}]) => (
-                    <div
-                      key={batchKey}
-                      className="border border-gray-200 rounded-lg overflow-hidden"
-                    >
-                      {/* 아코디언 헤더 */}
-                      <div
-                        className="flex items-center justify-between p-4 bg-gray-100 cursor-pointer hover:bg-gray-200"
-                        onClick={() => toggleBatch(batchKey)}
-                      >
-                        <div className="flex items-center gap-4">
-                          <span className="text-lg font-semibold">
-                            {expandedBatches.has(batchKey) ? "▼" : "▶"}
-                          </span>
-                          <span className="font-bold text-blue-600">
-                            {batch.batchNumber}차 발주
-                          </span>
-                          <span className="text-gray-600">
-                            (
-                            {batch.batchCreatedAt
-                              ? formatBatchDateTime(batch.batchCreatedAt)
-                              : batch.batchDate}
-                            )
-                          </span>
-                          <span className="px-2 py-1 bg-green-100 text-green-700 text-sm rounded">
-                            {batchOrders.length}건
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={batchOrders.every((o) =>
-                              selectedRows.has(o.id),
-                            )}
-                            onChange={(e) => {
-                              e.stopPropagation();
-                              if (e.target.checked) {
-                                setSelectedRows((prev) => {
-                                  const newSet = new Set(prev);
-                                  batchOrders.forEach((o) => newSet.add(o.id));
-                                  return newSet;
-                                });
-                              } else {
-                                setSelectedRows((prev) => {
-                                  const newSet = new Set(prev);
-                                  batchOrders.forEach((o) =>
-                                    newSet.delete(o.id),
-                                  );
-                                  return newSet;
-                                });
-                              }
-                            }}
-                            className="cursor-pointer w-4 h-4"
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                          <span className="text-sm text-gray-500">
-                            전체 선택
-                          </span>
-                        </div>
-                      </div>
 
-                      {/* 아코디언 내용 - 테이블 */}
-                      {expandedBatches.has(batchKey) && (
-                        <div className="p-4 overflow-x-auto">
-                          <table className="w-full border-collapse border border-gray-300 text-xs">
-                            <thead>
-                              <tr className="bg-gray-50">
-                                <th className="border border-gray-300 px-3 py-2 text-center w-10">
-                                  <input
-                                    type="checkbox"
-                                    checked={batchOrders.every((o) =>
-                                      selectedRows.has(o.id),
-                                    )}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        setSelectedRows((prev) => {
-                                          const newSet = new Set(prev);
-                                          batchOrders.forEach((o) =>
-                                            newSet.add(o.id),
-                                          );
-                                          return newSet;
-                                        });
-                                      } else {
-                                        setSelectedRows((prev) => {
-                                          const newSet = new Set(prev);
-                                          batchOrders.forEach((o) =>
-                                            newSet.delete(o.id),
-                                          );
-                                          return newSet;
-                                        });
-                                      }
-                                    }}
-                                    className="cursor-pointer"
-                                  />
-                                </th>
-                                <th className="border border-gray-300 px-3 py-2 text-left w-10">
-                                  No.
-                                </th>
-                                {headers.map((header, idx) => (
-                                  <th
-                                    key={idx}
-                                    className="border border-gray-300 px-3 py-2 text-left"
-                                  >
-                                    {header}
-                                  </th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {batchOrders.map((order, index) => (
-                                <tr key={order.id} className="hover:bg-gray-50">
-                                  <td className="border border-gray-300 px-3 py-2 text-center">
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedRows.has(order.id)}
-                                      onChange={(e) =>
-                                        handleSelectRow(
-                                          order.id,
-                                          e.target.checked,
-                                        )
-                                      }
-                                      className="cursor-pointer"
-                                    />
-                                  </td>
-                                  <td className="border border-gray-300 px-3 py-2 text-center">
-                                    {index + 1}
-                                  </td>
-                                  {headers.map((header, colIdx) => {
-                                    const cellValue = getCellValue(
-                                      order,
-                                      header,
-                                    );
-                                    const isClickable =
-                                      header === "매핑코드" ||
-                                      header === "내부코드/주문번호";
-                                    const isOrderStatus = header === "발주여부";
-                                    const isProductName = header === "상품명";
-                                    const isInternalCodeOrderNumber =
-                                      header === "내부코드/주문번호";
-                                    const isAddress = header === "주소";
-                                    const sabangName =
-                                      order.sabangName ||
-                                      order.rowData?.사방넷명 ||
-                                      order.rowData?.sabangName ||
-                                      "";
-                                    const rowData = order.rowData || {};
-                                    const internalCode =
-                                      rowData["내부코드"] || "";
-                                    const orderNumber =
-                                      rowData["주문번호"] || "";
-                                    const deliveryMessage =
-                                      rowData["배송메시지"] || "";
+            {/* 다운로드 버튼 */}
+            <button
+              onClick={handleDownload}
+              disabled={isDownloading || orders.length === 0}
+              className="px-4 py-2 bg-green-600 text-white text-sm rounded hover:bg-green-700 disabled:bg-gray-400"
+            >
+              {isDownloading
+                ? "다운로드 중..."
+                : selectedRows.size > 0
+                  ? `${selectedRows.size}건 다운로드`
+                  : "전체 다운로드"}
+            </button>
+          </div>
 
-                                    return (
-                                      <td
-                                        key={colIdx}
-                                        className={`border border-gray-300 px-3 py-2 ${
-                                          isClickable
-                                            ? "cursor-pointer text-blue-600 hover:underline"
-                                            : ""
-                                        } ${isOrderStatus ? getOrderStatusStyle(order.isOrdered) : ""}`}
-                                        onClick={() => {
-                                          if (header === "매핑코드")
-                                            handleMappingCodeClick(order);
-                                          else if (
-                                            header === "내부코드/주문번호"
-                                          )
-                                            handleInternalCodeClick(order);
-                                        }}
-                                      >
-                                        {isProductName && sabangName ? (
-                                          <div>
-                                            <div>{cellValue}</div>
-                                            <div className="text-blue-600 text-xs mt-1">
-                                              {sabangName}
-                                            </div>
-                                          </div>
-                                        ) : isInternalCodeOrderNumber &&
-                                          (internalCode || orderNumber) ? (
-                                          <div>
-                                            {internalCode && (
-                                              <div>{internalCode}</div>
-                                            )}
-                                            {orderNumber && (
-                                              <div className="text-blue-600 text-xs mt-1">
-                                                {orderNumber}
-                                              </div>
-                                            )}
-                                            {!internalCode && !orderNumber && (
-                                              <div>-</div>
-                                            )}
-                                          </div>
-                                        ) : isAddress && deliveryMessage ? (
-                                          <div>
-                                            <div>{cellValue}</div>
-                                            <div className="text-blue-600 text-xs mt-1">
-                                              {deliveryMessage}
-                                            </div>
-                                          </div>
-                                        ) : (
-                                          cellValue
-                                        )}
-                                      </td>
-                                    );
-                                  })}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-                  ))
+          {/* 테이블 */}
+          <div className="flex-1 overflow-auto p-4">
+            {loading ? (
+              <div className="text-center py-8">조회 중...</div>
+            ) : error ? (
+              <div className="text-center py-8 text-red-500">{error}</div>
+            ) : orders.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                주문 데이터가 없습니다.
+              </div>
+            ) : showTemplateView ? (
+              // 양식 보기 뷰 - 체크박스 선택한 주문만 표시
+              selectedRows.size > 0 ? (
+                <TemplateView
+                  orders={orders.filter((o) => selectedRows.has(o.id))}
+                  purchase={purchaseDetail}
+                  onEditsChange={handleTemplateEditsChange}
+                />
               ) : (
-                // 차수 정보가 없으면 발주된 주문을 일반 리스트로 표시
-                <div className="overflow-x-auto">
+                <div className="text-center py-12 text-gray-500">
+                  양식 보기를 위해 목록에서 체크박스로 항목을 선택해주세요.
+                </div>
+              )
+            ) : orderFilter === "ordered" && !hasOrderedOrders ? (
+              // ordered 필터인데 발주된 주문이 없는 경우
+              <div className="text-center py-8 text-gray-500">
+                발주된 주문이 없습니다.
+              </div>
+            ) : (orderFilter === "ordered" || orderFilter === "all") &&
+              hasOrderedOrders ? (
+              // 발주된 주문 - 차수별 아코디언 뷰 (ordered 또는 all 필터)
+              <div className="space-y-6">
+                {/* 발주된 주문 - 차수별 아코디언 */}
+                {orderFilter === "all" && hasOrderedOrders && (
                   <div className="mb-4">
                     <h3 className="text-lg font-bold text-green-600 mb-2">
-                      발주된 주문 (차수 정보 없음)
+                      발주된 주문
                     </h3>
                   </div>
-                  <table className="w-full border-collapse border border-gray-300 text-xs">
-                    <thead>
-                      <tr className="bg-gray-100">
-                        <th className="border border-gray-300 px-3 py-2 text-center w-10">
-                          <input
-                            type="checkbox"
-                            checked={
-                              orderedOrders.length > 0 &&
-                              orderedOrders.every((o) => selectedRows.has(o.id))
-                            }
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedRows((prev) => {
-                                  const newSet = new Set(prev);
-                                  orderedOrders.forEach((o) =>
-                                    newSet.add(o.id),
-                                  );
-                                  return newSet;
-                                });
-                              } else {
-                                setSelectedRows((prev) => {
-                                  const newSet = new Set(prev);
-                                  orderedOrders.forEach((o) =>
-                                    newSet.delete(o.id),
-                                  );
-                                  return newSet;
-                                });
-                              }
-                            }}
-                            className="cursor-pointer"
-                          />
-                        </th>
-                        <th className="border border-gray-300 px-3 py-2 text-left w-10">
-                          No.
-                        </th>
-                        {headers.map((header, idx) => (
-                          <th
-                            key={idx}
-                            className="border border-gray-300 px-3 py-2 text-left"
-                          >
-                            {header}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {orderedOrders.map((order, index) => (
-                        <tr key={order.id} className="hover:bg-gray-50">
-                          <td className="border border-gray-300 px-3 py-2 text-center">
+                )}
+                {Object.keys(orderedOrdersByBatch).length > 0 ? (
+                  // 차수별 아코디언 표시 (오래된 순: batchDate → batchNumber)
+                  Object.entries(orderedOrdersByBatch)
+                    .sort(([, {batch: a}], [, {batch: b}]) => {
+                      const dateCompare = (a.batchDate || "").localeCompare(
+                        b.batchDate || "",
+                      );
+                      if (dateCompare !== 0) return dateCompare;
+                      return (a.batchNumber ?? 0) - (b.batchNumber ?? 0);
+                    })
+                    .map(([batchKey, {batch, orders: batchOrders}]) => (
+                      <div
+                        key={batchKey}
+                        className="border border-gray-200 rounded-lg overflow-hidden"
+                      >
+                        {/* 아코디언 헤더 */}
+                        <div
+                          className="flex items-center justify-between p-4 bg-gray-100 cursor-pointer hover:bg-gray-200"
+                          onClick={() => toggleBatch(batchKey)}
+                        >
+                          <div className="flex items-center gap-4">
+                            <span className="text-lg font-semibold">
+                              {expandedBatches.has(batchKey) ? "▼" : "▶"}
+                            </span>
+                            <span className="font-bold text-blue-600">
+                              {batch.batchNumber}차 발주
+                            </span>
+                            <span className="text-gray-600">
+                              (
+                              {batch.batchCreatedAt
+                                ? formatBatchDateTime(batch.batchCreatedAt)
+                                : batch.batchDate}
+                              )
+                            </span>
+                            <span className="px-2 py-1 bg-green-100 text-green-700 text-sm rounded">
+                              {batchOrders.length}건
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
                             <input
                               type="checkbox"
-                              checked={selectedRows.has(order.id)}
-                              onChange={(e) =>
-                                handleSelectRow(order.id, e.target.checked)
-                              }
-                              className="cursor-pointer"
-                            />
-                          </td>
-                          <td className="border border-gray-300 px-3 py-2 text-center">
-                            {index + 1}
-                          </td>
-                          {headers.map((header, colIdx) => {
-                            const cellValue = getCellValue(order, header);
-                            const isClickable =
-                              header === "매핑코드" ||
-                              header === "내부코드/주문번호";
-                            const isOrderStatus = header === "발주여부";
-                            const isProductName = header === "상품명";
-                            const isInternalCodeOrderNumber =
-                              header === "내부코드/주문번호";
-                            const isAddress = header === "주소";
-                            const sabangName =
-                              order.sabangName ||
-                              order.rowData?.사방넷명 ||
-                              order.rowData?.sabangName ||
-                              "";
-                            const rowData = order.rowData || {};
-                            const internalCode = rowData["내부코드"] || "";
-                            const orderNumber = rowData["주문번호"] || "";
-                            const deliveryMessage = rowData["배송메시지"] || "";
-
-                            return (
-                              <td
-                                key={colIdx}
-                                className={`border border-gray-300 px-3 py-2 ${
-                                  isClickable
-                                    ? "cursor-pointer text-blue-600 hover:underline"
-                                    : ""
-                                } ${isOrderStatus ? getOrderStatusStyle(order.isOrdered) : ""}`}
-                                onClick={() => {
-                                  if (header === "매핑코드")
-                                    handleMappingCodeClick(order);
-                                  else if (header === "내부코드/주문번호")
-                                    handleInternalCodeClick(order);
-                                }}
-                              >
-                                {isProductName && sabangName ? (
-                                  <div>
-                                    <div>{cellValue}</div>
-                                    <div className="text-blue-600 text-xs mt-1">
-                                      {sabangName}
-                                    </div>
-                                  </div>
-                                ) : isInternalCodeOrderNumber &&
-                                  (internalCode || orderNumber) ? (
-                                  <div>
-                                    {internalCode && <div>{internalCode}</div>}
-                                    {orderNumber && (
-                                      <div className="text-blue-600 text-xs mt-1">
-                                        {orderNumber}
-                                      </div>
-                                    )}
-                                    {!internalCode && !orderNumber && (
-                                      <div>-</div>
-                                    )}
-                                  </div>
-                                ) : isAddress && deliveryMessage ? (
-                                  <div>
-                                    <div>{cellValue}</div>
-                                    <div className="text-blue-600 text-xs mt-1">
-                                      {deliveryMessage}
-                                    </div>
-                                  </div>
-                                ) : (
-                                  cellValue
-                                )}
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* all 필터일 때 미발주 주문도 표시 */}
-              {orderFilter === "all" && unorderedOrders.length > 0 && (
-                <>
-                  <div className="mt-6 mb-4">
-                    <h3 className="text-lg font-bold text-red-600 mb-2">
-                      미발주 주문
-                    </h3>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse border border-gray-300 text-xs">
-                      <thead>
-                        <tr className="bg-gray-100">
-                          <th className="border border-gray-300 px-3 py-2 text-center w-10">
-                            <input
-                              type="checkbox"
-                              checked={
-                                unorderedOrders.length > 0 &&
-                                unorderedOrders.every((o) =>
-                                  selectedRows.has(o.id),
-                                )
-                              }
+                              checked={batchOrders.every((o) =>
+                                selectedRows.has(o.id),
+                              )}
                               onChange={(e) => {
+                                e.stopPropagation();
                                 if (e.target.checked) {
                                   setSelectedRows((prev) => {
                                     const newSet = new Set(prev);
-                                    unorderedOrders.forEach((o) =>
+                                    batchOrders.forEach((o) =>
                                       newSet.add(o.id),
                                     );
                                     return newSet;
@@ -1394,7 +1109,210 @@ export default function PurchaseOrdersModal({
                                 } else {
                                   setSelectedRows((prev) => {
                                     const newSet = new Set(prev);
-                                    unorderedOrders.forEach((o) =>
+                                    batchOrders.forEach((o) =>
+                                      newSet.delete(o.id),
+                                    );
+                                    return newSet;
+                                  });
+                                }
+                              }}
+                              className="cursor-pointer w-4 h-4"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <span className="text-sm text-gray-500">
+                              전체 선택
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* 아코디언 내용 - 테이블 */}
+                        {expandedBatches.has(batchKey) && (
+                          <div className="p-4 overflow-x-auto">
+                            <table className="w-full border-collapse border border-gray-300 text-xs">
+                              <thead>
+                                <tr className="bg-gray-50">
+                                  <th className="border border-gray-300 px-3 py-2 text-center w-10">
+                                    <input
+                                      type="checkbox"
+                                      checked={batchOrders.every((o) =>
+                                        selectedRows.has(o.id),
+                                      )}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setSelectedRows((prev) => {
+                                            const newSet = new Set(prev);
+                                            batchOrders.forEach((o) =>
+                                              newSet.add(o.id),
+                                            );
+                                            return newSet;
+                                          });
+                                        } else {
+                                          setSelectedRows((prev) => {
+                                            const newSet = new Set(prev);
+                                            batchOrders.forEach((o) =>
+                                              newSet.delete(o.id),
+                                            );
+                                            return newSet;
+                                          });
+                                        }
+                                      }}
+                                      className="cursor-pointer"
+                                    />
+                                  </th>
+                                  <th className="border border-gray-300 px-3 py-2 text-left w-10">
+                                    No.
+                                  </th>
+                                  {headers.map((header, idx) => (
+                                    <th
+                                      key={idx}
+                                      className="border border-gray-300 px-3 py-2 text-left"
+                                    >
+                                      {header}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {batchOrders.map((order, index) => (
+                                  <tr
+                                    key={order.id}
+                                    className="hover:bg-gray-50"
+                                  >
+                                    <td className="border border-gray-300 px-3 py-2 text-center">
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedRows.has(order.id)}
+                                        onChange={(e) =>
+                                          handleSelectRow(
+                                            order.id,
+                                            e.target.checked,
+                                          )
+                                        }
+                                        className="cursor-pointer"
+                                      />
+                                    </td>
+                                    <td className="border border-gray-300 px-3 py-2 text-center">
+                                      {index + 1}
+                                    </td>
+                                    {headers.map((header, colIdx) => {
+                                      const cellValue = getCellValue(
+                                        order,
+                                        header,
+                                      );
+                                      const isClickable =
+                                        header === "매핑코드" ||
+                                        header === "내부코드/주문번호";
+                                      const isOrderStatus =
+                                        header === "발주여부";
+                                      const isProductName = header === "상품명";
+                                      const isInternalCodeOrderNumber =
+                                        header === "내부코드/주문번호";
+                                      const isAddress = header === "주소";
+                                      const sabangName =
+                                        order.sabangName ||
+                                        order.rowData?.사방넷명 ||
+                                        order.rowData?.sabangName ||
+                                        "";
+                                      const rowData = order.rowData || {};
+                                      const internalCode =
+                                        rowData["내부코드"] || "";
+                                      const orderNumber =
+                                        rowData["주문번호"] || "";
+                                      const deliveryMessage =
+                                        rowData["배송메시지"] || "";
+
+                                      return (
+                                        <td
+                                          key={colIdx}
+                                          className={`border border-gray-300 px-3 py-2 ${
+                                            isClickable
+                                              ? "cursor-pointer text-blue-600 hover:underline"
+                                              : ""
+                                          } ${isOrderStatus ? getOrderStatusStyle(order.isOrdered) : ""}`}
+                                          onClick={() => {
+                                            if (header === "매핑코드")
+                                              handleMappingCodeClick(order);
+                                            else if (
+                                              header === "내부코드/주문번호"
+                                            )
+                                              handleInternalCodeClick(order);
+                                          }}
+                                        >
+                                          {isProductName && sabangName ? (
+                                            <div>
+                                              <div>{cellValue}</div>
+                                              <div className="text-blue-600 text-xs mt-1">
+                                                {sabangName}
+                                              </div>
+                                            </div>
+                                          ) : isInternalCodeOrderNumber &&
+                                            (internalCode || orderNumber) ? (
+                                            <div>
+                                              {internalCode && (
+                                                <div>{internalCode}</div>
+                                              )}
+                                              {orderNumber && (
+                                                <div className="text-blue-600 text-xs mt-1">
+                                                  {orderNumber}
+                                                </div>
+                                              )}
+                                              {!internalCode &&
+                                                !orderNumber && <div>-</div>}
+                                            </div>
+                                          ) : isAddress && deliveryMessage ? (
+                                            <div>
+                                              <div>{cellValue}</div>
+                                              <div className="text-blue-600 text-xs mt-1">
+                                                {deliveryMessage}
+                                              </div>
+                                            </div>
+                                          ) : (
+                                            cellValue
+                                          )}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                ) : (
+                  // 차수 정보가 없으면 발주된 주문을 일반 리스트로 표시
+                  <div className="overflow-x-auto">
+                    <div className="mb-4">
+                      <h3 className="text-lg font-bold text-green-600 mb-2">
+                        발주된 주문 (차수 정보 없음)
+                      </h3>
+                    </div>
+                    <table className="w-full border-collapse border border-gray-300 text-xs">
+                      <thead>
+                        <tr className="bg-gray-100">
+                          <th className="border border-gray-300 px-3 py-2 text-center w-10">
+                            <input
+                              type="checkbox"
+                              checked={
+                                orderedOrders.length > 0 &&
+                                orderedOrders.every((o) =>
+                                  selectedRows.has(o.id),
+                                )
+                              }
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedRows((prev) => {
+                                    const newSet = new Set(prev);
+                                    orderedOrders.forEach((o) =>
+                                      newSet.add(o.id),
+                                    );
+                                    return newSet;
+                                  });
+                                } else {
+                                  setSelectedRows((prev) => {
+                                    const newSet = new Set(prev);
+                                    orderedOrders.forEach((o) =>
                                       newSet.delete(o.id),
                                     );
                                     return newSet;
@@ -1418,7 +1336,7 @@ export default function PurchaseOrdersModal({
                         </tr>
                       </thead>
                       <tbody>
-                        {unorderedOrders.map((order, index) => (
+                        {orderedOrders.map((order, index) => (
                           <tr key={order.id} className="hover:bg-gray-50">
                             <td className="border border-gray-300 px-3 py-2 text-center">
                               <input
@@ -1463,11 +1381,10 @@ export default function PurchaseOrdersModal({
                                       : ""
                                   } ${isOrderStatus ? getOrderStatusStyle(order.isOrdered) : ""}`}
                                   onClick={() => {
-                                    if (header === "매핑코드") {
+                                    if (header === "매핑코드")
                                       handleMappingCodeClick(order);
-                                    } else if (header === "내부코드/주문번호") {
+                                    else if (header === "내부코드/주문번호")
                                       handleInternalCodeClick(order);
-                                    }
                                   }}
                                 >
                                   {isProductName && sabangName ? (
@@ -1510,229 +1427,385 @@ export default function PurchaseOrdersModal({
                       </tbody>
                     </table>
                   </div>
-                </>
-              )}
-            </div>
-          ) : (
-            // 미발주 주문만 - 기존 목록 보기 뷰
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse border border-gray-300 text-xs">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="border border-gray-300 px-3 py-2 text-center w-10">
-                      <input
-                        type="checkbox"
-                        checked={
-                          paginatedOrders.length > 0 &&
-                          paginatedOrders.every((o) => selectedRows.has(o.id))
-                        }
-                        onChange={(e) => handleSelectAll(e.target.checked)}
-                        className="cursor-pointer"
-                      />
-                    </th>
-                    <th className="border border-gray-300 px-3 py-2 text-left w-10">
-                      No.
-                    </th>
-                    {headers.map((header, idx) => (
-                      <th
-                        key={idx}
-                        className="border border-gray-300 px-3 py-2 text-left"
-                      >
-                        {header}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedOrders.map((order, index) => (
-                    <tr key={order.id} className="hover:bg-gray-50">
-                      <td className="border border-gray-300 px-3 py-2 text-center">
+                )}
+
+                {/* all 필터일 때 미발주 주문도 표시 */}
+                {orderFilter === "all" && unorderedOrders.length > 0 && (
+                  <>
+                    <div className="mt-6 mb-4">
+                      <h3 className="text-lg font-bold text-red-600 mb-2">
+                        미발주 주문
+                      </h3>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse border border-gray-300 text-xs">
+                        <thead>
+                          <tr className="bg-gray-100">
+                            <th className="border border-gray-300 px-3 py-2 text-center w-10">
+                              <input
+                                type="checkbox"
+                                checked={
+                                  unorderedOrders.length > 0 &&
+                                  unorderedOrders.every((o) =>
+                                    selectedRows.has(o.id),
+                                  )
+                                }
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedRows((prev) => {
+                                      const newSet = new Set(prev);
+                                      unorderedOrders.forEach((o) =>
+                                        newSet.add(o.id),
+                                      );
+                                      return newSet;
+                                    });
+                                  } else {
+                                    setSelectedRows((prev) => {
+                                      const newSet = new Set(prev);
+                                      unorderedOrders.forEach((o) =>
+                                        newSet.delete(o.id),
+                                      );
+                                      return newSet;
+                                    });
+                                  }
+                                }}
+                                className="cursor-pointer"
+                              />
+                            </th>
+                            <th className="border border-gray-300 px-3 py-2 text-left w-10">
+                              No.
+                            </th>
+                            {headers.map((header, idx) => (
+                              <th
+                                key={idx}
+                                className="border border-gray-300 px-3 py-2 text-left"
+                              >
+                                {header}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {unorderedOrders.map((order, index) => (
+                            <tr key={order.id} className="hover:bg-gray-50">
+                              <td className="border border-gray-300 px-3 py-2 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedRows.has(order.id)}
+                                  onChange={(e) =>
+                                    handleSelectRow(order.id, e.target.checked)
+                                  }
+                                  className="cursor-pointer"
+                                />
+                              </td>
+                              <td className="border border-gray-300 px-3 py-2 text-center">
+                                {index + 1}
+                              </td>
+                              {headers.map((header, colIdx) => {
+                                const cellValue = getCellValue(order, header);
+                                const isClickable =
+                                  header === "매핑코드" ||
+                                  header === "내부코드/주문번호";
+                                const isOrderStatus = header === "발주여부";
+                                const isProductName = header === "상품명";
+                                const isInternalCodeOrderNumber =
+                                  header === "내부코드/주문번호";
+                                const isAddress = header === "주소";
+                                const sabangName =
+                                  order.sabangName ||
+                                  order.rowData?.사방넷명 ||
+                                  order.rowData?.sabangName ||
+                                  "";
+                                const rowData = order.rowData || {};
+                                const internalCode = rowData["내부코드"] || "";
+                                const orderNumber = rowData["주문번호"] || "";
+                                const deliveryMessage =
+                                  rowData["배송메시지"] || "";
+
+                                return (
+                                  <td
+                                    key={colIdx}
+                                    className={`border border-gray-300 px-3 py-2 ${
+                                      isClickable
+                                        ? "cursor-pointer text-blue-600 hover:underline"
+                                        : ""
+                                    } ${isOrderStatus ? getOrderStatusStyle(order.isOrdered) : ""}`}
+                                    onClick={() => {
+                                      if (header === "매핑코드") {
+                                        handleMappingCodeClick(order);
+                                      } else if (
+                                        header === "내부코드/주문번호"
+                                      ) {
+                                        handleInternalCodeClick(order);
+                                      }
+                                    }}
+                                  >
+                                    {isProductName && sabangName ? (
+                                      <div>
+                                        <div>{cellValue}</div>
+                                        <div className="text-blue-600 text-xs mt-1">
+                                          {sabangName}
+                                        </div>
+                                      </div>
+                                    ) : isInternalCodeOrderNumber &&
+                                      (internalCode || orderNumber) ? (
+                                      <div>
+                                        {internalCode && (
+                                          <div>{internalCode}</div>
+                                        )}
+                                        {orderNumber && (
+                                          <div className="text-blue-600 text-xs mt-1">
+                                            {orderNumber}
+                                          </div>
+                                        )}
+                                        {!internalCode && !orderNumber && (
+                                          <div>-</div>
+                                        )}
+                                      </div>
+                                    ) : isAddress && deliveryMessage ? (
+                                      <div>
+                                        <div>{cellValue}</div>
+                                        <div className="text-blue-600 text-xs mt-1">
+                                          {deliveryMessage}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      cellValue
+                                    )}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </div>
+            ) : (
+              // 미발주 주문만 - 기존 목록 보기 뷰
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse border border-gray-300 text-xs">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border border-gray-300 px-3 py-2 text-center w-10">
                         <input
                           type="checkbox"
-                          checked={selectedRows.has(order.id)}
-                          onChange={(e) =>
-                            handleSelectRow(order.id, e.target.checked)
+                          checked={
+                            paginatedOrders.length > 0 &&
+                            paginatedOrders.every((o) => selectedRows.has(o.id))
                           }
+                          onChange={(e) => handleSelectAll(e.target.checked)}
                           className="cursor-pointer"
                         />
-                      </td>
-                      <td className="border border-gray-300 px-3 py-2 text-center">
-                        {(currentPage - 1) * itemsPerPage + index + 1}
-                      </td>
-                      {headers.map((header, colIdx) => {
-                        const cellValue = getCellValue(order, header);
-                        const isClickable =
-                          header === "매핑코드" ||
-                          header === "내부코드/주문번호";
-                        const isOrderStatus = header === "발주여부";
-                        const isProductName = header === "상품명";
-                        const isInternalCodeOrderNumber =
-                          header === "내부코드/주문번호";
-                        const isAddress = header === "주소";
-                        const sabangName =
-                          order.sabangName ||
-                          order.rowData?.사방넷명 ||
-                          order.rowData?.sabangName ||
-                          "";
-                        const rowData = order.rowData || {};
-                        const internalCode = rowData["내부코드"] || "";
-                        const orderNumber = rowData["주문번호"] || "";
-                        const deliveryMessage = rowData["배송메시지"] || "";
-
-                        return (
-                          <td
-                            key={colIdx}
-                            className={`border border-gray-300 px-3 py-2 ${
-                              isClickable
-                                ? "cursor-pointer text-blue-600 hover:underline"
-                                : ""
-                            } ${isOrderStatus ? getOrderStatusStyle(order.isOrdered) : ""}`}
-                            onClick={() => {
-                              if (header === "매핑코드") {
-                                handleMappingCodeClick(order);
-                              } else if (header === "내부코드/주문번호") {
-                                handleInternalCodeClick(order);
-                              }
-                            }}
-                          >
-                            {isProductName && sabangName ? (
-                              <div>
-                                <div>{cellValue}</div>
-                                <div className="text-blue-600 text-xs mt-1">
-                                  {sabangName}
-                                </div>
-                              </div>
-                            ) : isInternalCodeOrderNumber &&
-                              (internalCode || orderNumber) ? (
-                              <div>
-                                {internalCode && <div>{internalCode}</div>}
-                                {orderNumber && (
-                                  <div className="text-blue-600 text-xs mt-1">
-                                    {orderNumber}
-                                  </div>
-                                )}
-                                {!internalCode && !orderNumber && <div>-</div>}
-                              </div>
-                            ) : isAddress && deliveryMessage ? (
-                              <div>
-                                <div>{cellValue}</div>
-                                <div className="text-blue-600 text-xs mt-1">
-                                  {deliveryMessage}
-                                </div>
-                              </div>
-                            ) : (
-                              cellValue
-                            )}
-                          </td>
-                        );
-                      })}
+                      </th>
+                      <th className="border border-gray-300 px-3 py-2 text-left w-10">
+                        No.
+                      </th>
+                      {headers.map((header, idx) => (
+                        <th
+                          key={idx}
+                          className="border border-gray-300 px-3 py-2 text-left"
+                        >
+                          {header}
+                        </th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+                  </thead>
+                  <tbody>
+                    {paginatedOrders.map((order, index) => (
+                      <tr key={order.id} className="hover:bg-gray-50">
+                        <td className="border border-gray-300 px-3 py-2 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedRows.has(order.id)}
+                            onChange={(e) =>
+                              handleSelectRow(order.id, e.target.checked)
+                            }
+                            className="cursor-pointer"
+                          />
+                        </td>
+                        <td className="border border-gray-300 px-3 py-2 text-center">
+                          {(currentPage - 1) * itemsPerPage + index + 1}
+                        </td>
+                        {headers.map((header, colIdx) => {
+                          const cellValue = getCellValue(order, header);
+                          const isClickable =
+                            header === "매핑코드" ||
+                            header === "내부코드/주문번호";
+                          const isOrderStatus = header === "발주여부";
+                          const isProductName = header === "상품명";
+                          const isInternalCodeOrderNumber =
+                            header === "내부코드/주문번호";
+                          const isAddress = header === "주소";
+                          const sabangName =
+                            order.sabangName ||
+                            order.rowData?.사방넷명 ||
+                            order.rowData?.sabangName ||
+                            "";
+                          const rowData = order.rowData || {};
+                          const internalCode = rowData["내부코드"] || "";
+                          const orderNumber = rowData["주문번호"] || "";
+                          const deliveryMessage = rowData["배송메시지"] || "";
 
-        {/* 페이지네이션 */}
-        {!showTemplateView &&
-          !(
-            (orderFilter === "ordered" || orderFilter === "all") &&
-            Object.keys(orderedOrdersByBatch).length > 0
-          ) &&
-          totalPages > 1 && (
-            <div className="p-4 border-t">
-              <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={setCurrentPage}
-              />
-            </div>
-          )}
-
-        {/* 하단 버튼 영역 */}
-        <div className="flex items-center justify-between p-4 border-t bg-gray-50">
-          <div className="text-sm text-gray-600">
-            {selectedRows.size > 0
-              ? `${selectedRows.size}건 선택됨`
-              : `총 ${orders.length}건`}
-          </div>
-          <div className="flex gap-2">
-            {selectedRows.size > 0 && (
-              <>
-                <button
-                  onClick={handleCancelSelected}
-                  disabled={isCanceling || isDeleting || isSending}
-                  className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-bold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isCanceling ? "처리 중..." : `${selectedRows.size}건 취소`}
-                </button>
-                <button
-                  onClick={handleDeleteSelected}
-                  disabled={isCanceling || isDeleting || isSending}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isDeleting ? "삭제 중..." : `${selectedRows.size}건 삭제`}
-                </button>
-              </>
+                          return (
+                            <td
+                              key={colIdx}
+                              className={`border border-gray-300 px-3 py-2 ${
+                                isClickable
+                                  ? "cursor-pointer text-blue-600 hover:underline"
+                                  : ""
+                              } ${isOrderStatus ? getOrderStatusStyle(order.isOrdered) : ""}`}
+                              onClick={() => {
+                                if (header === "매핑코드") {
+                                  handleMappingCodeClick(order);
+                                } else if (header === "내부코드/주문번호") {
+                                  handleInternalCodeClick(order);
+                                }
+                              }}
+                            >
+                              {isProductName && sabangName ? (
+                                <div>
+                                  <div>{cellValue}</div>
+                                  <div className="text-blue-600 text-xs mt-1">
+                                    {sabangName}
+                                  </div>
+                                </div>
+                              ) : isInternalCodeOrderNumber &&
+                                (internalCode || orderNumber) ? (
+                                <div>
+                                  {internalCode && <div>{internalCode}</div>}
+                                  {orderNumber && (
+                                    <div className="text-blue-600 text-xs mt-1">
+                                      {orderNumber}
+                                    </div>
+                                  )}
+                                  {!internalCode && !orderNumber && (
+                                    <div>-</div>
+                                  )}
+                                </div>
+                              ) : isAddress && deliveryMessage ? (
+                                <div>
+                                  <div>{cellValue}</div>
+                                  <div className="text-blue-600 text-xs mt-1">
+                                    {deliveryMessage}
+                                  </div>
+                                </div>
+                              ) : (
+                                cellValue
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-            <button
-              onClick={handleSendKakao}
-              disabled={
-                isSending ||
-                isCanceling ||
-                isDeleting ||
-                !purchase.submitType?.includes("kakaotalk")
-              }
-              className="px-4 py-2 bg-yellow-500 text-white text-sm rounded hover:bg-yellow-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
-              title={
-                !purchase.submitType?.includes("kakaotalk")
-                  ? "카카오톡 전송이 비활성화되어 있습니다"
-                  : ""
-              }
-            >
-              카카오톡 전송
-            </button>
-            <button
-              onClick={handleSendEmail}
-              disabled={
-                isSending ||
-                isCanceling ||
-                isDeleting ||
-                !purchase.submitType?.includes("email")
-              }
-              className="px-4 py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
-              title={
-                !purchase.submitType?.includes("email")
-                  ? "이메일 전송이 비활성화되어 있습니다"
-                  : ""
-              }
-            >
-              이메일 전송
-            </button>
+          </div>
+
+          {/* 페이지네이션 */}
+          {!showTemplateView &&
+            !(
+              (orderFilter === "ordered" || orderFilter === "all") &&
+              Object.keys(orderedOrdersByBatch).length > 0
+            ) &&
+            totalPages > 1 && (
+              <div className="p-4 border-t">
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={setCurrentPage}
+                />
+              </div>
+            )}
+
+          {/* 하단 버튼 영역 */}
+          <div className="flex items-center justify-between p-4 border-t bg-gray-50">
+            <div className="text-sm text-gray-600">
+              {selectedRows.size > 0
+                ? `${selectedRows.size}건 선택됨`
+                : `총 ${orders.length}건`}
+            </div>
+            <div className="flex gap-2">
+              {selectedRows.size > 0 && (
+                <>
+                  <button
+                    onClick={handleCancelSelected}
+                    disabled={isCanceling || isDeleting || isSending}
+                    className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm font-bold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isCanceling ? "처리 중..." : `${selectedRows.size}건 취소`}
+                  </button>
+                  <button
+                    onClick={handleDeleteSelected}
+                    disabled={isCanceling || isDeleting || isSending}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-bold rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isDeleting ? "삭제 중..." : `${selectedRows.size}건 삭제`}
+                  </button>
+                </>
+              )}
+              <button
+                onClick={handleSendKakao}
+                disabled={
+                  isSending ||
+                  isCanceling ||
+                  isDeleting ||
+                  !purchase.submitType?.includes("kakaotalk")
+                }
+                className="px-4 py-2 bg-yellow-500 text-white text-sm rounded hover:bg-yellow-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                title={
+                  !purchase.submitType?.includes("kakaotalk")
+                    ? "카카오톡 전송이 비활성화되어 있습니다"
+                    : ""
+                }
+              >
+                카카오톡 전송
+              </button>
+              <button
+                onClick={handleSendEmail}
+                disabled={
+                  isSending ||
+                  isCanceling ||
+                  isDeleting ||
+                  !purchase.submitType?.includes("email")
+                }
+                className="px-4 py-2 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                title={
+                  !purchase.submitType?.includes("email")
+                    ? "이메일 전송이 비활성화되어 있습니다"
+                    : ""
+                }
+              >
+                이메일 전송
+              </button>
+            </div>
           </div>
         </div>
+
+        {/* 매핑코드 수정 창 */}
+        {editingRow && (
+          <CodeEditWindow
+            rowId={editingRow.id}
+            currentRowData={editingRow.rowData}
+            onCodeUpdate={handleCodeUpdate}
+            onClose={() => setEditingRow(null)}
+          />
+        )}
+
+        {/* 상세 데이터 창 */}
+        {detailRow && (
+          <RowDetailWindow
+            rowData={detailRow}
+            onClose={() => setDetailRow(null)}
+            onDataUpdate={fetchOrders}
+          />
+        )}
       </div>
-
-      {/* 매핑코드 수정 창 */}
-      {editingRow && (
-        <CodeEditWindow
-          rowId={editingRow.id}
-          currentRowData={editingRow.rowData}
-          onCodeUpdate={handleCodeUpdate}
-          onClose={() => setEditingRow(null)}
-        />
-      )}
-
-      {/* 상세 데이터 창 */}
-      {detailRow && (
-        <RowDetailWindow
-          rowData={detailRow}
-          onClose={() => setDetailRow(null)}
-          onDataUpdate={fetchOrders}
-        />
-      )}
-    </div>
+    </ModalPortal>
   );
 }
 

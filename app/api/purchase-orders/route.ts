@@ -1,6 +1,7 @@
 import {NextRequest, NextResponse} from "next/server";
 import sql from "@/lib/db";
 import {getCompanyIdFromRequest} from "@/lib/company";
+import {getTodayDate} from "@/utils/date";
 
 /**
  * 매입처별 주문 통계 조회 API
@@ -22,10 +23,16 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
 
-    // 오늘 날짜 기본값
-    const today = new Date().toISOString().split("T")[0];
+    // 오늘 날짜 기본값 (한국 시간 기준)
+    const today = getTodayDate();
     const queryStartDate = startDate || today;
     const queryEndDate = endDate || today;
+
+    // 한국 시간(KST) 기준으로 날짜 범위를 UTC로 변환
+    const startKoreaStr = `${queryStartDate}T00:00:00+09:00`;
+    const endKoreaStr = `${queryEndDate}T23:59:59.999+09:00`;
+    const dateFromUTC = new Date(startKoreaStr);
+    const dateToUTC = new Date(endKoreaStr);
 
     // 매입처 리스트와 주문 통계 조회 (purchase_id FK 사용)
     const purchaseStats = await sql`
@@ -54,8 +61,8 @@ export async function GET(request: NextRequest) {
       LEFT JOIN uploads u ON ur.upload_id = u.id AND u.company_id = ${companyId}
       WHERE p.company_id = ${companyId}
         AND (u.created_at IS NULL OR (
-          u.created_at >= ${queryStartDate}::date
-          AND u.created_at < (${queryEndDate}::date + INTERVAL '1 day')
+          u.created_at >= ${dateFromUTC.toISOString()}::timestamptz
+          AND u.created_at <= ${dateToUTC.toISOString()}::timestamptz
         ))
       GROUP BY p.id, p.name, p.submit_type, p.email, p.kakaotalk
       ORDER BY p.name

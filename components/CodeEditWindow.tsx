@@ -1,5 +1,7 @@
 "use client";
 
+import ModalPortal from "@/components/ModalPortal";
+
 import {useState, useEffect} from "react";
 import type {Product} from "@/types/api";
 
@@ -76,13 +78,13 @@ export default function CodeEditWindow({
 
     if (hasCodeSearch) {
       filtered = filtered.filter((item) =>
-        item.code.toLowerCase().includes(codeSearch.toLowerCase())
+        item.code.toLowerCase().includes(codeSearch.toLowerCase()),
       );
     }
 
     if (hasNameSearch) {
       filtered = filtered.filter((item) =>
-        item.name.toLowerCase().includes(nameSearch.toLowerCase())
+        item.name.toLowerCase().includes(nameSearch.toLowerCase()),
       );
     }
 
@@ -159,259 +161,266 @@ export default function CodeEditWindow({
   };
 
   return (
-    <div className="fixed inset-0 bg-[#00000084] bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-[90vw] max-w-6xl h-[90vh] flex flex-col">
-        {/* 헤더 */}
-        <div className="flex items-center justify-between p-4 border-b">
-          <div className="flex flex-col">
-            <h2 className="text-xl font-bold">매핑코드 수정</h2>
-            {currentProductName && (
-              <span className="text-xs text-blue-600 font-medium mt-1">
-                주문 상품명: {currentProductName}
-              </span>
-            )}
+    <ModalPortal>
+      <div className="fixed inset-0 bg-[#00000084] bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg shadow-xl w-[90vw] max-w-6xl h-[90vh] flex flex-col">
+          {/* 헤더 */}
+          <div className="flex items-center justify-between p-4 border-b">
+            <div className="flex flex-col">
+              <h2 className="text-xl font-bold">매핑코드 수정</h2>
+              {currentProductName && (
+                <span className="text-xs text-blue-600 font-medium mt-1">
+                  주문 상품명: {currentProductName}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+            >
+              닫기
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
-          >
-            닫기
-          </button>
-        </div>
 
-        {/* 현재 매핑코드 정보 */}
-        <div className="p-4 bg-gray-50 border-b">
-          <h3 className="text-lg font-semibold mb-4">현재 매핑코드 데이터</h3>
-          {currentCodeData ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  내외주
-                </label>
-                <div className="text-sm text-gray-900">
-                  {currentCodeData.type || "-"}
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  택배사
-                </label>
-                <div className="text-sm text-gray-900">
-                  {currentCodeData.postType || "-"}
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  상품명
-                </label>
-                <div className="text-sm text-gray-900 wrap-break-word">
-                  {currentCodeData.name || "-"}
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  사방넷명
-                </label>
-                <div className="text-sm text-gray-900 wrap-break-word">
-                  {currentCodeData.sabangName || "-"}
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  매핑코드
-                </label>
-                <div className="text-sm text-gray-900 font-mono">
-                  {currentCodeData.code || "-"}
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  업체명
-                </label>
-                <div className="text-sm text-gray-900 wrap-break-word">
-                  {currentCodeData.purchase || "-"}
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  가격
-                </label>
-                <div className="text-sm text-gray-900">
-                  {currentCodeData.salePrice !== undefined &&
-                  currentCodeData.salePrice !== null
-                    ? currentCodeData.salePrice.toLocaleString()
-                    : "-"}
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  택배비
-                </label>
-                <div className="text-sm text-gray-900">
-                  {currentCodeData.postFee !== undefined &&
-                  currentCodeData.postFee !== null
-                    ? currentCodeData.postFee.toLocaleString()
-                    : "-"}
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  기타
-                </label>
-                <div className="text-sm text-gray-900 wrap-break-word">
-                  {currentCodeData.etc || "-"}
-                </div>
-              </div>
-            </div>
-          ) : currentCode ? (
-            <div className="text-sm text-gray-600">
-              매핑코드 "{currentCode}"에 해당하는 데이터를 찾을 수 없습니다.
-            </div>
-          ) : (
-            <div className="text-sm text-gray-600">
-              현재 매핑코드가 설정되어 있지 않습니다.
-            </div>
-          )}
-        </div>
-
-        {/* 검색 영역 */}
-        <div className="p-4 border-b">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                매핑코드 검색
-              </label>
-              <input
-                type="text"
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="매핑코드 입력"
-                value={codeSearch}
-                onChange={(e) => setCodeSearch(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                상품명 검색
-              </label>
-              <input
-                type="text"
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="상품명 입력"
-                value={nameSearch}
-                onChange={(e) => setNameSearch(e.target.value)}
-              />
-            </div>
-          </div>
-          <div className="mt-2 text-sm text-gray-600">
-            {codeSearch.trim().length > 0 && codeSearch.trim().length < 4 ? (
-              <span className="text-orange-600">
-                매핑코드는 4자 이상 입력해주세요.
-              </span>
-            ) : nameSearch.trim().length > 0 && nameSearch.trim().length < 2 ? (
-              <span className="text-orange-600">
-                상품명은 2자 이상 입력해주세요.
-              </span>
-            ) : (
-              `검색 결과: ${filteredCodes.length}건`
-            )}
-          </div>
-        </div>
-
-        {/* 결과 테이블 */}
-        <div className="flex-1 overflow-auto p-4">
-          {loading ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-gray-500">업데이트 중...</div>
-            </div>
-          ) : (
-            <table className="w-full border-collapse border border-gray-300">
-              <thead className="bg-gray-100 sticky top-0">
-                <tr>
-                  <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
+          {/* 현재 매핑코드 정보 */}
+          <div className="p-4 bg-gray-50 border-b">
+            <h3 className="text-lg font-semibold mb-4">현재 매핑코드 데이터</h3>
+            {currentCodeData ? (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
                     내외주
-                  </th>
-                  <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
+                  </label>
+                  <div className="text-sm text-gray-900">
+                    {currentCodeData.type || "-"}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
                     택배사
-                  </th>
-                  <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
-                    업체명
-                  </th>
-                  <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
+                  </label>
+                  <div className="text-sm text-gray-900">
+                    {currentCodeData.postType || "-"}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
                     상품명
-                  </th>
-                  <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
+                  </label>
+                  <div className="text-sm text-gray-900 wrap-break-word">
+                    {currentCodeData.name || "-"}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
                     사방넷명
-                  </th>
-                  <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
+                  </label>
+                  <div className="text-sm text-gray-900 wrap-break-word">
+                    {currentCodeData.sabangName || "-"}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
                     매핑코드
-                  </th>
-                  <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
-                    공급가
-                  </th>
-                  <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
+                  </label>
+                  <div className="text-sm text-gray-900 font-mono">
+                    {currentCodeData.code || "-"}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    업체명
+                  </label>
+                  <div className="text-sm text-gray-900 wrap-break-word">
+                    {currentCodeData.purchase || "-"}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    가격
+                  </label>
+                  <div className="text-sm text-gray-900">
+                    {currentCodeData.salePrice !== undefined &&
+                    currentCodeData.salePrice !== null
+                      ? currentCodeData.salePrice.toLocaleString()
+                      : "-"}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
                     택배비
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredCodes.length === 0 ? (
+                  </label>
+                  <div className="text-sm text-gray-900">
+                    {currentCodeData.postFee !== undefined &&
+                    currentCodeData.postFee !== null
+                      ? currentCodeData.postFee.toLocaleString()
+                      : "-"}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    기타
+                  </label>
+                  <div className="text-sm text-gray-900 wrap-break-word">
+                    {currentCodeData.etc || "-"}
+                  </div>
+                </div>
+              </div>
+            ) : currentCode ? (
+              <div className="text-sm text-gray-600">
+                매핑코드 "{currentCode}"에 해당하는 데이터를 찾을 수 없습니다.
+              </div>
+            ) : (
+              <div className="text-sm text-gray-600">
+                현재 매핑코드가 설정되어 있지 않습니다.
+              </div>
+            )}
+          </div>
+
+          {/* 검색 영역 */}
+          <div className="p-4 border-b">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  매핑코드 검색
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="매핑코드 입력"
+                  value={codeSearch}
+                  onChange={(e) => setCodeSearch(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  상품명 검색
+                </label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="상품명 입력"
+                  value={nameSearch}
+                  onChange={(e) => setNameSearch(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="mt-2 text-sm text-gray-600">
+              {codeSearch.trim().length > 0 && codeSearch.trim().length < 4 ? (
+                <span className="text-orange-600">
+                  매핑코드는 4자 이상 입력해주세요.
+                </span>
+              ) : nameSearch.trim().length > 0 &&
+                nameSearch.trim().length < 2 ? (
+                <span className="text-orange-600">
+                  상품명은 2자 이상 입력해주세요.
+                </span>
+              ) : (
+                `검색 결과: ${filteredCodes.length}건`
+              )}
+            </div>
+          </div>
+
+          {/* 결과 테이블 */}
+          <div className="flex-1 overflow-auto p-4">
+            {loading ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="text-gray-500">업데이트 중...</div>
+              </div>
+            ) : (
+              <table className="w-full border-collapse border border-gray-300">
+                <thead className="bg-gray-100 sticky top-0">
                   <tr>
-                    <td
-                      colSpan={9}
-                      className="border border-gray-300 px-4 py-8 text-center text-gray-500"
-                    >
-                      {codeSearch.trim().length > 0 && codeSearch.trim().length < 4
-                        ? "매핑코드는 4자 이상 입력해주세요."
-                        : nameSearch.trim().length > 0 && nameSearch.trim().length < 2
-                        ? "상품명은 2자 이상 입력해주세요."
-                        : codeSearch.trim().length >= 4 || nameSearch.trim().length >= 2
-                        ? "검색 결과가 없습니다."
-                        : "매핑코드(4자 이상) 또는 상품명(2자 이상)을 검색해주세요."}
-                    </td>
+                    <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
+                      내외주
+                    </th>
+                    <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
+                      택배사
+                    </th>
+                    <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
+                      업체명
+                    </th>
+                    <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
+                      상품명
+                    </th>
+                    <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
+                      사방넷명
+                    </th>
+                    <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
+                      매핑코드
+                    </th>
+                    <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
+                      공급가
+                    </th>
+                    <th className="border border-gray-300 px-4 py-2 text-left text-xs font-medium">
+                      택배비
+                    </th>
                   </tr>
-                ) : (
-                  filteredCodes.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="hover:bg-blue-50 cursor-pointer transition-colors"
-                      onClick={() => handleCodeSelect(item)}
-                    >
-                      <td className="border border-gray-300 px-4 py-2 text-xs">
-                        {item.type}
-                      </td>
-                      <td className="border border-gray-300 px-4 py-2 text-xs">
-                        {item.postType}
-                      </td>
-                      <td className="border border-gray-300 px-4 py-2 text-xs">
-                        {item.purchase || "-"}
-                      </td>
-                      <td className="border border-gray-300 px-4 py-2 text-xs">
-                        {item.name}
-                      </td>
-                      <td className="border border-gray-300 px-4 py-2 text-xs">
-                        {item.sabangName}
-                      </td>
-                      <td className="border border-gray-300 px-4 py-2 text-xs font-mono">
-                        {item.code}
-                      </td>
-                      <td className="border border-gray-300 px-4 py-2 text-xs">
-                        {item.salePrice !== undefined && item.salePrice !== null
-                          ? item.salePrice.toLocaleString()
-                          : "-"}
-                      </td>
-                      <td className="border border-gray-300 px-4 py-2 text-xs">
-                        {item.postFee !== undefined && item.postFee !== null
-                          ? item.postFee.toLocaleString()
-                          : "-"}
+                </thead>
+                <tbody>
+                  {filteredCodes.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={9}
+                        className="border border-gray-300 px-4 py-8 text-center text-gray-500"
+                      >
+                        {codeSearch.trim().length > 0 &&
+                        codeSearch.trim().length < 4
+                          ? "매핑코드는 4자 이상 입력해주세요."
+                          : nameSearch.trim().length > 0 &&
+                              nameSearch.trim().length < 2
+                            ? "상품명은 2자 이상 입력해주세요."
+                            : codeSearch.trim().length >= 4 ||
+                                nameSearch.trim().length >= 2
+                              ? "검색 결과가 없습니다."
+                              : "매핑코드(4자 이상) 또는 상품명(2자 이상)을 검색해주세요."}
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          )}
+                  ) : (
+                    filteredCodes.map((item) => (
+                      <tr
+                        key={item.id}
+                        className="hover:bg-blue-50 cursor-pointer transition-colors"
+                        onClick={() => handleCodeSelect(item)}
+                      >
+                        <td className="border border-gray-300 px-4 py-2 text-xs">
+                          {item.type}
+                        </td>
+                        <td className="border border-gray-300 px-4 py-2 text-xs">
+                          {item.postType}
+                        </td>
+                        <td className="border border-gray-300 px-4 py-2 text-xs">
+                          {item.purchase || "-"}
+                        </td>
+                        <td className="border border-gray-300 px-4 py-2 text-xs">
+                          {item.name}
+                        </td>
+                        <td className="border border-gray-300 px-4 py-2 text-xs">
+                          {item.sabangName}
+                        </td>
+                        <td className="border border-gray-300 px-4 py-2 text-xs font-mono">
+                          {item.code}
+                        </td>
+                        <td className="border border-gray-300 px-4 py-2 text-xs">
+                          {item.salePrice !== undefined &&
+                          item.salePrice !== null
+                            ? item.salePrice.toLocaleString()
+                            : "-"}
+                        </td>
+                        <td className="border border-gray-300 px-4 py-2 text-xs">
+                          {item.postFee !== undefined && item.postFee !== null
+                            ? item.postFee.toLocaleString()
+                            : "-"}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }

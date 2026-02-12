@@ -1,5 +1,7 @@
 "use client";
 
+import ModalPortal from "@/components/ModalPortal";
+
 import {useState, useEffect} from "react";
 import {getAuthHeaders} from "@/utils/api";
 
@@ -136,98 +138,100 @@ export default function RowDetailWindow({
 
   // 읽기 전용 필드 목록 (수정 불가)
   const readonlyFields = Object.keys(rowData).filter(
-    (key) => key !== "file_name" && !EDITABLE_FIELDS.includes(key)
+    (key) => key !== "file_name" && !EDITABLE_FIELDS.includes(key),
   );
 
   return (
-    <div className="fixed inset-0 bg-black/30 bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl w-[95vw] max-w-6xl h-[90vh] flex flex-col">
-        {/* 헤더 */}
-        <div className="flex items-center justify-between p-6 border-b bg-gray-50 rounded-t-lg">
-          <h2 className="text-2xl font-bold text-gray-800">상세 데이터</h2>
-          <div className="flex items-center gap-3">
-            {hasChanges && (
-              <span className="text-sm text-orange-600 font-medium">
-                변경사항이 있습니다
-              </span>
-            )}
-            <button
-              onClick={handleSave}
-              disabled={!hasChanges || isSaving}
-              className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium transition-colors"
-            >
-              {isSaving ? "저장 중..." : "저장"}
-            </button>
-            <button
-              onClick={onClose}
-              className="px-5 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 font-medium transition-colors"
-            >
-              닫기
-            </button>
-          </div>
-        </div>
-
-        {/* 상세 데이터 */}
-        <div className="flex-1 overflow-auto p-6">
-          <div className="space-y-8">
-            {/* 수정 가능한 필드 섹션 */}
-            <div>
-              <h3 className="text-lg font-semibold text-gray-800 mb-4 pb-2 border-b">
-                수정 가능한 정보
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {EDITABLE_FIELDS.map((field) => {
-                  return (
-                    <div key={field} className="space-y-1">
-                      <label className="block text-sm font-medium text-gray-700 ml-1">
-                        {getFieldLabel(field)}
-                      </label>
-                      <input
-                        type="text"
-                        value={formData[field] || ""}
-                        onChange={(e) =>
-                          handleFieldChange(field, e.target.value)
-                        }
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder={`${getFieldLabel(field)}을(를) 입력하세요`}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
+    <ModalPortal>
+      <div className="fixed inset-0 bg-black/30 bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg shadow-xl w-[95vw] max-w-6xl h-[90vh] flex flex-col">
+          {/* 헤더 */}
+          <div className="flex items-center justify-between p-6 border-b bg-gray-50 rounded-t-lg">
+            <h2 className="text-2xl font-bold text-gray-800">상세 데이터</h2>
+            <div className="flex items-center gap-3">
+              {hasChanges && (
+                <span className="text-sm text-orange-600 font-medium">
+                  변경사항이 있습니다
+                </span>
+              )}
+              <button
+                onClick={handleSave}
+                disabled={!hasChanges || isSaving}
+                className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium transition-colors"
+              >
+                {isSaving ? "저장 중..." : "저장"}
+              </button>
+              <button
+                onClick={onClose}
+                className="px-5 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 font-medium transition-colors"
+              >
+                닫기
+              </button>
             </div>
+          </div>
 
-            {/* 읽기 전용 필드 섹션 */}
-            <div>
-              <h3 className="text-lg font-semibold text-gray-800 mb-4 pb-2 border-b">
-                기본 정보
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
-                {readonlyFields.map((key) => {
-                  const value = rowData[key];
-                  const displayValue =
-                    key === "upload_time" && value
-                      ? new Date(value).toLocaleString("ko-KR")
-                      : value !== undefined && value !== null
-                      ? String(value)
-                      : "-";
-
-                  return (
-                    <div key={key} className="space-y-1">
-                      <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">
-                        {getFieldLabel(key)}
-                      </label>
-                      <div className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded border border-gray-200 wrap-break-word">
-                        {displayValue}
+          {/* 상세 데이터 */}
+          <div className="flex-1 overflow-auto p-6">
+            <div className="space-y-8">
+              {/* 수정 가능한 필드 섹션 */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4 pb-2 border-b">
+                  수정 가능한 정보
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {EDITABLE_FIELDS.map((field) => {
+                    return (
+                      <div key={field} className="space-y-1">
+                        <label className="block text-sm font-medium text-gray-700 ml-1">
+                          {getFieldLabel(field)}
+                        </label>
+                        <input
+                          type="text"
+                          value={formData[field] || ""}
+                          onChange={(e) =>
+                            handleFieldChange(field, e.target.value)
+                          }
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder={`${getFieldLabel(field)}을(를) 입력하세요`}
+                        />
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 읽기 전용 필드 섹션 */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4 pb-2 border-b">
+                  기본 정보
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4">
+                  {readonlyFields.map((key) => {
+                    const value = rowData[key];
+                    const displayValue =
+                      key === "upload_time" && value
+                        ? new Date(value).toLocaleString("ko-KR")
+                        : value !== undefined && value !== null
+                          ? String(value)
+                          : "-";
+
+                    return (
+                      <div key={key} className="space-y-1">
+                        <label className="block text-xs font-medium text-gray-500 uppercase tracking-wide">
+                          {getFieldLabel(key)}
+                        </label>
+                        <div className="text-sm text-gray-900 bg-gray-50 px-3 py-2 rounded border border-gray-200 wrap-break-word">
+                          {displayValue}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }

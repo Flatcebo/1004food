@@ -5,6 +5,7 @@ import Link from "next/link";
 import {usePathname} from "next/navigation";
 import {useAuthStore} from "@/stores/authStore";
 import {useSidebarStore} from "@/stores/sidebarStore";
+import {useTabStore} from "@/stores/tabStore";
 import {useEffect, useState} from "react";
 import {
   IoList,
@@ -178,17 +179,20 @@ const menuConfigs: AccordionMenuConfig[] = [
 function AccordionMenu({
   config,
   pathname,
+  activeTabPath,
 }: {
   config: AccordionMenuConfig;
   pathname: string;
+  activeTabPath: string | null;
 }) {
   const {isMenuOpen, toggleMenu} = useSidebarStore();
+  const {addTab} = useTabStore();
   const isOpen = isMenuOpen(config.id);
 
-  // 각 아이템의 활성 상태 확인
+  // 각 아이템의 활성 상태 확인 (탭 모드일 때는 activeTabPath 기준)
   const itemsWithActive = config.items.map((item) => ({
     ...item,
-    isActive: pathname === item.path,
+    isActive: (activeTabPath ?? pathname) === item.path,
   }));
 
   return (
@@ -208,10 +212,11 @@ function AccordionMenu({
       {isOpen && (
         <div className="ml-4 mt-1 flex flex-col gap-1">
           {itemsWithActive.map((item) => (
-            <Link
+            <button
               key={item.path}
-              href={item.path}
-              className={`w-full px-6 py-2 rounded-lg transition-all duration-200 flex items-center gap-3
+              type="button"
+              onClick={() => addTab(item.path, item.name)}
+              className={`w-full px-6 py-2 rounded-lg transition-all duration-200 flex items-center gap-3 text-left
                 text-[15px] ${
                   item.isActive
                     ? "text-[#888eab]"
@@ -219,7 +224,7 @@ function AccordionMenu({
                 }`}
             >
               <span>{item.name}</span>
-            </Link>
+            </button>
           ))}
         </div>
       )}
@@ -231,6 +236,9 @@ export default function SideBar() {
   const pathname = usePathname();
   const {user} = useAuthStore();
   const {openMenu} = useSidebarStore();
+  const {tabs, activeTabId} = useTabStore();
+  const activeTab = tabs.find((t) => t.id === activeTabId);
+  const activeTabPath = activeTab?.path ?? null;
   const [mounted, setMounted] = useState(false);
 
   // 클라이언트에서만 마운트됨을 표시 (Hydration 오류 방지)
@@ -266,7 +274,7 @@ export default function SideBar() {
   return (
     <div className="w-60 h-full bg-[#25323c] shrink-0">
       <div className="w-full h-full flex flex-col">
-        <div className="w-full h-16 border-b border-gray-200">
+        <div className="w-full h-14 border-b border-gray-200">
           <div className="w-full h-full flex items-center justify-center">
             <Link href="/">
               <Image
@@ -286,6 +294,7 @@ export default function SideBar() {
                 key={config.id}
                 config={config}
                 pathname={pathname}
+                activeTabPath={activeTabPath}
               />
             ))}
           </div>
